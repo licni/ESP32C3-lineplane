@@ -13,7 +13,7 @@
 ## 版本庫
 - 兩個 GitHub 原始碼專案(GG 2026-09-14),本機身分只設在這個版本庫:SuperGG + GitHub noreply 信箱.
   - `origin` = https://github.com/licni/ESP32lineplane:**GG 的私人雲端備份**,一直保持私人,不要刪除也不要公開.
-  - `public` = https://github.com/licni/ESP32C3-lineplane:要公開的原始碼專案,目前私人;整理好後由 GG 決定公開. 推送前先做個資檢查.
+  - `public` = https://github.com/licni/ESP32C3-lineplane:**公開**的原始碼專案(GG 2026-09-14 公開). 推上去別人馬上看得到,推送前先做個資檢查.
   - GG 要求推送時兩邊都推同樣的提交(`git push origin main` 與 `git push public main`).
 - **授權 GPL-3.0**(GG 2026-09-14,LICENSE 在根目錄). 2026-09-14 為了之後公開,提交歷史壓成單一提交並清除個資(家用 WiFi 名稱,區網 IP,本機路徑).
   **不要把個資寫進版本庫**:家用 WiFi 名稱/密碼,區網 IP,Email,本機完整路徑;測試腳本預設位址用 lineplane.local,實際 IP 用參數傳.
