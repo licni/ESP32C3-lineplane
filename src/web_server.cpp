@@ -1,4 +1,5 @@
-// 版本流水號: r21 (2026-09-14) 狀態 f 加 awl(等安全開關剩餘秒數);/api/fw 加 newer(網站版本比目前新 1 / 相同 0 / 較舊 -1)
+// 版本流水號: r22 (2026-09-14) 設定備份碼:GET /api/backup(產生),POST /api/backup/check(貼上檢查),/api/backup/apply(套用,要按儲存)
+// 舊: r21 (2026-09-14) 狀態 f 加 awl(等安全開關剩餘秒數);/api/fw 加 newer(網站版本比目前新 1 / 相同 0 / 較舊 -1)
 // 舊: r20 (2026-09-14) 狀態 f 加 al(這趟起飛程序已按過安全開關)
 // 舊: r19 (2026-09-14) 起飛程序與飛行中拒絕:儲存 WiFi 設定,發射功率,保持,檢查更新,校正設定/取消(安全審查 B5);狀態 cal 加時效剩餘秒數
 // 舊: r18 (2026-09-14) 狀態 f 加 arm(安全開關按下)
@@ -30,6 +31,7 @@
 #include "fw_update.h"
 #include "gear.h"
 #include "settings.h"
+#include "settings_backup.h"
 #include "test_hooks.h"
 #include "wifi_manager.h"
 #include "web_page.h"
@@ -274,6 +276,36 @@ static void handleSave() {
   const char *err = settingsSave();
   sendResult(err == nullptr, err ? err : "saved");
 }
+
+// --- 設定備份碼 -------------------------------------------------------------------
+// 有未儲存變更時產生,檢查,套用一律拒絕(GG:先儲存或放棄):備份碼才一定等於飛機實際飛的設定,套用也不會蓋掉還沒存的修改.
+static void handleBackupGet() {
+  if (settingsAnyDirty()) return sendResult(false, "bkdirty");
+  String code;
+  if (const char *err = backupEncode(code)) return sendResult(false, err);
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", "{\"ok\":true,\"code\":\"bkmade\",\"text\":\"" + code + "\"}");
+}
+
+static void backupCheckOrApply(bool apply) {
+  if (apply && refuseIfLocked()) return;
+  if (settingsAnyDirty()) return sendResult(false, "bkdirty");
+  if (!server.hasArg("text")) return sendResult(false, "badform");
+  const String text = server.arg("text");
+  if (text.length() > 4000) return sendResult(false, "bkcrc");
+  BackupInfo info;
+  const char *err = backupDecode(text.c_str(), apply, info);
+  String json = "{\"ok\":";
+  json += err ? "false" : "true";
+  json += ",\"code\":\"";
+  json += err ? err : (apply ? "bkapplied" : "bkok");
+  json += "\",\"scope\":" + String(info.badScope) + ",\"gen\":" + String(info.generation) +
+          ",\"newer\":" + (info.newer ? "1" : "0") + ",\"clamp\":[" + info.clamped + "]}";
+  server.send(err ? 400 : 200, "application/json", json);
+}
+
+static void handleBackupCheck() { backupCheckOrApply(false); }
+static void handleBackupApply() { backupCheckOrApply(true); }
 
 
 // 網頁「開始起飛程序」(GG 2026-09-14):等同做一次啟動手勢,之後照常等待放穩 → 倒數 → 起飛.
@@ -538,6 +570,9 @@ static void registerRoutes() {
   server.on("/api/defaults", HTTP_POST, handleDefaults);
   server.on("/api/save", HTTP_POST, handleSave);
   server.on("/api/revert", HTTP_POST, handleRevert);
+  server.on("/api/backup", HTTP_GET, handleBackupGet);
+  server.on("/api/backup/check", HTTP_POST, handleBackupCheck);
+  server.on("/api/backup/apply", HTTP_POST, handleBackupApply);
   server.on("/api/start", HTTP_POST, handleStart);
   server.on("/api/cancel", HTTP_POST, handleCancel);  server.on("/api/estop", HTTP_POST, handleEstop);
   server.on("/api/wifi", HTTP_GET, handleWifiGet);

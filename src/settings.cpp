@@ -1,4 +1,6 @@
-// 版本流水號: r18 (2026-09-14) 加安全開關等待上限 armWait(1~30 分鐘,預設 3,用收腳區塊預留位元組,舊存檔讀到 0 補 3);
+// 版本流水號: r20 (2026-09-14) 版面 v9:共用設定尾端加蜂鳴器電位 buzzerLow(0 高電位響 / 1 低電位響);讀 v8 共用設定尾端補預設,風格讀 v4/v6~v9
+// 舊: r19 (2026-09-14) 設定備份碼:整份設定 SettingsImage 的讀寫驗證套用;備份碼套用的飛行風格 pendingActive 按儲存才寫入,放棄變更還原
+// 舊: r18 (2026-09-14) 加安全開關等待上限 armWait(1~30 分鐘,預設 3,用收腳區塊預留位元組,舊存檔讀到 0 補 3);
 //   電變校正最高油門保持出廠 2 → 4 秒(GG:電變自己開機要約 1 秒,4~5 秒剛好等電變開機又不會進設定模式)
 // 舊: r17 (2026-09-14) 飛行中油門下限範圍 10~100(安全審查 B4),舊存檔 0~9 載入時補到 10
 // 舊: r16 (2026-09-14) 數值文字要整串是數字(「12abc」拒絕,原本會收成 12);風格名稱要是合法 UTF-8 且無控制字元
@@ -27,6 +29,8 @@ static const uint32_t BLOB_MAGIC = 0x4C504346;   // "LPCF"
 SharedSettings sharedSettings;
 ProfileSettings profiles[PROFILE_COUNT];
 uint8_t activeProfile = 0;
+// 備份碼套用的飛行風格:和其他設定一樣按儲存才寫入,放棄變更就不改(-1 = 沒有). 直接選用風格仍立即存檔.
+static int8_t pendingActive = -1;
 
 // 控制工作(優先權最高)隨時可能在 loop 改設定改到一半時插進來讀. 所有整塊改寫與控制工作的讀取都包在這把鎖裡,
 // 臨界區只有幾十到幾百位元組的複製,微秒等級.
@@ -40,7 +44,9 @@ static const size_t SHARED_V6_SIZE = offsetof(SharedSettings, twistCancelDeg);
 static_assert(SHARED_V6_SIZE == offsetof(SharedSettings, gestureEnable) + 4, "SharedSettings v6 size");
 static const size_t SHARED_V7_SIZE = offsetof(SharedSettings, gearEnable);
 static_assert(SHARED_V7_SIZE == SHARED_V6_SIZE + 4, "SharedSettings v7 size");
-static_assert(sizeof(SharedSettings) == SHARED_V7_SIZE + 12, "SharedSettings v8 size");
+static const size_t SHARED_V8_SIZE = offsetof(SharedSettings, buzzerActiveLow);
+static_assert(SHARED_V8_SIZE == SHARED_V7_SIZE + 12, "SharedSettings v8 size");
+static_assert(sizeof(SharedSettings) == SHARED_V8_SIZE + 4, "SharedSettings v9 size");
 // armWaitMin 占用 v8 收腳區塊的預留位元組:位置不可移動
 static_assert(offsetof(SharedSettings, armWaitMin) == offsetof(SharedSettings, gearRetractSec) + 1, "SharedSettings armWaitMin");
 
@@ -96,6 +102,7 @@ static void defaultShared(SharedSettings &s) {
   s.gearMaxUs = 1600;
   s.gearRetractSec = 5;
   s.gearTravelSec = 2.0f;
+  s.buzzerActiveLow = 0;   // GG 的蜂鳴器是高電位響
 }
 
 static const char *const PROFILE_DEFAULT_NAMES[PROFILE_COUNT] = {"A", "B", "C", "D", "E", "TEST"};
@@ -186,6 +193,7 @@ static const ParamDef SHARED_PARAMS[] = {
     SP("gearMaxUs", PARAM_U16, gearMaxUs, 1500, 2500, 5, 50),
     SP("gearRetractSec", PARAM_U8, gearRetractSec, 1, 120, 1, 5),
     SP("gearTravelSec", PARAM_F32, gearTravelSec, 0, 10, 0.1f, 0.5f),
+    SP("buzzerLow", PARAM_U8, buzzerActiveLow, 0, 1, 1, 1),   // 立即生效
 };
 
 static const ParamDef PROFILE_PARAMS[] = {
@@ -373,7 +381,8 @@ static bool loadBlobAny(Preferences &prefs, const char *key, uint8_t *data, size
 //   v6:又刪掉第二段曲線(GG:兩段分開不好設定且易混淆),版面回到與 v4 相同
 //   v7:共用設定尾端加扭轉機尾取消起飛(角度,封鎖秒數)+ 2 預留;風格不變
 //   v8:共用設定尾端加機輪收腳 12 位元組;風格不變
-// 所以風格 v4/v6/v7 原樣沿用,v5 取前段;共用設定 v4~v6 較短,尾端補預設. GG 已經在板子上調好參數,改版不可洗掉.
+//   v9:共用設定尾端加蜂鳴器電位 + 3 預留;風格不變
+// 所以風格 v4/v6/v7/v8 原樣沿用,v5 取前段;共用設定 v4~v6 較短,尾端補預設. GG 已經在板子上調好參數,改版不可洗掉.
 static const size_t CURVE_SIDE_SIZE = sizeof(CurveSide);
 
 static bool loadShared(Preferences &prefs, SharedSettings &out) {
@@ -384,7 +393,8 @@ static bool loadShared(Preferences &prefs, SharedSettings &out) {
   const bool current = ver == SETTINGS_LAYOUT_VERSION && size == sizeof(s);
   const bool old6 = ver >= 4 && ver <= 6 && size == SHARED_V6_SIZE;
   const bool old7 = ver == 7 && size == SHARED_V7_SIZE;
-  if (!current && !old6 && !old7) return false;
+  const bool old8 = ver == 8 && size == SHARED_V8_SIZE;
+  if (!current && !old6 && !old7 && !old8) return false;
   if (!current) {
     // loadBlobAny 只蓋掉前 size 個位元組;保險起見尾端再設一次預設
     SharedSettings d;
@@ -405,8 +415,9 @@ static bool loadProfile(Preferences &prefs, const char *key, ProfileSettings &ou
   uint8_t raw[512];
   uint16_t ver = 0, size = 0;
   if (!loadBlobAny(prefs, key, raw, sizeof(raw), ver, size)) return false;
-  // 風格結構 v4,v6,v7,v8 版面相同(v7,v8 只改了共用設定)
-  const bool current = (ver == SETTINGS_LAYOUT_VERSION || ver == 7 || ver == 6 || ver == 4) && size == sizeof(ProfileSettings);
+  // 風格結構 v4,v6~v9 版面相同(v7~v9 只改了共用設定)
+  const bool current =
+      (ver == SETTINGS_LAYOUT_VERSION || ver == 8 || ver == 7 || ver == 6 || ver == 4) && size == sizeof(ProfileSettings);
   const bool v5 = ver == 5 && size == sizeof(ProfileSettings) + 2 * CURVE_SIDE_SIZE;
   if (!current && !v5) return false;
   ProfileSettings p;
@@ -476,8 +487,9 @@ bool settingsSharedDirty() { return memcmp(&sharedSettings, &savedShared, sizeof
 bool settingsProfileDirty(uint8_t i) {
   return i < PROFILE_COUNT && memcmp(&profiles[i], &savedProfiles[i], sizeof(ProfileSettings)) != 0;
 }
+bool settingsActiveDirty() { return pendingActive >= 0 && pendingActive != activeProfile; }
 bool settingsAnyDirty() {
-  if (settingsSharedDirty()) return true;
+  if (settingsSharedDirty() || settingsActiveDirty()) return true;
   for (uint8_t i = 0; i < PROFILE_COUNT; ++i)
     if (settingsProfileDirty(i)) return true;
   return false;
@@ -579,16 +591,24 @@ static bool nameTextValid(const char *s) {
   return true;
 }
 
-const char *settingsSetName(uint8_t index, const char *name) {
-  if (index >= PROFILE_COUNT) return "scope";
+// 驗證名稱並截斷在 UTF-8 字元邊界上(不留半個中文字),結果寫進 out(補滿 0).
+static const char *nameToBuffer(const char *name, char out[PROFILE_NAME_BUFFER]) {
   size_t n = strlen(name);
   if (n == 0 || !nameTextValid(name)) return "name";
-  // 截斷在 UTF-8 字元邊界上,不留半個中文字.
   if (n > PROFILE_NAME_BUFFER - 1) {
     n = PROFILE_NAME_BUFFER - 1;
     while (n > 0 && ((uint8_t)name[n] & 0xC0) == 0x80) --n;
   }
-  LOCKED(memset(profiles[index].name, 0, PROFILE_NAME_BUFFER); memcpy(profiles[index].name, name, n));
+  memset(out, 0, PROFILE_NAME_BUFFER);
+  memcpy(out, name, n);
+  return nullptr;
+}
+
+const char *settingsSetName(uint8_t index, const char *name) {
+  if (index >= PROFILE_COUNT) return "scope";
+  char buf[PROFILE_NAME_BUFFER];
+  if (const char *e = nameToBuffer(name, buf)) return e;
+  LOCKED(memcpy(profiles[index].name, buf, PROFILE_NAME_BUFFER));
   return nullptr;
 }
 
@@ -600,6 +620,7 @@ const char *settingsSelectProfile(uint8_t index) {
   prefs.end();
   if (!ok) return "savefail";
   activeProfile = index;
+  pendingActive = -1;   // 直接選用蓋過備份碼還沒儲存的選擇
   return nullptr;
 }
 
@@ -642,12 +663,90 @@ const char *settingsSave() {
     if (saveBlob(prefs, key, (const uint8_t *)&profiles[i], sizeof(ProfileSettings))) { LOCKED(savedProfiles[i] = profiles[i]); }
     else ok = false;
   }
+  if (settingsActiveDirty()) {
+    if (prefs.putUChar("active", (uint8_t)pendingActive) == 1) {
+      LOCKED(activeProfile = (uint8_t)pendingActive);
+      pendingActive = -1;
+    } else {
+      ok = false;
+    }
+  }
   prefs.end();
   return ok ? nullptr : "savefail";
 }
 
 void settingsRevert() {
   LOCKED(sharedSettings = savedShared; for (uint8_t i = 0; i < PROFILE_COUNT; ++i) profiles[i] = savedProfiles[i]);
+  pendingActive = -1;
+  applyHardwareSettings();
+}
+
+// --- 整份設定(設定備份碼用) --------------------------------------------------------
+void settingsGetImage(SettingsImage &out) {
+  LOCKED(out.shared = sharedSettings; for (uint8_t i = 0; i < PROFILE_COUNT; ++i) out.profiles[i] = profiles[i]);
+  out.active = settingsActiveDirty() ? (uint8_t)pendingActive : activeProfile;
+}
+
+void settingsDefaultImage(SettingsImage &out) {
+  defaultShared(out.shared);
+  for (uint8_t i = 0; i < PROFILE_COUNT; ++i) defaultProfile(out.profiles[i], i);
+  out.active = 0;
+}
+
+static const ParamDef *imageParam(int8_t scope, const char *key) {
+  if (scope < -1 || scope >= PROFILE_COUNT) return nullptr;
+  return scope < 0 ? findParam(SHARED_PARAMS, SHARED_PARAM_COUNT, key) : findParam(PROFILE_PARAMS, PROFILE_PARAM_COUNT, key);
+}
+
+bool settingsParamRange(bool shared, const char *key, float &minV, float &maxV) {
+  const ParamDef *d = imageParam(shared ? -1 : 0, key);
+  if (!d) return false;
+  minV = d->minV;
+  maxV = d->maxV;
+  return true;
+}
+
+const char *settingsParamKey(bool shared, size_t index) {
+  if (shared) return index < SHARED_PARAM_COUNT ? SHARED_PARAMS[index].key : nullptr;
+  return index < PROFILE_PARAM_COUNT ? PROFILE_PARAMS[index].key : nullptr;
+}
+
+bool settingsImageGet(const SettingsImage &img, int8_t scope, const char *key, float &v) {
+  const ParamDef *d = imageParam(scope, key);
+  if (!d) return false;
+  v = readParam(scope < 0 ? (const uint8_t *)&img.shared : (const uint8_t *)&img.profiles[scope], *d);
+  return true;
+}
+
+bool settingsImagePut(SettingsImage &img, int8_t scope, const char *key, float v, bool &clamped) {
+  const ParamDef *d = imageParam(scope, key);
+  if (!d) return false;
+  clamped = v < d->minV - 1e-4f || v > d->maxV + 1e-4f;
+  if (d->fine > 0) v = roundf(v / d->fine) * d->fine;   // 與 settingsSet 相同的對齊方式
+  writeParam(scope < 0 ? (uint8_t *)&img.shared : (uint8_t *)&img.profiles[scope], *d, constrain(v, d->minV, d->maxV));
+  return true;
+}
+
+const char *settingsImageSetName(SettingsImage &img, uint8_t index, const char *name) {
+  if (index >= PROFILE_COUNT) return "scope";
+  return nameToBuffer(name, img.profiles[index].name);
+}
+
+const char *settingsImageValidate(const SettingsImage &img, int8_t &badScope) {
+  badScope = -1;
+  if (const char *e = validateShared(img.shared)) return e;
+  for (uint8_t i = 0; i < PROFILE_COUNT; ++i) {
+    badScope = (int8_t)i;
+    if (const char *e = validateProfile(img.profiles[i])) return e;
+  }
+  badScope = -1;
+  if (img.active >= PROFILE_COUNT) return "scope";
+  return nullptr;
+}
+
+void settingsApplyImage(const SettingsImage &img) {
+  LOCKED(sharedSettings = img.shared; for (uint8_t i = 0; i < PROFILE_COUNT; ++i) profiles[i] = img.profiles[i]);
+  pendingActive = img.active == activeProfile ? -1 : (int8_t)img.active;
   applyHardwareSettings();
 }
 
@@ -657,7 +756,7 @@ bool settingsSnapshotForFlight(SharedSettings &shared, ProfileSettings &profile,
   shared = sharedSettings;
   index = activeProfile;
   profile = profiles[index];
-  dirty = memcmp(&sharedSettings, &savedShared, sizeof(SharedSettings)) != 0;
+  dirty = memcmp(&sharedSettings, &savedShared, sizeof(SharedSettings)) != 0 || settingsActiveDirty();
   for (uint8_t i = 0; i < PROFILE_COUNT && !dirty; ++i)
     dirty = memcmp(&profiles[i], &savedProfiles[i], sizeof(ProfileSettings)) != 0;
   portEXIT_CRITICAL(&settingsLock);
@@ -726,7 +825,10 @@ static void appendJsonString(String &out, const char *s) {
 void settingsValuesJson(String &out, uint8_t profileIndex) {
   if (profileIndex >= PROFILE_COUNT) profileIndex = activeProfile;
   out.reserve(2500);
-  out = "{\"active\":" + String(activeProfile) + ",\"edit\":" + String(profileIndex) + ",\"names\":[";
+  // active 是含還沒儲存的飛行風格(備份碼套用),dirtyActive 表示它和存檔的不同
+  const uint8_t act = settingsActiveDirty() ? (uint8_t)pendingActive : activeProfile;
+  out = "{\"active\":" + String(act) + ",\"dirtyActive\":" + (settingsActiveDirty() ? "true" : "false") +
+        ",\"edit\":" + String(profileIndex) + ",\"names\":[";
   for (uint8_t i = 0; i < PROFILE_COUNT; ++i) {
     if (i) out += ',';
     appendJsonString(out, profiles[i].name);

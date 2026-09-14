@@ -1,4 +1,6 @@
-// 版本流水號: r17 (2026-09-14) 序列指令 armwait <秒>|off(測試用縮短安全開關等待上限,軟體重開保留)
+// 版本流水號: r19 (2026-09-14) 載入設定後蜂鳴器腳位依設定的電位先設成不響(buzzerBegin)
+// 舊: r18 (2026-09-14) 開機檢查設定備份碼的編碼表(backupSelfCheck)
+// 舊: r17 (2026-09-14) 序列指令 armwait <秒>|off(測試用縮短安全開關等待上限,軟體重開保留)
 // 舊: r16 (2026-09-14) 感測器改 GPIO5/6 後擋 GPIO5 測試指令 pwmcap/escemu;開機印 I2C 腳位;
 //   I2C 匯流排解鎖(開機與 mpu 指令,預防):重開時感測器傳到一半會拉住 SDA,之後讀不到
 // 舊: r15 (2026-09-14) 校正旗標時效推進;序列指令 calexp(測試用縮短時效)
@@ -32,6 +34,8 @@
 #include "imu.h"
 #include "control.h"
 #include "settings.h"
+#include "settings_backup.h"
+#include "buzzer.h"
 #include "flight.h"
 #include "fw_update.h"
 #include "wifi_manager.h"
@@ -391,6 +395,8 @@ void setup() {
   // 腳位低電位的這幾十毫秒電變看到的是「沒有訊號」,不會動作.
   const bool calibFlag = escCalibTakeAtBoot();
   settingsBegin();   // 在控制工作啟動前載入:協定,脈寬,安裝方位與角度修正要先就位
+  backupSelfCheck();
+  buzzerBegin(sharedSettings.buzzerActiveLow != 0);   // 電位看設定,所以在載入設定之後
   const bool escCalibrate = calibFlag && sharedSettings.escProtocol == ESC_PROTO_PWM50;
   escBegin(sharedSettings.escProtocol, escCalibrate ? sharedSettings.escMaxUs : ESC_US_SAFE_IDLE, sharedSettings.escPwmHz,
            sharedSettings.escRpmTelemetry != 0);

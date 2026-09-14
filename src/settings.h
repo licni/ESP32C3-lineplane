@@ -1,4 +1,6 @@
-// 版本流水號: r15 (2026-09-14) 預留位元組 gearReserved 改為安全開關等待上限 armWaitMin(大小不變,讀到 0 當 3 分鐘)
+// 版本流水號: r17 (2026-09-14) 版面 v9:共用設定尾端加蜂鳴器電位 buzzerActiveLow(+3 預留);舊存檔尾端補預設
+// 舊: r16 (2026-09-14) 設定備份碼用的整份設定介面 SettingsImage;備份碼套用的飛行風格要按儲存才寫入(settingsActiveDirty)
+// 舊: r15 (2026-09-14) 預留位元組 gearReserved 改為安全開關等待上限 armWaitMin(大小不變,讀到 0 當 3 分鐘)
 // 舊: r14 (2026-09-14) 飛行中油門下限最低 THROTTLE_FLOOR_PCT = 10%(版面不變,舊存檔載入時補到 10)
 // 舊: r13 (2026-09-13) 版面 v8:共用設定尾端加機輪收腳(啟用,反轉,行程下限/上限,起飛後收輪秒數,舵機速度)
 // 舊: r12 (2026-09-13) 預留位元組 reserved1 改為起飛前水平限制 startLevelDeg(大小不變)
@@ -38,7 +40,7 @@ const uint8_t CURVE_STORE_POINTS = 5;
 const uint8_t CURVE_MAX_POINTS = 4;
 const uint8_t CURVE_MIN_POINTS = 1;
 const uint8_t PROFILE_NAME_BUFFER = 24;   // UTF-8,中文一字 3 位元組,約 7 個中文字
-const uint16_t SETTINGS_LAYOUT_VERSION = 8;
+const uint16_t SETTINGS_LAYOUT_VERSION = 9;
 const uint8_t ARM_WAIT_DEFAULT_MIN = 3;   // 安全開關等待上限出廠值(GG 2026-09-14:3 分鐘,可調)
 
 enum DisturbMode : uint8_t { DISTURB_EXTEND = 0, DISTURB_RESET = 1, DISTURB_OFF = 2 };
@@ -90,6 +92,9 @@ struct SharedSettings {
   // 原本是收腳區塊的預留位元組(舊存檔一定是 0,載入時補 3). 起飛程序開始後這麼多分鐘沒按安全開關就自動取消
   uint8_t armWaitMin;
   float gearTravelSec;       // 舵機從一端走到另一端的秒數(0 = 直接跳)
+  // --- v9 起加在尾端:蜂鳴器(GG 2026-09-14;v4~v8 的存檔讀進來時補預設) ---
+  uint8_t buzzerActiveLow;   // 0 = 高電位響(出廠),1 = 低電位響
+  uint8_t reserved9[3];
 };
 
 struct CurvePoint {
@@ -125,11 +130,12 @@ struct ProfileSettings {
 // --- 目前生效的設定(RAM) -----------------------------------------------------
 extern SharedSettings sharedSettings;
 extern ProfileSettings profiles[PROFILE_COUNT];
-extern uint8_t activeProfile;   // 飛行使用哪一組;選擇時立即存檔,不算「未儲存變更」
+extern uint8_t activeProfile;   // 飛行使用哪一組;選擇時立即存檔,不算「未儲存變更」(備份碼套用的例外,見 settingsActiveDirty)
 
 void settingsBegin();
 bool settingsSharedDirty();
 bool settingsProfileDirty(uint8_t index);
+bool settingsActiveDirty();   // 備份碼套用了不同的飛行風格,還沒按儲存
 bool settingsAnyDirty();
 
 // 設定單一參數. scope = -1 共用,0~5 風格. 成功回 nullptr,失敗回錯誤代碼(網頁查表顯示).
@@ -146,6 +152,26 @@ void settingsRevert();
 // 把參數表與目前值組成 JSON(網頁用).
 void settingsMetaJson(String &out);
 void settingsValuesJson(String &out, uint8_t profileIndex);
+
+// --- 整份設定(設定備份碼 settings_backup.cpp 用) ---------------------------------
+struct SettingsImage {
+  SharedSettings shared;
+  ProfileSettings profiles[PROFILE_COUNT];
+  uint8_t active;
+};
+void settingsGetImage(SettingsImage &out);       // 目前 RAM 的值(飛行風格含還沒儲存的)
+void settingsDefaultImage(SettingsImage &out);   // 出廠值
+// 參數表查詢:scope -1 共用,0~5 風格. 沒有這個參數回 false.
+bool settingsParamRange(bool shared, const char *key, float &minV, float &maxV);
+const char *settingsParamKey(bool shared, size_t index);   // 參數表第 index 個的名稱,超過回 nullptr
+bool settingsImageGet(const SettingsImage &img, int8_t scope, const char *key, float &v);
+// 寫入一個參數:夾到參數表範圍並對齊步進. clamped = 原值超出範圍被夾. 沒有這個參數回 false. 不做交叉驗證,點數鍵直接寫.
+bool settingsImagePut(SettingsImage &img, int8_t scope, const char *key, float v, bool &clamped);
+const char *settingsImageSetName(SettingsImage &img, uint8_t index, const char *name);
+// 交叉驗證整份設定. 失敗回錯誤代碼,badScope = -1 共用或 0~5 風格.
+const char *settingsImageValidate(const SettingsImage &img, int8_t &badScope);
+// 驗證過的整份設定套到 RAM(變成未儲存變更,飛行風格也是按儲存才寫入).
+void settingsApplyImage(const SettingsImage &img);
 
 // 控制工作用(上鎖複製):起飛快照,回傳是否有未儲存變更(共用或任一風格).
 bool settingsSnapshotForFlight(SharedSettings &shared, ProfileSettings &profile, uint8_t &profileIndex);

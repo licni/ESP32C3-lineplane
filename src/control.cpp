@@ -1,4 +1,5 @@
-// 版本流水號: r19 (2026-09-14) 飛行輸入加安全開關等待上限的測試覆寫秒數(序列指令 armwait)
+// 版本流水號: r20 (2026-09-14) 蜂鳴器每拍依飛行狀態與設定的電位更新(buzzerUpdate)
+// 舊: r19 (2026-09-14) 飛行輸入加安全開關等待上限的測試覆寫秒數(序列指令 armwait)
 // 舊: r18 (2026-09-14) 安全開關 GPIO21 讀取與去抖(50ms),測試指令可覆寫
 // 舊: r17 (2026-09-14) 飛行輸入加韌體更新擋起飛原因;韌體寫入中拒絕手動輸出
 // 舊: r16 (2026-09-13) 機輪收腳舵機每拍更新;網頁試收輪(待機限定,10 秒自動放下)
@@ -17,6 +18,7 @@
 // 舊: r2 (2026-09-13) 優先權改系統最高(實測被 WiFi 搶佔)
 // 舊: r1 (2026-09-13) 由 main.cpp 拆出:控制工作與遙測快照
 #include "control.h"
+#include "buzzer.h"
 #include "esc_output.h"
 #include "event_log.h"
 #include "imu.h"
@@ -274,6 +276,7 @@ static void controlTask(void *) {
     FlightStatus fst;
     flightGetStatus(fst);
     lastFlightState = fst.state;
+    buzzerUpdate(nowMs, fst, cfg.buzzerActiveLow != 0);
     uint8_t flags = 0;
     if (groundRoll.level()) flags |= LOG_FLAG_LEVEL;
     if (groundRoll.holdSeconds() >= cfg.earlyLandHoldSec) flags |= LOG_FLAG_ROLL_HOLD;

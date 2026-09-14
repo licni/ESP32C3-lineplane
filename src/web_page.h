@@ -144,6 +144,9 @@ button.b.sm{padding:3px 10px;font-size:13px}
 input[type=text],input[type=password],input[type=number],select{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;min-width:0}
 .row input[type=text],.row input[type=password],.row input[type=number]{flex:1 1 160px}
 .row input[type=range]{flex:1 1 160px;min-width:0}
+/* 設定備份碼:英數字長串要能在任何位置斷行 */
+.bktext{display:block;width:100%;box-sizing:border-box;margin:4px 0;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:13px/1.4 ui-monospace,Consolas,monospace;word-break:break-all;resize:vertical}
+.bktext:disabled{opacity:.5}
 button,select,input{touch-action:manipulation}   /* 連點按鈕不觸發雙擊放大,雙指縮放照常 */
 button.b{flex:0 0 auto;white-space:nowrap;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;padding:7px 14px;border-radius:8px;cursor:pointer}
 button.b.pri{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -387,6 +390,20 @@ progress{width:100%;height:10px}
 <section id="set" hidden>
  <div id="setCards"></div>
  <div class="card"><div class="row" style="margin:0"><button class="b danger sm" id="btnSharedDef">共用設定回預設</button><span class="sub" style="flex:1 1 150px">含安裝,電變頁的設定;按儲存才寫入. 不影響 WiFi.</span></div></div>
+ <div class="card" id="bkCard">
+  <h2>設定備份碼</h2>
+  <div class="cnote">把這台飛機的全部設定變成一串 LP 開頭的文字:共用設定(含安裝,電變頁),六組風格與名稱,飛行使用哪一組. 不含 WiFi 設定.
+   複製起來存在 LINE 或記事本,到另一台飛機貼上,按「套用」,再按上方的儲存,設定就全部過去.
+   <br><b>套用後請逐頁檢查</b>,尤其感測器方位,角度修正,電變脈寬與收輪行程:每台飛機的安裝不一樣.
+   <br>較舊的備份碼也能用,之後新增的功能維持出廠值. 有未儲存的變更時不能使用,請先儲存或放棄.</div>
+  <div class="live" id="bkDirty" hidden><span class="pill bad">有未儲存的變更</span><span class="sub">請先按上方的儲存或放棄,才能複製或套用備份碼.</span></div>
+  <div class="row" style="margin-bottom:0"><button class="b pri" id="btnBkMake">產生並複製</button><span class="sub" id="bkMakeText" style="flex:1 1 150px"></span></div>
+  <textarea class="bktext" id="bkOut" rows="4" readonly hidden></textarea>
+  <div class="sub" style="margin-top:8px">貼上備份碼</div>
+  <textarea class="bktext" id="bkIn" rows="4" placeholder="LP 開頭的備份碼(長按貼上)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+  <div class="row" style="margin-bottom:0"><button class="b pri" id="btnBkApply" disabled>套用</button><button class="b" id="btnBkClear">清空</button></div>
+  <div class="msg" id="bkMsg"></div>
+ </div>
 </section>
 
 <section id="inst" hidden>
@@ -533,7 +550,10 @@ const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔�
  selected:'已設為飛行使用.',copied:'已複製,記得儲存.',defaults:'已回預設,按儲存才會寫入;按放棄變更可以救回.',reverted:'已放棄變更.',
  manualstate:'只有待機或飛行結束時可以手動輸出(倒數中請先取消倒數).',manuallow:'手動輸出要從最低油門開始.',
  calibdirty:'有未儲存的變更,請先儲存(校正用存檔裡的脈寬).',calibproto:'DShot 是數位油門,不需要校正行程.',
- calibon:'已設定:10 秒內拔掉電池再接上就開始校正,沒拔會自動取消.',caliboff:'已取消電變校正.'};
+ calibon:'已設定:10 秒內拔掉電池再接上就開始校正,沒拔會自動取消.',caliboff:'已取消電變校正.',
+ bkdirty:'有未儲存的變更,請先按上方的儲存或放棄.',bkprefix:'這不是備份碼(要 LP 開頭),已清空,請重新貼上.',
+ bkcrc:'備份碼不完整或有錯字(可能少複製了一段),已清空,請重新複製整串再貼上.',bkver:'這個備份碼的格式比這台飛機的韌體新,請先到系統頁更新韌體.',
+ bkfail:'產生備份碼失敗,請再試一次.'};
 const AXES=['晶片 +X','晶片 −X','晶片 +Y','晶片 −Y','晶片 +Z','晶片 −Z'];
 const UNIT={pct:'%',cpct:'%',sec:'秒',min:'分鐘',deg:'°',g:'g',us:'µs',m:'公尺',num:'',hz:'Hz'};
 // 參數標籤:[名稱, 單位種類, 說明]
@@ -598,7 +618,9 @@ const SET_LAYOUT=[
 const INST_LAYOUT=[
  {t:'飛行速度',k:['lineLength','lapSec'],n:'姿態計算要扣掉繞圈的向心力,用線長與單圈秒數換算速度,大概填對即可.',id:'speedCard'},
  {t:'機輪收腳',k:['gearEnable','gearRetractSec','gearTravelSec','gearMinUs','gearMaxUs','gearReverse'],id:'gearCard',
-  n:'收腳舵機訊號線接 GPIO3. 馬達啟動後到設定秒數收輪,降落開始減力時放輪;緊急停止,撞擊斷電等馬達停下時立即放輪. 開機,待機,倒數中一律放下. 所有計時器共用.'}
+  n:'收腳舵機訊號線接 GPIO3. 馬達啟動後到設定秒數收輪,降落開始減力時放輪;緊急停止,撞擊斷電等馬達停下時立即放輪. 開機,待機,倒數中一律放下. 所有計時器共用.'},
+ {t:'蜂鳴器',k:['buzzerLow'],id:'buzzCard',
+  n:'有源蜂鳴器(通電就響)接 GPIO7. 開機就緒響「滴滴」;等安全開關按下時每 2.5 秒響一聲長音;倒數時短音越來越急,最後 3 秒連續響到馬達啟動. 待機時一直在響,就是電位選反了,切換後立即生效.'}
 ];
 const ESC_LAYOUT=[
  {t:'輸出協定',k:['escProtocol','escPwmHz','escRpm','motorPoles'],id:'protoCard',n:'一般電變用 PWM(出廠 50Hz). 開源韌體電變(BLHeli_S,Bluejay,BLHeli_32,AM32)可選 DShot:數位油門,不用校正行程,也不看下面的脈寬. 換協定或頻率要<b>儲存後重新開機</b>才生效,電變也要重新通電.'},
@@ -1088,6 +1110,7 @@ function buildShared(){
    else if(k==='earlyLand')c.appendChild(makeSelect('s',k,'觸地提早降落',['關閉','開啟'],'建議先關閉,到紀錄頁看過特技與地面滑行各自的 Z 軸抖動,確定門檻不會誤觸再開啟. 開啟時收輪不作用.'));
    else if(k==='gearEnable')c.appendChild(makeSelect('s',k,'收輪功能',['關閉','開啟'],'沒有收腳的飛機保持關閉. 觸地提早降落開啟時不收輪:不知道什麼時候要貼地降落,輪子要一直放著.'));
    else if(k==='gearReverse')c.appendChild(makeSelect('s',k,'舵機方向',['正轉(收起在上限)','反轉(收起在下限)'],'正轉:放下在下限,收起在上限. 反轉:相反. 按「試收輪」看方向,收的方向反了就切換.'));
+   else if(k==='buzzerLow')c.appendChild(makeSelect('s',k,'蜂鳴器響的電位',['高電位響','低電位響'],'依蜂鳴器模組選擇. 一般有源蜂鳴器正極接 GPIO7 是高電位響;模組標示「低電平觸發」選低電位響. 改完按上方的儲存.'));
    else if(k==='crashEnable')c.appendChild(makeSelect('s',k,'撞擊斷電',['關閉','開啟'],'開啟時,飛行中衝擊超過撞擊門檻立即關馬達.'));
    else if(k==='escRpm')c.appendChild(makeSelect('s',k,'轉速回傳(雙向 DShot)',['關閉','開啟'],'電變把馬達轉速送回來顯示. 只有 DShot300 可用,電變韌體要支援雙向 DShot(Bluejay,AM32,BLHeli_32 32.7 以上). <b>不支援的電變開了可能不解鎖,不轉</b>,所以預設關閉;開了先用手動輸出確認馬達會轉. 儲存並重新開機生效. 收不到回傳只顯示警告,不擋起飛.'));
    else if(k==='escProtocol')c.appendChild(makeSelect('s',k,'電變訊號',['PWM(一般電變)','DShot150','DShot300'],'一般電變用 PWM. Bluejay 只能用 DShot. BLHeli_S 的 L 型(24MHz)晶片官方建議 DShot150,其他開源電變用 DShot300. 詳見下方廠牌說明.'));
@@ -1155,9 +1178,12 @@ function render(){
  document.querySelectorAll('#noseSeg button').forEach(b=>b.classList.toggle('on',Number(b.dataset.v)===s.noseRight));
  const st=$('speedText');if(st){const v=2*Math.PI*s.lineLength/s.lapSec;st.textContent=`換算飛行速度約 ${v.toFixed(1)} m/s(${(v*3.6).toFixed(0)} km/h)`}
  renderWidgets();
- const dirty=VALS.dirtyShared||VALS.dirtyProfiles.some(x=>x);
+ const dirty=valsDirty();
  $('saveBar').hidden=!dirty;$('topBar').classList.toggle('dirty',dirty);
+ bkRender();
 }
+// dirtyActive:備份碼套用了不同的飛行風格,也要按儲存
+function valsDirty(){return !!VALS&&(VALS.dirtyShared||!!VALS.dirtyActive||VALS.dirtyProfiles.some(x=>x))}
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function mmss(s){return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
 
@@ -1326,7 +1352,8 @@ function renderStatus(s){
  evSync(s);
  if(pane==='comp')updateCurveNow(s);
  // 別的裝置或序列埠存檔後,這裡的未儲存提示要跟著消失
- if(VALS){const dirty=VALS.dirtyShared||VALS.dirtyProfiles.some(x=>x);if(dirty!==!!s.dirty)loadVals()}
+ if(VALS){if(valsDirty()!==!!s.dirty)loadVals()}
+ if(pane==='set')bkRender();   // 起飛程序鎖定時不能套用
 }
 
 let busy=false;
@@ -1831,6 +1858,71 @@ confirmTwice($('btnProfDef'),'這組回預設',async()=>{try{const r=await post(
 confirmTwice($('btnSharedDef'),'共用設定回預設',async()=>{try{const r=await post('/api/defaults',{p:'s'});toast(CODES[r.code]||r.code,!r.ok)}catch(e){}loadVals()});
 $('btnSave').onclick=async()=>{try{const r=await post('/api/save');toast(CODES[r.code]||r.code,!r.ok)}catch(e){toast('連線失敗.',true)}loadVals()};
 $('btnRevert').onclick=async()=>{try{const r=await post('/api/revert');toast(CODES[r.code]||r.code,!r.ok)}catch(e){}loadVals()};
+
+// --- 設定備份碼(GG 2026-09-14,設計見 docs/設定備份碼設計_2026-09-14.md) ---
+// 有未儲存變更時整張卡不能用. 貼上當下就送板子檢查;不是 LP 開頭或檢查碼錯就提示並清空.
+const BK_NAMES={noseAxis:'朝機頭的軸',upAxis:'朝機背的軸',noseRight:'圖示機頭方向',escProtocol:'輸出協定',gestureEnable:'啟動手勢',
+ earlyLand:'觸地提早降落',escRpm:'轉速回傳',gearEnable:'機輪收腳',gearReverse:'舵機反轉',buzzerLow:'蜂鳴器電位',phaseMode:'換段方式',upN:'補速曲線點數',dnN:'減速曲線點數'};
+const BK_SHARED_ERR=['axis','escrange','pwmhz','twistdeg','gearrange'];
+function bkLabel(item){
+ if(item==='act')return '飛行使用的風格';
+ const i=item.indexOf(':'),sc=item.slice(0,i),key=item.slice(i+1);
+ const m=/^(up|dn)(\d)([ap])$/.exec(key);
+ const name=(L[key]||[])[0]||BK_NAMES[key]||(m?`${m[1]==='up'?'補速':'減速'}曲線第 ${m[2]} 點${m[3]==='a'?'角度':'補償'}`:key);
+ return sc==='s'?name:`第 ${Number(sc)+1} 組風格的${name}`;
+}
+function bkShow(ok,text){const e=$('bkMsg');e.className='msg '+(ok?'ok':'bad');e.textContent=text}
+function bkRender(){
+ const dirty=!VALS||valsDirty(),lock=!!(STATUS&&STATUS.lock);
+ $('bkDirty').hidden=!VALS||!dirty;
+ $('btnBkMake').disabled=dirty;
+ $('bkIn').disabled=dirty;
+ $('btnBkApply').disabled=dirty||lock||!$('bkIn').value.trim();
+ if(dirty)$('bkOut').hidden=true;   // 之前產生的碼已經不是目前的設定
+}
+// http 網頁(不是 https)瀏覽器會擋剪貼簿 API,改用選取文字後 execCommand('copy')
+async function bkCopy(el){
+ try{if(window.isSecureContext&&navigator.clipboard){await navigator.clipboard.writeText(el.value);return true}}catch(e){}
+ try{el.readOnly=false;el.focus();el.select();el.setSelectionRange(0,el.value.length);
+  const ok=document.execCommand('copy');el.readOnly=true;el.blur();return ok}
+ catch(e){el.readOnly=true;return false}
+}
+function bkResult(r,applied){
+ if(r.ok){
+  let t=applied?'已套用. 請逐頁檢查設定,尤其感測器方位,角度修正,電變脈寬與收輪行程,確認後按上方的儲存;不要就按放棄.':'備份碼完整,可以按「套用」.';
+  if(r.newer)t+=' 這個備份碼來自較新的韌體,這版沒有的功能已略過.';
+  if(r.clamp&&r.clamp.length)t+=' 以下超出這版的可調範圍,已調到範圍內:'+r.clamp.map(bkLabel).join(',')+'.';
+  bkShow(true,t);
+  if(applied)loadVals();
+  return;
+ }
+ const clear=r.code==='bkprefix'||r.code==='bkcrc';
+ let t=CODES[r.code]||r.code;
+ if(r.scope>=0)t=`第 ${r.scope+1} 組風格:`+t;else if(BK_SHARED_ERR.includes(r.code))t='共用設定:'+t;
+ if(clear){$('bkIn').value='';bkLastLen=0}
+ bkShow(false,t);bkRender();
+}
+let bkLastLen=0;
+$('btnBkMake').onclick=async()=>{
+ try{const r=await poll('/api/backup');
+  if(!r.ok){bkShow(false,CODES[r.code]||r.code);return}
+  const o=$('bkOut');o.value=r.text;o.hidden=false;
+  const ok=await bkCopy(o);
+  $('bkMakeText').textContent=`${r.text.length} 字`;
+  bkShow(ok,ok?'已複製,可以貼到 LINE 或記事本保存.':'這支手機不能自動複製:請長按下面的備份碼,全選後複製.');
+ }catch(e){bkShow(false,'連線失敗,請再試一次.')}
+};
+$('bkIn').addEventListener('input',()=>{
+ const v=$('bkIn').value,jump=v.length-bkLastLen;bkLastLen=v.length;
+ bkRender();
+ if(!v.trim()){$('bkMsg').textContent='';return}
+ // 一次多出很多字 = 貼上(含輸入法的剪貼簿建議),馬上檢查;手打的等按套用時由板子檢查
+ if(jump>=10)post('/api/backup/check',{text:v}).then(r=>{if($('bkIn').value===v)bkResult(r,false)}).catch(()=>bkShow(false,'連線失敗,請再試一次.'));
+});
+$('btnBkApply').onclick=async()=>{
+ try{const r=await post('/api/backup/apply',{text:$('bkIn').value});bkResult(r,true)}catch(e){bkShow(false,'連線失敗,請再試一次.')}
+};
+$('btnBkClear').onclick=()=>{$('bkIn').value='';bkLastLen=0;$('bkMsg').textContent='';bkRender()};
 
 // --- 系統頁 ---
 async function loadWifi(){

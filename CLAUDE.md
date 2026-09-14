@@ -23,6 +23,8 @@
 - `test_logs/`(測試紀錄與板上設定備份)與 Python 暫存不進版本庫. GG 要求時才提交/推送.
 
 ## 工作方式
+- **目前是「只改程式碼」模式(GG 2026-09-14,優先於下面的檢查規則)**:在 GG 說【恢復全部檢查】之前,不跑回歸/全功能/瀏覽器測試,
+  不改使用說明書,不做燒錄前後設定備份比對,不重拍截圖. 程式改完編譯並燒到開發板,只列出這次修改影響到的東西與建議 GG 自己檢查的項目.
 - 分段實作,每段編譯通過就寫進 docs/開發紀錄.md,再請 GG 實機確認.
 - **編譯,燒錄,OTA,序列監控全部由 Claude 用 PlatformIO 操作**. GG 不用 Arduino IDE.
   pio 路徑:`$env:USERPROFILE\.platformio\penv\Scripts\pio.exe`.
@@ -57,6 +59,8 @@
   並 `diff()` 比對;板子不在待機或有未儲存變更就不測. 絕不可「回預設並儲存」當收尾. 燒錄前先 `board_backup.py save`.
   **燒錄例外(GG 2026-09-14)**:板上有未儲存變更時照樣直接燒,不用問(目前板上都是測試資料);做法是先備份 RAM 值,燒完用 setmany 放回不儲存. 起飛程序/馬達運轉中仍不燒.
 - **web_page.h 的 HTML/JS 修改用檔案編輯工具**,不要用 PowerShell 字串替換:引號跳脫與陣列串接多次靜默改壞內容(空字串變單引號,整張卡片消失).
+- **設定備份碼**(2026-09-14,docs/設定備份碼設計_2026-09-14.md):新增參數或放寬參數範圍時,要在 src/settings_backup.cpp **開新世代**把欄位接在後面,
+  不可改已定案世代的表(舊備份碼會解錯). 開機序列埠印 `backup codec ok` 才表示編碼表涵蓋全部參數.
 - **設定結構改版要寫轉移**(settings.cpp 的 loadShared/loadProfile),不可讓使用者設定回預設. 改完燒錄後用 `board_backup.py diff` 驗證.
 - 回歸測試:tools/settings_api_test.py(設定 API),tools/flight_sm_test.py(狀態機,板子放桌上),tools/web_load_test.py(網頁負載計時),
   tools/curve_ui_test.py(曲線圖拖曳,CDP;要用 penv 的 python,內建 websockets),
