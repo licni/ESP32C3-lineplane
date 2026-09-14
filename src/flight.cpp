@@ -1,4 +1,5 @@
-// 版本流水號: r20 (2026-09-14) 安全開關等待上限(GG:3 分鐘可調):起飛程序開始後超過上限沒按開關 → 取消回待機(事件 28/3);
+// 版本流水號: r21 (2026-09-14) 降落保險時間改從減力走完才開始算(降落最長 = 減力秒數 + 保險時間;GG:減力 20 + 保險 20 時減力一完就關馬達)
+// 舊: r20 (2026-09-14) 安全開關等待上限(GG:3 分鐘可調):起飛程序開始後超過上限沒按開關 → 取消回待機(事件 28/3);
 //   上電自動倒數等開關逾時 → 這次通電不再自動倒數(事件 28/4). 桌上碰到飛機誤觸發時不會一直鎖著設定
 // 舊: r19 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG):開始不再拒絕(原因 7/8 不再產生),
 //   起飛程序中按下一次就記住,放穩(或上電自動倒數放平 1 秒)後開始倒數;上電自動倒數等待中燈慢閃;事件 28
@@ -614,8 +615,11 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
         else if (in.imuOk && landStillS >= fs.touchdownStillSec) finish(END_TOUCH_STILL, landStillS, fs.touchdownStillSec);
         else if (in.imuOk && in.rollHoldS >= fs.earlyLandHoldSec) finish(END_TOUCH_ROLL, in.rollHoldS, fs.earlyLandHoldSec);
       }
-      if (state == FS_LANDING && landingElapsed >= fs.landingTimeoutSec)
-        finish(END_LANDING_TIMEOUT, landingElapsed, fs.landingTimeoutSec);
+      // 保險時間從減力走完才開始算(GG 2026-09-14):降落最長 = 減力秒數 + 保險時間.
+      // 原本從開始降落算,減力 20 秒 + 保險 20 秒時減力一走完就關馬達,完全沒有等觸地的時間.
+      const float landingLimitS = fp.landingRampSec + fs.landingTimeoutSec;
+      if (state == FS_LANDING && landingElapsed >= landingLimitS)
+        finish(END_LANDING_TIMEOUT, landingElapsed, landingLimitS);
     }
   }
 
