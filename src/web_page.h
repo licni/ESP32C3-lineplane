@@ -1,4 +1,8 @@
-// 版本流水號: r58 (2026-09-14) 停用安全開關(GG):設定頁風險說明 + 三項打勾才送出,每一頁上方紅色警告列(狀態 asoff),監看頁開關顯示已停用,事件 28/5
+// 版本流水號: r62 (2026-09-15) 曲線朝上點數/朝下點數各自加圓角框(GG:標籤和選單離得遠,看不出是一組)
+// 舊: r61 (2026-09-14) 補速/減速起點(死區邊界)的點改成實心小點(半徑 5 空心 → 3 實心),和可拖的空心點區分(GG)
+// 舊: r60 (2026-09-14) 曲線點縮小:半徑 9/選取 11 → 6/7.5,框線 3 → 2.2(GG:太肥),觸控範圍維持半徑 20
+// 舊: r59 (2026-09-14) 曲線拖曳放開:角度與補償一次送出(setmany),拖曳中與送出中不讓讀回的舊設定覆蓋畫面(GG:放開瞬間點先跳回原位)
+// 舊: r58 (2026-09-14) 停用安全開關(GG):設定頁風險說明 + 三項打勾才送出,每一頁上方紅色警告列(狀態 asoff),監看頁開關顯示已停用,事件 28/5
 // 舊: r57 (2026-09-14) 手動上傳韌體:選檔後找身分標記,不是這個控制器的韌體就不讓上傳,是的話顯示版本比目前新/相同/舊(允許退回舊版)
 // 舊: r56 (2026-09-14) 設定頁「設定備份碼」卡片(產生並複製,貼上即檢查,套用,清空;未儲存時停用);安裝頁「蜂鳴器」電位切換;
 //   曲線點拖曳改用總油門 10%~100% 夾(GG:基本油門 70% 時只能拉到 20%),補償值 ±100;未儲存判斷含備份碼套用的飛行風格;
@@ -202,7 +206,8 @@ button.b:disabled{opacity:.45;cursor:default}
 .cvpanel .selbox{border:2px solid #ef4444;border-radius:10px;padding:4px 10px;background:var(--bg)}
 .cvpanel .selbox h3{margin:3px 0;font-size:14.5px;color:#ef4444}
 .cvpanel .wl{display:grid;grid-template-columns:76px 1fr;gap:6px;align-items:baseline;font-size:14px;margin:2px 0}
-.cnt2{display:flex;gap:4px 14px;flex-wrap:wrap;margin-top:4px}.cnt2 .prm{flex:1 1 150px;border-top:0}
+/* 朝上/朝下點數:各自一個框,標籤和選單看得出是同一組(GG:兩者離得遠,中間是說明展開的位置) */
+.cnt2{display:flex;gap:6px 10px;flex-wrap:wrap;margin-top:6px}.cnt2 .prm{flex:1 1 150px;border:1px solid var(--line);border-radius:8px;padding:4px 8px;background:var(--bg)}.cnt2 .prm select{background:var(--card)}
 .cv-limit{fill:var(--mute);opacity:.18}.cv-dead{fill:#3b82f6;opacity:.09}
 .cv-grid{stroke:var(--line);stroke-width:1}.cv-zero{stroke:var(--mute);stroke-width:1;stroke-dasharray:4 4}
 .cv-lab{fill:var(--mute);font-size:13px;font-family:system-ui,sans-serif}.cv-sm{font-size:10.5px}
@@ -211,9 +216,9 @@ button.b:disabled{opacity:.45;cursor:default}
 .cv-base{stroke:var(--accent);stroke-width:1.6;stroke-dasharray:3 3}
 .cv-raw{fill:none;stroke:var(--mute);stroke-width:1.6;stroke-dasharray:5 4}
 .cv-curve{fill:none;stroke:var(--accent);stroke-width:3.6;stroke-linejoin:round;stroke-linecap:round}
-.cv-pt{fill:var(--card);stroke:var(--accent);stroke-width:3;cursor:grab}
-.cv-pt.sel{fill:#ef4444;stroke:#fff;stroke-width:2.5;filter:url(#cvGlow)}
-.cv-db{fill:var(--card);stroke:var(--accent);stroke-width:2}
+.cv-pt{fill:var(--card);stroke:var(--accent);stroke-width:2.2;cursor:grab}
+.cv-pt.sel{fill:#ef4444;stroke:#fff;stroke-width:2;filter:url(#cvGlow)}
+.cv-db{fill:var(--accent);stroke:none;pointer-events:none}
 .cv-hd{fill:var(--ink);cursor:grab}.cv-hd.base{fill:var(--accent)}.cv-hd.sel{fill:#ef4444;filter:url(#cvGlow)}
 .cv-hit{fill:transparent;cursor:grab}
 .cv-tag{fill:var(--card);stroke:var(--accent);stroke-width:1.2}.cv-tagt{fill:var(--ink);font-size:13px;font-weight:700;font-family:system-ui,sans-serif}
@@ -977,13 +982,14 @@ function drawCurve(){
  // 飛機圖示(左上角,跟著目前角度轉)
  h+=`<g transform="translate(${X0+44},${Y0+36})"><g id="cvPlane"><g id="cvPlaneFlip" transform="scale(${right?-1:1},1)" class="cv-plane"><g transform="scale(.36)">`+
   `<path d="M-92,0 Q-90,-9 -72,-10 L58,-5 L96,-3 L96,3 L58,5 L-72,10 Q-90,9 -92,0 Z"/><path d="M68,-4 L90,-30 L100,-30 L97,-3 Z"/><rect x="-97" y="-28" width="4" height="56"/><circle cx="-54" cy="30" r="7"/></g></g></g></g>`;
- // 死區邊界(曲線從這裡開始補償)
- h+=`<circle cx="${bx}" cy="${cvY(upDb)}" r="5" class="cv-db"/><circle cx="${bx}" cy="${cvY(dnDb)}" r="5" class="cv-db"/>`;
+ // 死區邊界(曲線從這裡開始補償):不能拖,畫成實心小點,和空心可拖的點區分(GG)
+ h+=`<circle cx="${bx}" cy="${cvY(upDb)}" r="3" class="cv-db"/><circle cx="${bx}" cy="${cvY(dnDb)}" r="3" class="cv-db"/>`;
  // 可調點
  for(const side of ['up','dn'])for(let i=1;i<=p[ck(side+'N')];i++){
   const a=p[ck(`${side}${i}a`)],c=p[ck(`${side}${i}p`)],x=cvX(clamp(base+c,0,100)),y=cvY(a);
   const sel=cvPhase===1&&cvSel.t==='pt'&&cvSel.side===side&&cvSel.i===i;
-  h+=`<circle cx="${x}" cy="${y}" r="${sel?11:9}" class="cv-pt${sel?' sel':''}"/><circle cx="${x}" cy="${y}" r="20" class="cv-hit" data-h="pt" data-side="${side}" data-i="${i}"/>`;
+  // 看得到的點縮小(GG:太肥),手指觸控範圍維持半徑 20 才好按
+  h+=`<circle cx="${x}" cy="${y}" r="${sel?7.5:6}" class="cv-pt${sel?' sel':''}"/><circle cx="${x}" cy="${y}" r="20" class="cv-hit" data-h="pt" data-side="${side}" data-i="${i}"/>`;
   if(sel){const out=clamp(base+c,mn,mx),lx=x>X1-150?x-16:x+16,ly=y-14<Y0+14?y+26:y-14;   // 太靠近頂端時文字放到點下方,不壓到圖角標籤
    h+=`<text x="${lx}" y="${ly}" text-anchor="${x>X1-150?'end':'start'}" class="cv-nowt">${a>0?'+':''}${a}° ${c>=0?'+':''}${c}% → ${out}%</text>`}
  }
@@ -1076,10 +1082,18 @@ function cvDragKeys(s){
  const end=async()=>{
   if(!cvDrag)return;const s=cvDrag;cvDrag=null;
   if(!s.moved)return;
-  // 放開當下先把要送的值全部記下來:送完第一個值會重新載入設定,VALS 會被換成伺服器上的舊值.
-  // 先送角度再送補償;若被韌體拒絕,重新載入就會回到原值.
-  const vals=s.keys.map(k=>VALS.profile[k]);
-  for(let k=0;k<s.keys.length;k++)if(vals[k]!==s.before[k])await setParam('p',s.keys[k],vals[k]);
+  // 角度與補償一次送出(setmany 全部寫完才驗證),送完只重新讀一次. r58 以前分兩次送,每次都重新讀,
+  // 送完角度讀回來補償還是舊值,畫面上的點先跳回原位再跳到新位置. 被韌體拒絕時重新讀回來就回到原值.
+  const body=s.keys.map((k,i)=>[k,VALS.profile[k],s.before[i]]).filter(x=>x[1]!==x[2]).map(x=>`${x[0]}=${x[1]}`).join('\n');
+  if(!body){render();return}
+  cvSaving=true;valsGen++;
+  chain=chain.then(async()=>{
+   try{const r=await poll('/api/setmany?p='+editP,{method:'POST',headers:{'Content-Type':'text/plain'},body});
+    if(!r.ok)toast(CODES[r.code]||r.code,true)}
+   catch(e){toast('連線失敗,請再試一次.',true)}
+   cvSaving=false;valsGen++;
+   await loadVals();
+  });
  };
  svg.addEventListener('pointerup',e=>{pointers.delete(e.pointerId);end()});
  // 瀏覽器接手手勢(雙指縮放)時會送 pointercancel:拖到一半的點回原位,不送出
@@ -1237,8 +1251,13 @@ function valsDirty(){return !!VALS&&(VALS.dirtyShared||!!VALS.dirtyActive||VALS.
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function mmss(s){return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
 
+// 曲線拖曳中或放開後還在送出時,讀回來的設定是舊值:不覆蓋畫面(GG:放開瞬間點先跳回原位再跳到新位置).
+// valsGen:送出開始就加一,送出前就發出的讀取回來時丟掉.
+let cvSaving=false,valsGen=0;
 async function loadVals(){
- try{VALS=await poll('/api/settings?p='+editP);editP=VALS.edit;
+ try{const g=valsGen,v=await poll('/api/settings?p='+editP);
+  if(cvDrag||cvSaving||g!==valsGen)return;
+  VALS=v;editP=VALS.edit;
   if(VALS.edit===VALS.active){ACTP=VALS.profile;ACTP_IDX=VALS.active}   // 監看頁背景曲線跟著最新的飛行風格
   render()}catch(e){}
 }
