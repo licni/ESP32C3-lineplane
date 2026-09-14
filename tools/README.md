@@ -15,8 +15,8 @@
 | 指令 | 用途 |
 |---|---|
 | `sim att <機頭°> <滾轉°>` / `sim pulse <x|y|z> <g> <毫秒> [延遲]` / `sim vib` / `sim fail 1` / `sim off` | 感測器模擬:姿態,推力或撞擊脈衝,抖動,讀取失敗 |
-| `armsw 0\|1\|off` | 安全開關覆寫(開發板沒接 GPIO21 開關時用;軟體重開保留,拔電清除) |
-| `pwmcap on` / `pwm` | GPIO5 量測電變脈寬(GPIO5 跳線接 GPIO4) |
+| `armsw 0\|1\|off` | 安全開關覆寫(開發板沒接 GPIO21 開關時用;1 = 一直按著,起飛程序放穩後直接倒數;軟體重開保留,拔電清除) |
+| `pwmcap on` / `pwm` | GPIO5 量測電變脈寬(需要 GPIO5 跳線接 GPIO4. 2026-09-14 起感測器改接 GPIO5,韌體擋下這個指令) |
 | `powerontest` | 下一次軟體重開當作上電(測上電後直接倒數) |
 | `fwwin <秒>` / `fwurl <https 資料夾>` | 縮短新韌體確認時限 / 暫時改讀測試用更新來源 |
 | `calexp <秒>` | 縮短電變校正旗標時效 |
@@ -33,6 +33,8 @@
 | `run_regression.py` | 批次跑回歸測試 |
 | `publish_firmware.py` | 發布韌體到公開更新專案(每天只留最新一版,說明合併) |
 | `pio_strip_paths.py` | PlatformIO 建置前腳本:編進韌體的原始檔路徑換成短前綴,發布的韌體不帶電腦使用者名稱 |
+| `manual_check.py` | 使用說明書維護:重新產生目錄,檢查內部連結與圖片,參數表格的出廠值/範圍/步進與 `src/settings.cpp` 一致 |
+| `manual_page/build.py` | 使用說明書轉成網頁(樣式與互動在同資料夾),發布成 claude.ai 私人 Artifact 給使用者看 |
 | `readme_shots.py` | 產生首頁 README 的網頁截圖 |
 | `shot_page.py` | 網頁截圖工具(指定分頁與元素) |
 
@@ -55,7 +57,7 @@
 
 | 檔案 | 內容 |
 |---|---|
-| `arm_switch_test.py` | GPIO21 安全開關,撞擊斷電連續 2 拍 |
+| `arm_switch_test.py` | GPIO21 安全開關(起飛程序照常開始,按下才倒數;按一次記住;上電自動倒數等開關),撞擊斷電連續 2 拍 |
 | `safety2_test.py` | 撞擊後不接受推力手勢,校正旗標時效,油門下限 10%,飛行中鎖住 WiFi 寫入 |
 | `flight_sm_test.py` | 飛行狀態機(含軟體重開不自動倒數) |
 | `start_level_test.py` | 起飛前水平限制 |

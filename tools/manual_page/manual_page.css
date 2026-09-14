@@ -1,0 +1,184 @@
+/* 色票沿用控制器網頁本身(web_page.h)的設計,讓說明書和產品是同一套語言 */
+:root{
+  --ground:#f4f5f7;
+  --surface:#ffffff;
+  --ink:#1c2230;
+  --muted:#5f6779;
+  --rule:#dde1e8;
+  --th-bg:#f7f8fa;
+  --accent:#1f6feb;
+  --accent-soft:#e8f0fd;
+  --fab-bg:#1f6feb;
+  --fab-ink:#ffffff;
+  --ok:#1a8f4c;
+  --ok-soft:#e7f4ec;
+  --warn:#b76b00;
+  --warn-soft:#fbf1e1;
+  --bad:#c9202b;
+  --bad-soft:#fcebec;
+  --note:#4a5568;
+  --note-soft:#eceff4;
+  --on-tone:#ffffff;
+  --code-bg:#e9edf2;
+  --led:#2f7bff;
+  --led-glow:rgba(47,123,255,.55);
+  --led-off:#c7ceda;
+  --shadow:0 1px 2px rgba(28,34,48,.06),0 6px 18px rgba(28,34,48,.05);
+  --sans:"Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+  --mono:"B612 Mono",ui-monospace,SFMono-Regular,Consolas,"Noto Sans TC","Microsoft JhengHei",monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#10141b;--surface:#1a202b;--ink:#e6e9ef;--muted:#9aa3b5;--rule:#2c3441;--th-bg:#1f2632;
+    --accent:#6ea1ff;--accent-soft:#17243c;--fab-bg:#2d63d6;--fab-ink:#ffffff;
+    --ok:#3fbf73;--ok-soft:#13261b;--warn:#e0a13a;--warn-soft:#2a2113;--bad:#ff6b6b;--bad-soft:#2d1719;
+    --note:#aab3c5;--note-soft:#222a36;--on-tone:#10141b;--code-bg:#252c38;
+    --led:#5b9bff;--led-glow:rgba(91,155,255,.6);--led-off:#3a4352;
+    --shadow:0 1px 2px rgba(0,0,0,.45);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#10141b;--surface:#1a202b;--ink:#e6e9ef;--muted:#9aa3b5;--rule:#2c3441;--th-bg:#1f2632;
+  --accent:#6ea1ff;--accent-soft:#17243c;--fab-bg:#2d63d6;--fab-ink:#ffffff;
+  --ok:#3fbf73;--ok-soft:#13261b;--warn:#e0a13a;--warn-soft:#2a2113;--bad:#ff6b6b;--bad-soft:#2d1719;
+  --note:#aab3c5;--note-soft:#222a36;--on-tone:#10141b;--code-bg:#252c38;
+  --led:#5b9bff;--led-glow:rgba(91,155,255,.6);--led-off:#3a4352;
+  --shadow:0 1px 2px rgba(0,0,0,.45);
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--ground);color:var(--ink);font:16px/1.8 var(--sans);-webkit-text-size-adjust:100%}
+::selection{background:var(--accent-soft)}
+a{color:var(--accent);text-underline-offset:3px;text-decoration-thickness:1px}
+a:hover{text-decoration-thickness:2px}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+strong{font-weight:700}
+code{font-family:var(--mono);font-size:.86em;background:var(--code-bg);padding:1px 6px;border-radius:5px;overflow-wrap:anywhere}
+
+/* ---- 版面:寬螢幕左側章節欄 + 閱讀欄;手機單欄 ---- */
+.shell{display:grid;grid-template-columns:minmax(0,1fr);column-gap:56px;max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 72px}
+@media (max-width:420px){.shell{padding-inline:16px;padding-block:18px 72px}}
+@media (min-width:1060px){.shell{grid-template-columns:230px minmax(0,46rem);justify-content:center}}
+/* 格線子項預設不會縮到比內容窄:寬表格與流程圖會把閱讀欄撐出螢幕,要讓它們在自己的框裡捲動 */
+.doc,.rail{min-width:0}
+
+.rail{display:none}
+@media (min-width:1060px){
+  .rail{display:block;position:sticky;top:28px;align-self:start;max-height:calc(100vh - 56px);overflow:auto;padding:2px 6px 12px 0;font-size:14px;line-height:1.45}
+}
+.rail-title{margin:4px 8px 10px;font:700 11.5px/1 var(--mono);letter-spacing:.16em;color:var(--muted)}
+.rail ol{list-style:none;margin:0;padding:0}
+.rail li+li{margin-top:2px}
+.rail a{display:grid;grid-template-columns:3.6em 1fr;align-items:baseline;padding:6px 8px;border-radius:8px;color:var(--muted);text-decoration:none}
+.rail a:hover{color:var(--ink);background:var(--surface)}
+.rail a[aria-current="true"]{color:var(--ink);background:var(--surface);box-shadow:var(--shadow)}
+.rail .no{font:700 12.5px/1 var(--mono);color:var(--accent)}
+
+/* ---- 刊頭 ---- */
+.masthead{padding-block:6px 18px}
+.masthead>*+*{margin-top:14px}
+.kicker{margin:0;display:flex;flex-wrap:wrap;gap:6px}
+.kicker span{font:700 11.5px/1 var(--mono);letter-spacing:.06em;color:var(--muted);background:var(--surface);border:1px solid var(--rule);border-radius:999px;padding:6px 10px}
+h1{margin:0;font-size:clamp(30px,6.4vw,44px);line-height:1.2;font-weight:700;letter-spacing:.01em;text-wrap:balance}
+.h1-sub{display:block;margin-top:8px;font-size:.46em;font-weight:500;letter-spacing:.34em;color:var(--muted)}
+.meta{margin:0;padding-block:12px;border-block:1px solid var(--rule)}
+.meta div{display:grid;grid-template-columns:5.2em minmax(0,1fr);gap:12px;align-items:baseline}
+.meta div+div{margin-top:8px}
+.meta dt{font-size:13px;font-weight:700;letter-spacing:.08em;color:var(--muted)}
+.meta dd{margin:0}
+@media (max-width:480px){.meta div{grid-template-columns:1fr;gap:0}}
+
+/* ---- 手機目錄與浮動按鈕 ---- */
+.toc-mobile{margin:4px 0 0;background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:0 14px}
+.toc-mobile summary{cursor:pointer;padding:12px 0;font-weight:700}
+.toc-hint{font-weight:400;font-size:13px;color:var(--muted)}
+.toc-mobile ol{list-style:none;margin:0 0 12px;padding:0;font-size:15px}
+.toc-mobile ul{list-style:none;margin:0 0 6px;padding:0 0 0 3.2em;font-size:14px}
+.toc-mobile a{display:grid;grid-template-columns:3.2em minmax(0,1fr);align-items:baseline;padding:5px 0;color:var(--ink);text-decoration:none}
+.toc-mobile ul a{grid-template-columns:3.4em minmax(0,1fr);padding:3px 0;color:var(--muted)}
+.toc-mobile .no{font:700 12.5px/1 var(--mono);color:var(--accent)}
+.toc-mobile ul .no{color:var(--muted);font-weight:400}
+@media (min-width:1060px){.toc-mobile{display:none}}
+.toc-fab{position:fixed;right:16px;bottom:16px;z-index:10;font:700 13px/1 var(--sans);letter-spacing:.1em;color:var(--fab-ink);background:var(--fab-bg);padding:12px 15px;border-radius:999px;text-decoration:none;box-shadow:0 6px 18px rgba(31,111,235,.32)}
+@media (min-width:1060px){.toc-fab{display:none}}
+
+/* ---- 內文 ---- */
+.content h2{display:flex;align-items:baseline;gap:14px;margin:64px 0 12px;padding-top:18px;border-top:1px solid var(--rule);font-size:26px;line-height:1.35;font-weight:700;text-wrap:balance;scroll-margin-top:16px}
+.content h2 .no{flex:0 0 auto;font:700 15px/1 var(--mono);color:var(--accent);letter-spacing:.02em}
+.content h3{display:flex;align-items:baseline;gap:10px;margin:40px 0 8px;font-size:19px;line-height:1.45;font-weight:700;text-wrap:balance;scroll-margin-top:16px}
+.content h3 .no{flex:0 0 auto;font:700 13.5px/1 var(--mono);color:var(--muted)}
+.content p{margin:12px 0}
+.content ul,.content ol{margin:10px 0;padding-left:1.55em}
+.content li+li{margin-top:6px}
+.content li>ul,.content li>ol{margin:6px 0 2px}
+.content ol>li::marker{font-family:var(--mono);font-weight:700;color:var(--accent)}
+.content ul>li::marker{color:var(--muted)}
+@media (max-width:420px){.content h2{font-size:23px;margin-top:52px}.content h3{font-size:18px}}
+
+/* 表格:各自橫向捲動,頁面本身不會左右捲 */
+.table-wrap{margin:14px 0;overflow-x:auto;background:var(--surface);border:1px solid var(--rule);border-radius:12px}
+table{width:100%;border-collapse:collapse;font-size:14.5px;line-height:1.6;font-variant-numeric:tabular-nums}
+table[data-cols="4"]{min-width:36rem}
+th,td{padding:9px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--rule)}
+tbody tr:last-child td{border-bottom:0}
+th{background:var(--th-bg);font-size:12.5px;font-weight:700;letter-spacing:.06em;color:var(--muted);white-space:nowrap}
+td:first-child{font-weight:500;min-width:6.5em}
+
+/* 提示框:淡色底 + 控制器網頁同款的標籤 */
+.callout{--tone:var(--note);--tone-soft:var(--note-soft);margin:18px 0;padding:12px 16px;background:var(--tone-soft);border-radius:12px}
+.callout .tag{display:inline-block;padding:5px 10px;border-radius:999px;background:var(--tone);color:var(--on-tone);font:700 12px/1 var(--sans);letter-spacing:.14em}
+.callout p,.callout ul,.callout ol{margin:8px 0}
+.callout>:last-child{margin-bottom:2px}
+.warn-danger{--tone:var(--bad);--tone-soft:var(--bad-soft)}
+.warn-caution{--tone:var(--warn);--tone-soft:var(--warn-soft)}
+.warn-important{--tone:var(--accent);--tone-soft:var(--accent-soft)}
+.warn-tip{--tone:var(--ok);--tone-soft:var(--ok-soft)}
+.warn-note{--tone:var(--note);--tone-soft:var(--note-soft)}
+
+/* 網頁上實際出現的文字(時間軸) */
+blockquote.screen{margin:14px 0;padding:12px 14px;background:var(--surface);border:1px solid var(--rule);border-radius:10px;font-family:var(--mono);font-size:13.5px;line-height:1.75}
+blockquote.screen p{margin:0}
+
+figure.shot{margin:20px 0;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+figure.shot img{display:block;width:260px;max-width:100%;height:auto;background:var(--surface);border:1px solid var(--rule);border-radius:16px;box-shadow:var(--shadow)}
+figure.shot figcaption{font-size:13px;line-height:1.5;color:var(--muted)}
+
+.diagram{margin:16px 0;padding:14px;background:var(--surface);border:1px solid var(--rule);border-radius:12px;overflow-x:auto}
+.diagram pre{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.6;white-space:pre}
+
+/* ---- 狀態燈:照韌體 flightLedPattern() 的真實時序閃爍 ---- */
+.ledcell{display:inline-flex;align-items:center;gap:9px}
+.led{flex:0 0 auto;width:12px;height:12px;border-radius:50%;background:var(--led-off);box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}
+.led.on{background:var(--led);box-shadow:0 0 10px 2px var(--led-glow)}
+@keyframes led-half{0%{background:var(--led);box-shadow:0 0 10px 2px var(--led-glow)}50%,100%{background:var(--led-off);box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}}
+@keyframes led-two{0%,15%{background:var(--led);box-shadow:0 0 10px 2px var(--led-glow)}7.5%,22.5%,100%{background:var(--led-off);box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}}
+@keyframes led-three{0%,15%,30%{background:var(--led);box-shadow:0 0 10px 2px var(--led-glow)}7.5%,22.5%,37.5%,100%{background:var(--led-off);box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}}
+.led.slow{animation:led-half 1s step-end infinite}
+.led.fast{animation:led-half .25s step-end infinite}
+.led.reject{animation:led-half .1s step-end infinite}
+.led.rapid{animation:led-half .08s step-end infinite}
+.led.two{animation:led-two 2s step-end infinite}
+.led.three{animation:led-three 2s step-end infinite}
+
+/* ---- 頁尾 ---- */
+.colophon{margin-top:72px;padding-top:20px;border-top:1px solid var(--rule);font-size:13.5px;color:var(--muted)}
+.colophon p{margin:0}
+.colophon p+p{margin-top:8px}
+.credit{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 22px}
+.credit .gg{font-size:22px;font-weight:700;letter-spacing:.02em;background:linear-gradient(90deg,#ff6a00,#ee0979 50%,#7b2ff7);-webkit-background-clip:text;background-clip:text;color:transparent}
+.credit .line{font-weight:700;color:#06c755}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .led.blink{animation:none;background:linear-gradient(90deg,var(--led) 0 50%,var(--led-off) 50% 100%)}
+}
+@media print{
+  .rail,.toc-mobile,.toc-fab{display:none}
+  .shell{display:block;padding:0}
+  .table-wrap{overflow:visible}
+  .led{animation:none}
+}

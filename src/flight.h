@@ -1,4 +1,5 @@
-// 版本流水號: r10 (2026-09-14) 拒絕原因 9:撞擊斷電後推飛機不算手勢
+// 版本流水號: r11 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG);狀態加 armLatched
+// 舊: r10 (2026-09-14) 拒絕原因 9:撞擊斷電後推飛機不算手勢
 // 舊: r9 (2026-09-14) 安全開關輸入 armSwitch,拒絕原因 7/8,狀態回報開關
 // 舊: r8 (2026-09-14) 輸入加 fwBlock:韌體更新中或新韌體待確認時拒絕起飛(REJECT_FW_UPDATING / REJECT_FW_UNCONFIRMED)
 // 舊: r7 (2026-09-14) 手勢請求加來源(網頁開始起飛按鈕)
@@ -16,9 +17,10 @@
 // 由控制工作在下一拍處理 —— 狀態只有一個工作在改,不會有兩邊同時改的問題.
 //
 // 流程(規格第 3 節):
-//   上電 → 電變解鎖(3 秒) ─┬ 手勢開啟 → 待機 ─(啟動手勢)→ 等待放穩 → 倒數 → 起飛 → 飛行 → 降落 → 結束
-//                          └ 手勢關閉 → 直接倒數(每次上電只一次)
-//   倒數中外力介入 → 退回等待放穩,再放穩後依設定延長/重置/不理會.
+//   上電 → 電變解鎖(3 秒) ─┬ 手勢開啟 → 待機 ─(啟動手勢)→ 等待放穩 ─(安全開關按過)→ 倒數 → 起飛 → 飛行 → 降落 → 結束
+//                          └ 手勢關閉 → 待機等安全開關按下與放平 → 直接倒數(每次上電只一次)
+//   安全開關(GG 2026-09-14 r11):不擋起飛程序開始,等按下才倒數. 起飛程序中按下一次就記住(開始當下按著也算).
+//   倒數中外力介入 → 退回等待放穩,再放穩後依設定延長/重置/不理會(不必再按開關).
 //   結束後(手勢開啟時)可再做手勢起飛;手勢關閉時要重新上電.
 //
 // 設定:手勢成立(或自動倒數開始)那一刻複製共用設定與飛行風格,之後整趟飛行只用這份快照,
@@ -53,7 +55,7 @@ enum LandingCause : uint8_t { LAND_NONE = 0, LAND_TIME, LAND_EARLY_ROLL };
 // REJECT_TILT:推了啟動手勢但機身角度超過起飛前水平限制;REJECT_TILT_WAIT:上電自動倒數因角度超過而暫停等待
 // REJECT_FW_UPDATING:韌體更新進行中;REJECT_FW_UNCONFIRMED:剛更新的新韌體還沒在網頁確認(沒確認會自動退回舊版,
 // 飛行中退回重開等於馬達停,所以確認前不准起飛)
-// REJECT_ARM_SWITCH:安全開關(GPIO21)沒按下;REJECT_ARM_WAIT:上電自動倒數在等安全開關按下(不用掉自動倒數的機會)
+// REJECT_ARM_SWITCH / REJECT_ARM_WAIT:r10 以前安全開關沒按下就拒絕開始. r11 起改成等開關按下才倒數,不再產生(保留編號)
 // REJECT_CRASH_LOCK:撞擊斷電後推飛機不算手勢(撿飛機,扶正時容易推到),要網頁開始起飛程序或重新上電
 enum RejectReason : uint8_t { REJECT_NONE = 0, REJECT_UNSAVED, REJECT_IMU, REJECT_TILT, REJECT_TILT_WAIT, REJECT_FW_UPDATING, REJECT_FW_UNCONFIRMED,
                               REJECT_ARM_SWITCH, REJECT_ARM_WAIT, REJECT_CRASH_LOCK };
@@ -111,6 +113,7 @@ struct FlightStatus {
   float gestureBlockS;       // 扭轉取消後還要幾秒才接受手勢
   bool autoWaitLevel;        // 上電自動倒數在等飛機放平(角度超過起飛前水平限制)或等安全開關按下
   bool armSwitch;            // 安全開關目前是否按下(網頁顯示用)
+  bool armLatched;           // 這趟起飛程序(等待放穩/倒數,或上電自動倒數等待中)已經按過安全開關
 };
 
 void flightBegin();

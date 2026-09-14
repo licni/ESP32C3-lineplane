@@ -28,7 +28,9 @@
   pio 路徑:`$env:USERPROFILE\.platformio\penv\Scripts\pio.exe`.
 - GG 開發期間全程不裝螺旋槳,燒錄與測試時不需要提醒拆槳.
 - 開發板在 **COM20**(GG 確認是測試用板,可直接燒). 出現別的 COM 埠時先讀序列輸出確認再燒.
-  開發板的 MPU6050 接在 **GPIO0/1**(不是參考專案的 5/6).
+  開發板的 MPU6050 接在 **GPIO5/6**(GG 2026-09-14 從 GPIO0/1 改線,和使用者的板子與參考專案相同).
+  原本 GPIO5 ↔ GPIO4 的測試跳線已拔掉:序列指令 pwmcap(量電變脈寬)/escemu(模擬電變)韌體直接擋下(會搶走 I2C 腳位),
+  用到它們的測試(t0,t2,t3,t5,t6,t9,rpm_emulator_test,gear_test_nosettings)要換一隻腳重新跳線並改 test_hooks/esc_output 腳位才能完整跑.
 - 燒錄:USB `pio run -t upload --upload-port COM20`;無線 `pio run -e ota -t upload`(預設 lineplane.local;熱點模式加 `--upload-port 192.168.4.1`).
   **無線燒錄/網頁上傳/板子下載後,新韌體是「待確認」**(2026-09-14 起):開網頁會自動確認,或 `POST /api/fw/confirm`;
   WiFi 就緒後 **1 分鐘**沒確認會自動退回舊版(GG 2026-09-14 從 5 分鐘縮短),確認前不能起飛. USB 燒錄不會待確認.
@@ -38,9 +40,13 @@
   首頁只放 README,CHANGELOG,manifest.json;韌體檔在 firmware/ 資料夾(GG:首頁不要越來越長). 每版一定寫修正說明.
   **每天只留當天最新一版**(GG 2026-09-14):同一天再發布時工具自動刪掉當天舊的 Release/tag/韌體檔,當天修改合併進最新版的 Release 與 CHANGELOG.
   --notes 是板子顯示的精簡版(≤400 位元組,寫當天合併重點),--day-notes-file 是當天所有修改的完整條列(自己整理,拿掉已被取代的內容). firmware/ 只留最近 3 天.
+- **使用說明書** docs/使用說明書.md(GG 2026-09-14 要求,給拿到硬體的使用者):改參數範圍/出廠值,網頁畫面文字,操作流程時同步更新說明書,
+  再跑 `tools/manual_check.py`(目錄,連結,參數數值對照 settings.cpp). 網頁版用 `tools/manual_page/build.py` 產生,發布在 GG 的 claude.ai 私人 Artifact「線控飛機油門控制器 使用說明書」.
 - 開機安全:只有真的拔電再接電才會「上電後直接倒數」;軟體重開不會. 測試要模擬上電時先送序列指令 `powerontest`.
-- **安全開關 GPIO21**(2026-09-14):接地才能開始起飛程序. 開發板沒接開關,所有會起飛的測試要先送序列指令 `armsw 1`
-  (lp_test.protect() 已自動送,重開機後覆寫清掉要再送),收尾 `armsw off`.
+- **安全開關 GPIO21**(GG 2026-09-14 改):起飛程序(推飛機,網頁開始,上電自動倒數)照常開始,**按下安全開關才開始倒數**;
+  起飛程序中按過一次就記住(開始當下按著也算,所以飛場應急短路照樣能飛),倒數中被碰到重新放穩不必再按. 沒按時燈慢閃等待,事件 28.
+  開發板沒接開關:測試用序列指令 `armsw 1` 模擬一直按著(lp_test.protect() 已自動送;覆寫存 RTC,軟體重開保留,拔電清除),收尾 `armsw off`.
+- 硬體(GG 2026-09-14):板上降壓板支援 6~9V 的電變 BEC;收腳舵機從 BEC 分電,不經過控制器;USB 可以和電池同時接(二極體反接保護).
 - 測網頁:電腦無線網卡有臨時設定檔 `HappySuperGG_Plane`,`netsh wlan connect name=HappySuperGG_Plane interface="Wi-Fi"`
   (電腦上網走有線,連熱點不影響). 板子已連家用 WiFi,平常用 lineplane.local.
 - **序列埠工具一律 `dtr=False, rts=False` 再開,而且只開一次**:Windows 開 COM 會切 DTR/RTS,C3 原生 USB 當成重置,板子會重開.

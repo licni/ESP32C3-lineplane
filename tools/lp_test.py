@@ -313,7 +313,7 @@ def protect():
     board_backup.require_idle(HOST)
     SNAP = board_backup.backup(HOST)
     atexit.register(_emergency_restore)
-    cmd("armsw 1", expect="OK")   # 開發板沒接 GPIO21 安全開關,測試期間當作按下(flight r17 起沒按不能起飛)
+    cmd("armsw 1", expect="OK")   # 開發板沒接 GPIO21 安全開關,測試期間當作一直按著(flight r19 起沒按不會開始倒數)
     return SNAP
 
 

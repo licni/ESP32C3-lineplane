@@ -1,4 +1,5 @@
-// 版本流水號: r4 (2026-09-14) EV_CALIB_CLEAR(26,校正旗標自動取消),EV_WIFI_DEFER(27,飛行中 WiFi 試用退回延後)
+// 版本流水號: r5 (2026-09-14) EV_ARM_SWITCH(28,安全開關:等開關按下才倒數,開關按下)
+// 舊: r4 (2026-09-14) EV_CALIB_CLEAR(26,校正旗標自動取消),EV_WIFI_DEFER(27,飛行中 WiFi 試用退回延後)
 // 舊: r3 (2026-09-14) 加 EV_WIFI 註解補齊,EV_FW(25,韌體更新:開始,完成,確認,退回,下載失敗)
 // 舊: r2 (2026-09-13) 加 EV_SIM(測試用感測器模擬開關)
 // 舊: r1 (2026-09-13) 初版:事件紀錄(通電後的重要事件與原因,記憶體環形緩衝,斷電清除)
@@ -14,7 +15,7 @@
 
 enum EventType : uint8_t {
   EV_BOOT = 1,          // a = esp_reset_reason
-  EV_ARMED,             // 電變解鎖完成. arg = 1 手勢開啟 / 0 上電自動倒數
+  EV_ARMED,             // 電變解鎖完成. arg = 1 手勢開啟 / 0 上電自動倒數 / 2 自動倒數已用過 / 3 不是上電開機,不自動倒數
   EV_GESTURE,           // 啟動手勢成立. a = 推力 g
   EV_REJECT,            // 拒絕啟動. arg = RejectReason
   EV_COUNTDOWN,         // 開始倒數. a = 倒數秒數, arg = 1 延長後繼續 / 2 重新倒數 / 0 首次
@@ -38,8 +39,9 @@ enum EventType : uint8_t {
   EV_GEAR,              // 機輪收腳. arg = 1 收起 / 0 放下, a = 飛行秒數
   EV_WIFI,              // WiFi 設定保護. arg = 1 連續開關電救援回出廠 / 2 設定沒確認已退回 / 3 發射功率沒確認已退回(a = 退回的 dBm)
   EV_FW,                // 韌體更新. arg 見 fw_update.h 的 FwEvent
-  EV_CALIB_CLEAR,       // 電變校正旗標自動取消. arg = 1 設定後 10 分鐘沒拔電 / 2 軟體重開
+  EV_CALIB_CLEAR,       // 電變校正旗標自動取消. arg = 1 設定後 10 秒沒拔電 / 2 軟體重開
   EV_WIFI_DEFER,        // 起飛程序或飛行中,WiFi 試用退回延後到落地. arg = 1 功率試用 / 2 設定試用
+  EV_ARM_SWITCH,        // 安全開關(等按下才倒數). arg = 0 起飛程序已放穩,等開關 / 1 上電自動倒數等開關 / 2 開關按下
 };
 
 struct EventRecord {

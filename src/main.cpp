@@ -1,4 +1,6 @@
-// 版本流水號: r15 (2026-09-14) 校正旗標時效推進;序列指令 calexp(測試用縮短時效)
+// 版本流水號: r16 (2026-09-14) 感測器改 GPIO5/6 後擋 GPIO5 測試指令 pwmcap/escemu;開機印 I2C 腳位;
+//   I2C 匯流排解鎖(開機與 mpu 指令):重開時感測器傳到一半會拉住 SDA,之後讀不到(燒錄後實際遇到)
+// 舊: r15 (2026-09-14) 校正旗標時效推進;序列指令 calexp(測試用縮短時效)
 // 舊: r14 (2026-09-14) 序列指令 armsw(測試用安全開關覆寫)
 // 舊: r13 (2026-09-14) 序列指令 fwurl(測試用更新來源,不存檔);sim pulse 延遲參數
 // 舊: r12 (2026-09-14) 韌體更新:開機判斷待確認/退回,loop 推進;序列指令 fw(狀態),fwwin <秒>(測試用縮短確認時限)
@@ -69,6 +71,37 @@ static int8_t parseAxis(const String &s) {
   const char sign = s[0], axis = s[1];
   if ((sign != '+' && sign != '-') || axis < 'x' || axis > 'z') return -1;
   return (int8_t)((axis - 'x') * 2 + (sign == '-' ? 1 : 0));
+}
+
+// I2C 匯流排解鎖(2026-09-14):板子在感測器正傳資料時重開(燒錄重置,軟體重開,韌體更新,電壓不足),感測器會一直
+// 拉住 SDA 等時脈,之後每次讀取都失敗(ESP_ERR_INVALID_STATE),要感測器斷電才恢復 —— USB 供電的開發板燒錄後遇過.
+// 開機先用 GPIO 送最多 16 個 SCL 脈衝讓它把這個位元組送完,再送 STOP. 匯流排正常(SDA 高)時只送 STOP,無害.
+// 回傳 true = 開機時匯流排是卡住的.
+static bool i2cBusRecover(uint8_t sda, uint8_t scl) {
+  pinMode(sda, INPUT_PULLUP);
+  pinMode(scl, OUTPUT_OPEN_DRAIN);
+  digitalWrite(scl, HIGH);
+  delay(1);
+  const bool stuck = digitalRead(sda) == LOW;
+  for (uint8_t i = 0; i < 16 && digitalRead(sda) == LOW; ++i) {
+    digitalWrite(scl, LOW);
+    delayMicroseconds(10);
+    digitalWrite(scl, HIGH);
+    delayMicroseconds(10);
+  }
+  // STOP:SCL 低時拉低 SDA,放開 SCL,再放開 SDA(SCL 高時 SDA 由低變高)
+  digitalWrite(scl, LOW);
+  delayMicroseconds(10);
+  pinMode(sda, OUTPUT_OPEN_DRAIN);
+  digitalWrite(sda, LOW);
+  delayMicroseconds(10);
+  digitalWrite(scl, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(sda, HIGH);
+  delayMicroseconds(10);
+  pinMode(sda, INPUT);
+  pinMode(scl, INPUT);
+  return stuck;
 }
 
 static void scanI2c() {
@@ -151,7 +184,10 @@ static void handleSerial() {
     if (line.endsWith("off")) testPwmCapStop();
     else if (line.endsWith("reset")) testPwmCapResetMinMax();
     else if (line.endsWith("gear")) testPwmCapStartPin(PIN_GEAR_SERVO);
-    else if (escActiveProtocol() != ESC_PROTO_PWM50) {
+    else if (!TEST_GPIO5_AVAILABLE) {   // GPIO5 接感測器 I2C,不能拿來量脈寬
+      Serial.println(F("ERR pwmcap: GPIO5 is I2C on this board"));
+      return;
+    } else if (escActiveProtocol() != ESC_PROTO_PWM50) {
       Serial.println(F("ERR pwmcap PWM only"));
       return;
     } else testPwmCapStart();
@@ -188,6 +224,8 @@ static void handleSerial() {
     if (arg == "off") {
       escEmuStop();
       Serial.println(F("OK escemu off"));
+    } else if (!TEST_GPIO5_AVAILABLE) {   // GPIO5 接感測器 I2C
+      Serial.println(F("ERR escemu: GPIO5 is I2C on this board"));
     } else {
       const char *err = escEmuStart(arg == "stop" ? 0xFFFF : (uint32_t)constrain(arg.toInt(), 1, 65408));
       Serial.println(err ? String("ERR escemu ") + err : String("OK escemu on"));
@@ -319,6 +357,11 @@ static void handleSerial() {
     if (line == "scan") scanI2c();
     else if (line == "scanall") scanAllPins();
     else {
+      Wire.end();
+      if (i2cBusRecover(PIN_I2C_SDA, PIN_I2C_SCL)) Serial.println(F("I2C bus was stuck (SDA low), recovered"));
+      Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+      Wire.setClock(400000UL);
+      Wire.setTimeOut(10);
       const bool ok = imuBegin();
       Serial.println(ok ? F("MPU OK") : F("ERR MPU (no reply on I2C, check wiring / pull-ups)"));
       controlSetImuPresent(ok);
@@ -353,11 +396,13 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   Serial.begin(115200);
 
+  const bool i2cWasStuck = i2cBusRecover(PIN_I2C_SDA, PIN_I2C_SCL);   // 上次在感測器傳資料到一半時重開,匯流排會卡住
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire.setClock(400000UL);
   Wire.setTimeOut(10);   // 線斷掉時單次讀取最多卡 10ms,不拖垮控制節拍
 
   const bool imuOk = imuBegin();
+  if (i2cWasStuck) Serial.println(F("I2C bus was stuck at boot (SDA low), recovered"));
   Serial.println(imuOk ? F("MPU OK") : F("ERR MPU"));
   {
     static const char *const protoNames[] = {"PWM", "DShot150", "DShot300"};
@@ -371,7 +416,7 @@ void setup() {
   testArmOverrideBoot();   // 測試用安全開關覆寫(軟體重開保留),要在控制工作開始讀之前
   controlBegin(imuOk, escCalibrate, escCalibStartMs);
 
-  Serial.printf("FW version %s\n", FW_VERSION);
+  Serial.printf("FW version %s I2C SDA=%u SCL=%u\n", FW_VERSION, PIN_I2C_SDA, PIN_I2C_SCL);
   if (testArmOverride() >= 0) Serial.printf("TEST armsw override %d (kept across soft reboot)\n", testArmOverride());
   fwUpdateBegin();   // 新韌體待確認或上次更新被退回;要在控制工作讀 fwUpdateBlockReason 之前設好,所以放 WiFi 前
   wifiBegin();

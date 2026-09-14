@@ -1,4 +1,7 @@
-# 版本流水號: r2 (2026-09-13) 感測器故障鎖定到重新上電:故障後重開機再測,加「又有回應仍極快閃」;撞擊測試移到最後一次重開之後(飛行紀錄才留得住)
+# 版本流水號: r4 (2026-09-14) 事件順序不算機輪收腳事件 23(看板上的收腳設定,t4 不改;收腳時機由 t9 測),另外記錄
+# 舊: r3 (2026-09-14) 撞擊斷電後推飛機不算手勢(拒絕原因 9):回待機改用網頁開始再取消;
+#   飛行中鎖定段沒進入飛行就不送寫入類 API(不在飛行時那些 API 會真的改設定,儲存,重開機)
+# 舊: r2 (2026-09-13) 感測器故障鎖定到重新上電:故障後重開機再測,加「又有回應仍極快閃」;撞擊測試移到最後一次重開之後(飛行紀錄才留得住)
 # 舊: r1 (2026-09-13) 全功能測試 段 4:狀態燈(讀腳位),事件紀錄順序與數值,飛行紀錄,飛行中鎖定
 # ============================================================================
 # 燈號規格(規格第 3 節):解鎖熄滅 / 待機長亮 / 等待放穩慢閃 / 倒數快閃 / 飛行降落熄滅 /
@@ -36,6 +39,14 @@ def launch():
     return T.wait_state("takeoff", 30, poll=0.02)
 
 
+def back_to_standby():
+    """從結束狀態回到真正的待機. r3:撞擊斷電後推飛機不算手勢,重開機又會清掉飛行紀錄,所以用網頁開始再取消"""
+    r = T.post("/api/start")
+    T.wait_state(("wait_still", "countdown"), 2)
+    T.post("/api/cancel")
+    return r["ok"] and T.fstate(T.wait_state("standby", 1)) == "standby"
+
+
 def inner(runs):
     """去掉頭尾(取樣開始/結束切斷的)段"""
     return runs[1:-1]
@@ -51,11 +62,8 @@ time.sleep(1)
 
 # ============ A. 燈號 ============
 T.log("\n== A. 狀態燈(GPIO8 腳位實際電位,每 5ms 取樣)==")
-# r1:板子停在上一個測試的「結束」狀態(閃 2 下),先做一次手勢再取消,回到真正的待機
-T.gesture_push(2.5)
-T.wait_state("wait_still", 2)
-T.post("/api/cancel")
-T.wait_state("standby", 1)
+# r1:板子可能停在上一個測試的「結束」狀態(閃 2 下),先開始再取消,回到真正的待機
+back_to_standby()
 runs = T.led_capture(1500)
 T.check("待機:長亮", len(runs) == 1 and runs[0][0], runs)
 
@@ -138,6 +146,7 @@ T.check("撞擊斷電:閃 3 下停一下(每 2 秒 3 下,長暗約 1250ms)",
 # ============ B. 事件紀錄:一趟完整飛行 ============
 T.log("\n== B. 事件紀錄:手勢 → 倒數 5 秒 → 飛行 30 秒(第一段 10 秒)→ 降落 → 靜止觸地 ==")
 level()
+T.check("撞擊斷電後:網頁開始再取消,回到待機(推飛機不算手勢)", back_to_standby(), T.fstate())
 n0 = T.ev_total()
 log_total0 = None
 T.gesture_push(2.5)
@@ -146,6 +155,10 @@ st = T.wait_state("done", 40)
 time.sleep(0.3)
 ev = T.events_after(n0)
 T.log("  事件:", [(e[2], e[3], round(e[4], 2), round(e[5], 2), e[1]) for e in ev])
+gear = of(ev, 23)
+if gear:
+    T.log("  (觀察)機輪收腳事件(看板上的收腳設定,不算在順序裡):", [("收起" if e[3] else "放下", round(e[4], 2)) for e in gear])
+ev = [e for e in ev if e[2] != 23]
 seq = [e[2] for e in ev]
 T.check("事件順序:手勢 3 → 開始倒數 5 → 馬達啟動 8 → 換段 9 → 開始降落 10 → 馬達停止 11", seq == [3, 5, 8, 9, 10, 11], seq)
 if seq == [3, 5, 8, 9, 10, 11]:
@@ -195,35 +208,40 @@ T.check(f"之前的撞擊測試 14.5g 有記到總 G(最大 {max(r[2] for r in r
 T.log("\n== D. 飛行中:設定/儲存/重開機/校正/手動輸出一律拒絕 ==")
 launch()
 st = T.wait_state("flying", 3)
-T.check("飛行中 lock=1,ota=0", st["lock"] == 1 and st["ota"] == 0, (st["lock"], st["ota"]))
-res = {
-    "set": T.post("/api/set", p="s", k="gestureG", v=2.1),
-    "setmany": None,
-    "name": T.post("/api/name", p=1, name="X"),
-    "select": T.post("/api/select", p=1),
-    "copy": T.post("/api/copy", **{"from": 0, "to": 1}),
-    "defaults": T.post("/api/defaults", p="s"),
-    "save": T.post("/api/save"),
-    "revert": T.post("/api/revert"),
-    "reboot": T.post("/api/reboot"),
-    "calib": T.post("/api/calib", on=1),
-    "manual": T.post("/api/manual", us=1000),
-}
-try:
-    T.setmany("s", {"gestureG": 2.2})
-    res["setmany"] = {"ok": True}
-except RuntimeError as e:
-    res["setmany"] = {"ok": False, "code": str(e)}
-T.log("  回應:", {k: (v["ok"], v.get("code")) for k, v in res.items()})
-T.check("所有寫入類 API 都被拒絕(locked/busy/manualstate)", all(not v["ok"] for v in res.values()), res)
-st = T.status()
-T.check("被拒絕後仍在飛行,板子沒有重開,設定沒變", T.fstate(st) == "flying" and st["dirty"] == 0, (T.fstate(st), st["dirty"], st["up"]))
-r = T.cmd("orient +x +z", expect="OK")
-T.log(f"  (觀察)飛行中從 USB 序列埠送 orient +x +z:{r!r}")
+# r3:不在飛行時下面的 API 會真的改設定,回預設,儲存,重開機,所以沒進入飛行就整段略過
+flying = T.fstate(st) == "flying"
+T.check("進入飛行(沒進入就略過寫入類 API)", flying, T.fstate(st))
+if flying:
+    T.check("飛行中 lock=1,ota=0", st["lock"] == 1 and st["ota"] == 0, (st["lock"], st["ota"]))
+    res = {
+        "set": T.post("/api/set", p="s", k="gestureG", v=2.1),
+        "setmany": None,
+        "name": T.post("/api/name", p=1, name="X"),
+        "select": T.post("/api/select", p=1),
+        "copy": T.post("/api/copy", **{"from": 0, "to": 1}),
+        "defaults": T.post("/api/defaults", p="s"),
+        "save": T.post("/api/save"),
+        "revert": T.post("/api/revert"),
+        "reboot": T.post("/api/reboot"),
+        "calib": T.post("/api/calib", on=1),
+        "manual": T.post("/api/manual", us=1000),
+    }
+    try:
+        T.setmany("s", {"gestureG": 2.2})
+        res["setmany"] = {"ok": True}
+    except RuntimeError as e:
+        res["setmany"] = {"ok": False, "code": str(e)}
+    T.log("  回應:", {k: (v["ok"], v.get("code")) for k, v in res.items()})
+    T.check("所有寫入類 API 都被拒絕(locked/busy/manualstate)", all(not v["ok"] for v in res.values()), res)
+    st = T.status()
+    T.check("被拒絕後仍在飛行,板子沒有重開,設定沒變", T.fstate(st) == "flying" and st["dirty"] == 0, (T.fstate(st), st["dirty"], st["up"]))
+    r = T.cmd("orient +x +z", expect="OK")
+    T.log(f"  (觀察)飛行中從 USB 序列埠送 orient +x +z:{r!r}")
 T.post("/api/estop")
 T.wait_state("done", 1)
 time.sleep(0.3)
-T.check("結束後解鎖(lock=0,ota=1)", T.status()["lock"] == 0 and T.status()["ota"] == 1)
+if flying:
+    T.check("結束後解鎖(lock=0,ota=1)", T.status()["lock"] == 0 and T.status()["ota"] == 1)
 
 # ============ E. 解鎖期燈號與開機事件 ============
 T.log("\n== E. 重新開機:解鎖 3 秒熄滅,開機原因事件 ==")

@@ -1,4 +1,5 @@
-// 版本流水號: r19 (2026-09-14) 起飛程序與飛行中拒絕:儲存 WiFi 設定,發射功率,保持,檢查更新,校正設定/取消(安全審查 B5);狀態 cal 加時效剩餘秒數
+// 版本流水號: r20 (2026-09-14) 狀態 f 加 al(這趟起飛程序已按過安全開關)
+// 舊: r19 (2026-09-14) 起飛程序與飛行中拒絕:儲存 WiFi 設定,發射功率,保持,檢查更新,校正設定/取消(安全審查 B5);狀態 cal 加時效剩餘秒數
 // 舊: r18 (2026-09-14) 狀態 f 加 arm(安全開關按下)
 // 舊: r17 (2026-09-14) 韌體更新:/api/fw(狀態),/api/fw/check,/api/fw/install,/api/fw/confirm;網頁上傳接更新保護;狀態加 fw [更新中,待確認,剩餘秒數,檢查狀態,進度,已退回]
 // 舊: r16 (2026-09-14) WiFi 設定保護:網頁存檔一律試用,發射功率試用,/api/wifi/keep,狀態加 wt [功率試用剩餘,設定試用中,設定試用剩餘,目前功率]
@@ -100,7 +101,7 @@ static void handleStatus() {
            "\"act\":%u,\"dirty\":%d,\"lock\":%d,\"cmp\":%.1f,\"imp\":[%.2f,%u,%ld],"
            "\"vib\":%.2f,\"lvl\":%d,\"hold\":%.1f,\"push\":%.2f,\"glamp\":%d,\"gpeak\":%.2f,\"push3\":%.2f,\"dist\":[%.3f,%.3f,%ld],"
            "\"f\":{\"s\":%u,\"ss\":%.1f,\"cd\":%.1f,\"t\":%.1f,\"base\":%.1f,\"comp\":%.1f,\"out\":%.1f,\"ph\":%u,"
-           "\"lc\":%u,\"er\":%u,\"rj\":%u,\"rja\":%ld,\"da\":%u,\"dg\":%.2f,\"dga\":%ld,\"ge\":%d,\"au\":%d,\"fp\":%u,\"set\":%.1f,\"tw\":%.0f,\"gb\":%.1f,\"aw\":%d,\"arm\":%d},"
+           "\"lc\":%u,\"er\":%u,\"rj\":%u,\"rja\":%ld,\"da\":%u,\"dg\":%.2f,\"dga\":%ld,\"ge\":%d,\"au\":%d,\"fp\":%u,\"set\":%.1f,\"tw\":%.0f,\"gb\":%.1f,\"aw\":%d,\"arm\":%d,\"al\":%d},"
            "\"man\":%d,\"cal\":[%u,%.1f,%d,%d,%.0f],\"dsh\":%ld,\"proto\":%u,\"hz\":%u,\"evn\":%lu,\"rpm\":[%d,%lu,%lu,%lu,%lu,%lu,%lu,%ld],"
            "\"sim\":%d,\"cap\":[%d,%lu,%lu,%lu,%lu,%lu,%ld],\"gear\":[%.0f,%u,%d],\"wt\":[%.0f,%d,%.0f,%u],\"fw\":[%d,%d,%.0f,%u,%u,%d]}",
            t.pitchDeg, t.rawPitchDeg, t.rollDeg, t.accMagG, t.gyroDps[0], t.gyroDps[1], t.gyroDps[2], t.biasDps[0],
@@ -115,7 +116,7 @@ static void handleStatus() {
            f.flightSeconds, f.basePct, f.compPct, f.outPct, (unsigned)f.phase, (unsigned)f.landingCause,
            (unsigned)f.endReason, (unsigned)f.rejectReason, f.rejectAgeMs == UINT32_MAX ? -1L : (long)(f.rejectAgeMs / 100),
            (unsigned)f.disturbAction, f.disturbG, f.disturbAgeMs == UINT32_MAX ? -1L : (long)(f.disturbAgeMs / 100),
-           f.gestureEnabled ? 1 : 0, f.autoStartUsed ? 1 : 0, (unsigned)f.flightProfile, f.settleSeconds, f.twistDeg, f.gestureBlockS, f.autoWaitLevel ? 1 : 0, f.armSwitch ? 1 : 0,
+           f.gestureEnabled ? 1 : 0, f.autoStartUsed ? 1 : 0, (unsigned)f.flightProfile, f.settleSeconds, f.twistDeg, f.gestureBlockS, f.autoWaitLevel ? 1 : 0, f.armSwitch ? 1 : 0, f.armLatched ? 1 : 0,
            t.manualActive ? 1 : 0, (unsigned)t.calibState, t.calibRemainS, escCalibPending() ? 1 : 0,
            escBootWasPowerOn() ? 1 : 0, escCalibExpireRemainS(millis()), t.escDshot == 0xFFFF ? -1L : (long)t.escDshot, (unsigned)escActiveProtocol(), (unsigned)escActivePwmHz(), (unsigned long)eventLogTotal(), escRpmActive() ? 1 : 0, (unsigned long)rs.frames,
            (unsigned long)rs.replies, (unsigned long)rs.ok, (unsigned long)rs.bad, (unsigned long)rs.noReply,

@@ -1,4 +1,5 @@
-// 版本流水號: r53 (2026-09-14) 韌體更新說明改清楚:開著的網頁自動確認(不用按按鈕),寫上由網頁確認的理由(GG)
+// 版本流水號: r54 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG):狀態列等待安全開關,事件 28,監看頁開關文字,說明文字
+// 舊: r53 (2026-09-14) 韌體更新說明改清楚:開著的網頁自動確認(不用按按鈕),寫上由網頁確認的理由(GG)
 // 舊: r52 (2026-09-14) 校正旗標時效 10 秒:按鈕旁醒目注意,步驟與提示文字,倒數秒數(GG)
 // 舊: r51 (2026-09-14) 撞擊斷電後推飛機不啟動的文字(原因 9);校正旗標時效顯示,事件 26;WiFi 試用延後事件 27;下限拖曳最低 10%;發射功率與保持被拒時提示
 // 舊: r50 (2026-09-14) 安全開關 GPIO21:狀態列與監看頁顯示,拒絕原因 7/8 文字
@@ -549,7 +550,7 @@ const L={
  dnDb:['減速開始角度','deg','機頭朝下超過這個角度才開始減速;在這之內不補償.'],
  pitchTrim:['角度修正','deg','加到量到的角度上. 飛機擺平飛姿勢時讀到 +2°,就設 −2. 出廠 0.'],
  gestureG:['啟動手勢力道','g','機身大致水平,往機頭方向推超過這個力道才算啟動. 推一下看下方試推燈有沒有亮來調整.'],
- countdownSec:['倒數秒數','sec','倒數完馬達啟動,也就是你走到手柄的時間. 手勢起飛:從飛機放穩起算. 上電倒數:從上電起算.'],
+ countdownSec:['倒數秒數','sec','倒數完馬達啟動,也就是你走到手柄的時間. 安全開關按過,而且飛機已放穩(上電倒數是放平)的那一刻開始算.'],
  disturbG:['外力門檻','g','倒數中晃動超過這個值,視為有人碰到飛機. 碰一下飛機看下方橘燈調整,戶外有風時調大.'],
  startLevel:['起飛前水平限制','deg','機頭或滾轉超過這個角度就不起飛:推手勢會被拒絕;上電倒數會暫停,放平 1 秒才開始;等待放穩或倒數中超過則取消起飛. 後三點飛機停放時機頭本來就朝上,要設得比停放角度大. 原因記在監看頁事件紀錄.'],
  twistCancel:['扭轉機尾取消起飛','deg','手勢起飛後(等待放穩或倒數中),抓著機尾把飛機轉超過這個角度就取消起飛. 0 = 關閉. 放飛機時容易誤觸就調大.'],
@@ -586,7 +587,7 @@ const PROF_LAYOUT=[
 const PROF_NOTE='時間都從馬達開始轉算起. 總飛行時間到了,或飛行中觸地提早降落(設定頁開啟),就開始降落;降落期間不做角度補償. 油門上下限在角度補償頁.';
 const SET_LAYOUT=[
  {t:'啟動與倒數',k:['gestureEnable','startLevel','gestureG','twistCancel','twistBlock','countdownSec','disturbG','disturbMode','extendSec'],
-  n:'推一下飛機(啟動手勢)或按上方「開始起飛程序」→ 等飛機放穩 → 倒數 → 馬達啟動. 倒數中可按「取消倒數」或扭轉機尾取消.'},
+  n:'推一下飛機(啟動手勢)或按上方「開始起飛程序」→ 等飛機放穩 → 按下安全開關 → 倒數 → 馬達啟動. 安全開關放穩前或放穩後按都可以. 倒數中可按「取消倒數」或扭轉機尾取消.'},
  {t:'觸地提早降落',k:['earlyLand','earlyLandVib','earlyLandHold','earlyLandTilt','earlyLandArm'],n:'飛行中想提早結束時,讓飛機正飛水平貼地滑行,機輪在地上彈跳的抖動持續一段時間,就開始降落. 門檻請參考「紀錄」頁的實際數值.',id:'earlyCard'},
  {t:'降落與撞擊',k:['touchdownG','touchdownStill','landingTimeout','crashEnable','crashG'],n:'降落中以下任一成立就關馬達:觸地衝擊超過門檻;完全靜止;地面滑行抖動持續達標(用提早降落的抖動設定,不管開關). 都沒成立就等保險時間到.'},
  ];
@@ -1078,7 +1079,7 @@ function buildShared(){
  for(const [layout,boxId] of [[SET_LAYOUT,'setCards'],[INST_LAYOUT,'instCards'],[ESC_LAYOUT,'escCards']])for(const g of layout){const box=$(boxId);
   const c=card(g.t,g.n,g.id);
   for(const k of g.k){
-   if(k==='gestureEnable')c.appendChild(makeSelect('s',k,'啟動方式',['上電後直接倒數','推一下才倒數(手勢)'],'推一下才倒數:待機時推一下飛機或按上方「開始起飛程序」. 上電後直接倒數:接上電池後自動倒數,每次通電只一次;更新韌體,網頁重新開機,當機重開都不會自己倒數,要飛請拔電再接電. 想上電 N 秒就一定啟動,把「外力介入時」設成不理會外力.'));
+   if(k==='gestureEnable')c.appendChild(makeSelect('s',k,'啟動方式',['上電後直接倒數','推一下才倒數(手勢)'],'推一下才倒數:待機時推一下飛機或按上方「開始起飛程序」,飛機放穩後按下安全開關開始倒數. 上電後直接倒數:接上電池,按下安全開關(飛機放平)就開始倒數,每次通電只一次;更新韌體,網頁重新開機,當機重開都不會自己倒數,要飛請拔電再接電. 想按下開關 N 秒後就一定啟動,把「外力介入時」設成不理會外力.'));
    else if(k==='disturbMode')c.appendChild(makeSelect('s',k,'外力介入時',['延長秒數','從頭倒數','不理會外力'],'倒數中有人碰到飛機(晃動超過外力門檻)時怎麼處理.'));
    else if(k==='earlyLand')c.appendChild(makeSelect('s',k,'觸地提早降落',['關閉','開啟'],'建議先關閉,到紀錄頁看過特技與地面滑行各自的 Z 軸抖動,確定門檻不會誤觸再開啟. 開啟時收輪不作用.'));
    else if(k==='gearEnable')c.appendChild(makeSelect('s',k,'收輪功能',['關閉','開啟'],'沒有收腳的飛機保持關閉. 觸地提早降落開啟時不收輪:不知道什麼時候要貼地降落,輪子要一直放著.'));
@@ -1277,7 +1278,7 @@ function renderStatus(s){
  $('plane').setAttribute('transform',`rotate(${noseRightNow?-s.p:s.p})`);
  $('acc').textContent=s.a.toFixed(2)+' g';
  $('still').textContent=s.st?`是(${s.sts.toFixed(1)} 秒)`:'否';
- {const e=$('armSw');e.textContent=s.f.arm?'已按下,可起飛':'沒按下';e.style.color=s.f.arm?'var(--ok)':'var(--bad)'}
+ {const e=$('armSw');e.textContent=s.f.arm?'已按下':'沒按下';e.style.color=s.f.arm?'var(--ok)':'var(--mute)'}
  {const t=rpmText(s);$('esc').textContent=(s.proto?`DShot ${s.dsh}`:s.esc+' µs')+(t?(t.ok?` · ${t.rpm} RPM`:' · 轉速收不到'):'')}
  $('gyro').textContent=s.g.map(v=>v.toFixed(1)).join(' / ');
  $('bias').textContent=s.b.map(v=>v.toFixed(2)).join(' / ');
@@ -1395,6 +1396,8 @@ function evText(e){
     {c:'bad',m:'韌體更新失敗,繼續使用目前的版本',h:'下載中斷或檔案不對時會這樣,目前韌體沒有改變,可以再試一次.'},
     {c:'bad',m:'新韌體沒有在時限內確認,退回舊版',h:''}][arg]||{c:'dim',m:`韌體更新(${arg})`,h:''}}
   case 23:return {c:'dim',m:arg?`收輪(飛行 ${mmss(Math.round(a))})`:(a>0?`放輪(飛行 ${mmss(Math.round(a))})`:'放輪'),h:''};
+  case 28:return arg===2?{c:'good',m:'安全開關按下',h:''}
+   :{c:'',m:arg===1?'上電自動倒數:等安全開關按下':'飛機已放穩,等安全開關按下才開始倒數',h:arg===1?'按下安全開關(飛機放平)就開始倒數.':'按下安全開關就開始倒數.'};
   case 22:return {c:'bad',m:arg?'測試用感測器模擬開啟(USB 序列指令)':'測試用感測器模擬關閉',h:arg?'只有開發測試會出現. 模擬中角度與 G 力都是假的,重新開機即清除.':''};
   case 20:return {c:'land',m:(a>0?`扭轉機尾 ${Math.round(a)}°(門檻 ${Math.round(b)}°),取消起飛`:'序列埠模擬扭轉,取消起飛')+`,${arg} 秒內不接受手勢`,h:'如果不是故意扭轉:放飛機時轉動太多也會取消,可以在設定頁把角度調大.'};
  }
@@ -1429,13 +1432,16 @@ function renderFlight(f){
  let title='--',detail='',cls='',badge='狀態';
  switch(f.s){
   case 0:badge='開機';title='電變解鎖中';break;
-  case 1:badge='待機';title='待機';detail=f.ge?'推一下飛機,或按「開始起飛程序」':(f.au?'要飛請拔掉電池再接上(上電倒數每次通電一次,重開機不算)':'');
+  case 1:badge='待機';title='待機';detail=f.ge?'推一下飛機,或按「開始起飛程序」;放穩後按安全開關開始倒數':(f.au?'要飛請拔掉電池再接上(上電倒數每次通電一次,重開機不算)':'');
    if(f.er===9&&f.ss<15){title='待機(角度超過水平限制,已取消起飛)';detail=(f.ge?'放平後再推一下飛機':'要再飛請重新上電')}
    if(f.gb>0){title='待機(已扭轉機尾取消起飛)';detail=`${f.gb.toFixed(1)} 秒後才接受啟動手勢`}
-   if(f.aw){cls='reject';badge=f.arm?'等待放平':'等安全開關';title=f.arm?'角度超過水平限制,暫不倒數':'安全開關沒按下,暫不倒數';
-    detail=f.arm?`把飛機放平(機頭與滾轉 ±${VALS?VALS.shared.startLevel:'?'}° 內)並維持 1 秒就開始倒數`:'按下 GPIO21 的安全開關(接地)並維持 1 秒就開始倒數'}
-   else if(!f.arm)detail='安全開關沒按下,不能開始起飛程序'+(f.ge?'(推飛機會被拒)':'');break;
-  case 2:cls='wait';badge='起飛程序';title='等待放穩';detail=`放穩 ${Math.min(1,f.set).toFixed(1)} / 1.0 秒`;
+   // 上電自動倒數在待機等:安全開關還沒按過 → 等安全開關;按過但沒放平 → 等待放平
+   if(f.aw){cls='wait';badge=f.al?'等待放平':'等安全開關';title=f.al?'角度超過水平限制,暫不倒數':'等待安全開關';
+    detail=f.al?`把飛機放平(機頭與滾轉 ±${VALS?VALS.shared.startLevel:'?'}° 內)並維持 1 秒就開始倒數`:'按下安全開關就開始倒數(飛機要放平)'}
+   break;
+  case 2:cls='wait';badge='起飛程序';
+   if(!f.al&&f.set>=1){title='等待安全開關';detail='飛機已放穩,按下安全開關就開始倒數'}
+   else{title='等待放穩';detail=`放穩 ${Math.min(1,f.set).toFixed(1)} / 1.0 秒`+(f.al?'':',放穩後按安全開關開始倒數')}
    if(f.da&&f.dga>=0&&f.dga<600)detail+=`,外力最大 ${f.dg.toFixed(2)} g,放穩後${f.da===1?'延長秒數(倒數最多 '+((VALS?VALS.shared.countdownSec:0)+10)+' 秒)':'重新倒數'}`;break;
   case 3:cls='count';badge='起飛倒數';title=`倒數 ${f.cd.toFixed(1)} 秒`;detail=`風格${pname(f.fp)}`;break;
  }
@@ -1467,7 +1473,7 @@ function startDisarm(){startArmed=false;clearTimeout(startTimer);const b=$('btnS
 $('btnStart').onclick=()=>{const b=$('btnStart');
  if(!startArmed){startArmed=true;b.classList.add('arm');b.textContent='確定開始?再按一下';startTimer=setTimeout(startDisarm,3000);return}
  startDisarm();
- post('/api/start').then(r=>{if(!r.ok)toast(CODES[r.code]||r.code,true);else toast('開始起飛程序:把飛機放穩,倒數中可按取消.');tick()}).catch(()=>toast('連線失敗,沒有開始.',true))};
+ post('/api/start').then(r=>{if(!r.ok)toast(CODES[r.code]||r.code,true);else toast('開始起飛程序:把飛機放穩,按下安全開關開始倒數.');tick()}).catch(()=>toast('連線失敗,沒有開始.',true))};
 (function(){
  let taps=0,timer=0;const b=$('btnEstop'),label='緊急停止(連按三下)';
  b.onclick=()=>{clearTimeout(timer);taps++;

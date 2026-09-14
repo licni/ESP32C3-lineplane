@@ -1,4 +1,6 @@
-// 版本流水號: r18 (2026-09-14) 撞擊斷電後推飛機不算手勢(原因 9);飛行中油門下限保底 10%
+// 版本流水號: r19 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG):開始不再拒絕(原因 7/8 不再產生),
+//   起飛程序中按下一次就記住,放穩(或上電自動倒數放平 1 秒)後開始倒數;上電自動倒數等待中燈慢閃;事件 28
+// 舊: r18 (2026-09-14) 撞擊斷電後推飛機不算手勢(原因 9);飛行中油門下限保底 10%
 // 舊: r17 (2026-09-14) 安全開關 GPIO21 沒按下不開始起飛程序(手勢拒絕原因 7;自動倒數等按下,原因 8);撞擊斷電改連續 2 拍
 // 舊: r16 (2026-09-14) 韌體更新中或新韌體待確認時拒絕起飛(拒絕原因 5/6)
 // 舊: r15 (2026-09-14) 上電後直接倒數只給真正的上電重置(GG):OTA/網頁重開/當機重開一律待機,解鎖事件 arg 3
@@ -52,6 +54,12 @@ static bool autoStartUsed = false;
 static bool bootNoAutoStart = false;   // 這次開機不是上電重置:不給上電自動倒數(flightBegin 決定)
 static const uint8_t CRASH_CONFIRM_TICKS = 2;   // 撞擊斷電要連續幾拍超過門檻
 static uint8_t crashTicks = 0;
+
+// 安全開關(GG 2026-09-14 r19):起飛程序照常開始,等安全開關按下才倒數. 用途是「人在飛機旁,確定要飛了」.
+// 起飛程序中(等待放穩,或上電自動倒數等待中)按下一次就記住:按的時候碰動飛機沒關係,重新放穩就開始倒數.
+// 開始當下已經按著也算 —— 飛場上開關壞掉時把兩腳跳線短路(等於一直按著),照樣能飛.
+static bool armLatched = false;
+static bool armWaitLogged = false;   // 這趟起飛程序已記過「等安全開關」事件
 
 static volatile bool reqCancel = false, reqEstop = false, reqGesture = false, reqDisturb = false, reqTwist = false,
                      reqTilt = false;
@@ -147,6 +155,14 @@ static bool withinStartLevel(const FlightInputs &in) {
   return in.imuOk && fabsf(in.pitchDeg) <= fs.startLevelDeg && fabsf(in.rollDeg) <= fs.startLevelDeg;
 }
 
+// 起飛程序中安全開關按下 → 記住(開關去抖在 control.cpp:低電位連續 50ms)
+static void latchArm(const FlightInputs &in) {
+  if (in.armSwitch && !armLatched) {
+    armLatched = true;
+    eventLog(EV_ARM_SWITCH, 2);
+  }
+}
+
 static void rejectTilt(RejectReason r, const FlightInputs &in) {
   rejectReason = r;
   rejectMs = nowMsCache ? nowMsCache : 1;
@@ -167,11 +183,7 @@ static void tryStart(bool autoStart, const FlightInputs &in) {
     enter(FS_STANDBY);
     return;
   }
-  if (!in.armSwitch) {   // 安全開關(GPIO21)沒按下:任何方式都不開始起飛程序(GG 2026-09-14 安全審查)
-    reject(REJECT_ARM_SWITCH);
-    enter(FS_STANDBY);
-    return;
-  }
+  // 安全開關不在這裡擋(r19):起飛程序照常開始,等開關按下才倒數(見 FS_WAIT_STILL 與上電自動倒數的等待)
   if (dirty) {
     reject(REJECT_UNSAVED);
     enter(FS_STANDBY);
@@ -189,13 +201,16 @@ static void tryStart(bool autoStart, const FlightInputs &in) {
   twistDeg = 0;
   lastDisturbAction = DISTURB_ACT_NONE;
   resumeCountdown = false;
+  armWaitLogged = false;
   captureSettleRef();
   if (autoStart) {
-    // 上電直接倒數:不等放穩(資深飛友習慣),外力照設定處理
+    // 上電直接倒數:不等放穩(資深飛友習慣),外力照設定處理. 安全開關已在待機等待時按過.
+    armLatched = true;
     countdownRemain = fs.countdownSec;
     enter(FS_COUNTDOWN);
     eventLog(EV_COUNTDOWN, 0, countdownRemain);
   } else {
+    armLatched = in.armSwitch;   // 推飛機或按網頁開始的當下已經按著也算
     enter(FS_WAIT_STILL);
   }
 }
@@ -329,15 +344,25 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
         // arg:1 = 等啟動手勢,0 = 接著上電自動倒數,2 = 手勢關閉但自動倒數已用過(例如剛校正完),
         //     3 = 手勢關閉但這次不是上電開機(OTA/網頁重開/當機重開),不自動倒數
         eventLog(EV_ARMED, fs.gestureEnable ? 1 : (!autoStartUsed ? 0 : (bootNoAutoStart ? 3 : 2)));
-        if (!fs.gestureEnable && !autoStartUsed && ((in.imuOk && !withinStartLevel(in)) || !in.armSwitch)) {
-          // 上電自動倒數,但飛機角度超過水平限制或安全開關沒按:不倒數,在待機等條件成立 1 秒(不用掉自動倒數的機會)
-          autoWaitLevel = true;
-          levelHoldS = 0;
-          if (!in.armSwitch) reject(REJECT_ARM_WAIT);
-          else rejectTilt(REJECT_TILT_WAIT, in);
-          enter(FS_STANDBY);
-        } else if (!fs.gestureEnable && !autoStartUsed) {
-          tryStart(true, in);
+        if (!fs.gestureEnable && !autoStartUsed) {
+          // 上電自動倒數:安全開關按過而且飛機放平才倒數;還沒按或沒放平就在待機等(燈慢閃,不用掉自動倒數的機會).
+          // 感測器異常時不看水平,交給 tryStart 拒絕.
+          armLatched = in.armSwitch;
+          armWaitLogged = false;
+          const bool levelOk = !in.imuOk || withinStartLevel(in);
+          if (armLatched && levelOk) {
+            tryStart(true, in);
+          } else {
+            autoWaitLevel = true;
+            levelHoldS = 0;
+            if (!armLatched) {
+              armWaitLogged = true;
+              eventLog(EV_ARM_SWITCH, 1);   // 等安全開關(不是拒絕,不急閃)
+            } else {
+              rejectTilt(REJECT_TILT_WAIT, in);
+            }
+            enter(FS_STANDBY);
+          }
         } else {
           enter(FS_STANDBY);
         }
@@ -359,15 +384,16 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
       if (autoWaitLevel) {
         if (fs.gestureEnable || autoStartUsed) {
           autoWaitLevel = false;   // 改成手勢啟動,或手動輸出用掉了自動倒數
-        } else if (withinStartLevel(in) && in.armSwitch) {   // 放平且安全開關按著,持續 1 秒才倒數
-          levelHoldS += dt;
-          if (levelHoldS >= AUTO_LEVEL_HOLD_S) {
+        } else {
+          // 安全開關按過就記住;飛機放平維持 1 秒(開關按下前就放平也算)才倒數
+          latchArm(in);
+          const bool levelOk = !in.imuOk || withinStartLevel(in);
+          levelHoldS = levelOk ? levelHoldS + dt : 0;
+          if (armLatched && levelHoldS >= AUTO_LEVEL_HOLD_S) {
             autoWaitLevel = false;
             tryStart(true, in);
             break;
           }
-        } else {
-          levelHoldS = 0;
         }
       }
       if (fs.gestureEnable) {
@@ -406,7 +432,16 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
         enter(FS_STANDBY);
         break;
       }
+      latchArm(in);
       if (settleS >= SETTLE_REQUIRED_S) {
+        if (!armLatched) {
+          // 已放穩,等安全開關按下才開始倒數(r19). 按開關碰動飛機的話,重新放穩 1 秒後開始.
+          if (!armWaitLogged) {
+            armWaitLogged = true;
+            eventLog(EV_ARM_SWITCH, 0);
+          }
+          break;
+        }
         if (!resumeCountdown) countdownRemain = fs.countdownSec;
         else if (pendingAction == DISTURB_ACT_EXTEND)
           countdownRemain = min(countdownRemain + fs.extendSec, fs.countdownSec + COUNTDOWN_EXTEND_LIMIT_S);
@@ -599,6 +634,7 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
   status.twistDeg = (state == FS_WAIT_STILL || state == FS_COUNTDOWN) && gestureStarted ? twistDeg : 0;
   status.autoWaitLevel = autoWaitLevel;
   status.armSwitch = in.armSwitch;
+  status.armLatched = armLatched && (state == FS_WAIT_STILL || state == FS_COUNTDOWN || autoWaitLevel);
   status.gestureBlockS =
       gestureBlockUntilMs && (int32_t)(now - gestureBlockUntilMs) < 0 ? (gestureBlockUntilMs - now) / 1000.0f : 0;
   portEXIT_CRITICAL(&statusLock);
@@ -618,7 +654,7 @@ uint8_t flightLedPattern(uint32_t now, bool imuFault) {
   if (imuFault && !motorState(state)) return (now / 40) % 2;                 // 感測器故障:極快閃
   switch (state) {
     case FS_ARMING: return 0;
-    case FS_STANDBY: return 1;
+    case FS_STANDBY: return autoWaitLevel ? (now % 1000) < 500 : 1;   // 上電自動倒數等安全開關或放平:慢閃(和等待放穩一樣是等待中)
     case FS_WAIT_STILL: return (now % 1000) < 500;   // 慢閃
     case FS_COUNTDOWN: return (now % 250) < 125;     // 快閃
     case FS_DONE: {
