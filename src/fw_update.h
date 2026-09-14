@@ -1,4 +1,5 @@
-// 版本流水號: r2 (2026-09-14) 確認時限 WiFi 就緒後 300 → 60 秒,開機後上限 420 → 240 秒(GG)
+// 版本流水號: r3 (2026-09-14) 版本逐段比數字(fwVersionCompare),狀態加 remoteNewer;板子下載只裝比目前新的版本
+// 舊: r2 (2026-09-14) 確認時限 WiFi 就緒後 300 → 60 秒,開機後上限 420 → 240 秒(GG)
 // 舊: r1 (2026-09-14) 初版:更新鎖,新韌體確認與自動退回,板子自己下載更新(公開 GitHub 專案)
 #pragma once
 #include <Arduino.h>
@@ -27,7 +28,7 @@ const size_t FW_NOTES_MAX = 400;                // 更新說明最長位元組(U
 enum FwCheckState : uint8_t {
   FWC_IDLE = 0,     // 還沒檢查
   FWC_CHECKING,     // 讀取 manifest 中
-  FWC_CHECKED,      // 已讀到遠端版本(看 remoteVersion 與目前版本是否相同)
+  FWC_CHECKED,      // 已讀到遠端版本(remoteNewer:網站版本比目前新,相同,或比較舊)
   FWC_DOWNLOADING,  // 下載並寫入中
   FWC_DONE,         // 寫入完成,即將重開機
   FWC_ERROR         // 失敗,原因在 err
@@ -56,6 +57,7 @@ struct FwStatus {
   bool rolledBack;             // 這次開機是退回後的舊版
   char rolledBackFrom[24];     // 被退回的版本(網頁上傳/無線燒錄不知道版本時是空字串)
   char remoteVersion[24];
+  int8_t remoteNewer;          // 1 = 網站版本比目前新(才可以安裝),0 = 相同,-1 = 網站版本比較舊(例如開發中的板子)
   uint32_t remoteSize;
   char notes[FW_NOTES_MAX + 1];
 };
@@ -73,8 +75,10 @@ void fwUpdateFlashed(bool ok, const char *toVersion = "");
 bool fwUpdateConfirm();
 // 開始檢查更新(背景讀 manifest). 回 nullptr = 已開始,否則錯誤代碼.
 const char *fwUpdateCheckStart();
-// 安裝檢查到的版本(背景下載). version 要和檢查到的一致,避免裝到別的版本. 回 nullptr = 已開始.
+// 安裝檢查到的版本(背景下載). version 要和檢查到的一致,避免裝到別的版本;而且要比目前的版本新. 回 nullptr = 已開始.
 const char *fwUpdateInstallStart(const char *version);
+// 比較版本「年.月.日.序號」:a 比 b 新回 1,相同 0,比較舊 -1(逐段比數字,.10 比 .9 新).
+int fwVersionCompare(const char *a, const char *b);
 void fwUpdateGetStatus(FwStatus &out);
 // 測試用(USB 序列指令 fwwin):這次開機的確認時限改成 sec 秒.
 void fwUpdateTestSetWindow(uint16_t sec);

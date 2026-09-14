@@ -298,6 +298,10 @@ def _emergency_restore():
         time.sleep(0.3)
         cmd("sim off", expect="sim")
         cmd("armsw off", expect="OK")
+        try:
+            cmd("armwait off", expect="OK")   # 安全開關等待上限覆寫(flight r20 起)
+        except Exception:  # noqa: BLE001
+            pass
         cmd("pwmcap off", expect="OK")
         log("  還原:", board_backup.restore(HOST, SNAP) or "ok")
         log("  比對:", board_backup.diff(SNAP, board_backup.backup(HOST)) or "相同")
@@ -323,6 +327,7 @@ def restore_and_verify():
     try:
         cmd("sim off", expect="sim")
         cmd("armsw off", expect="OK")
+        cmd("armwait off", expect="OK")
     except Exception:  # noqa: BLE001
         pass
     errs = board_backup.restore(HOST, SNAP)

@@ -1,4 +1,6 @@
-// 版本流水號: r17 (2026-09-14) 飛行中油門下限範圍 10~100(安全審查 B4),舊存檔 0~9 載入時補到 10
+// 版本流水號: r18 (2026-09-14) 加安全開關等待上限 armWait(1~30 分鐘,預設 3,用收腳區塊預留位元組,舊存檔讀到 0 補 3);
+//   電變校正最高油門保持出廠 2 → 4 秒(GG:電變自己開機要約 1 秒,4~5 秒剛好等電變開機又不會進設定模式)
+// 舊: r17 (2026-09-14) 飛行中油門下限範圍 10~100(安全審查 B4),舊存檔 0~9 載入時補到 10
 // 舊: r16 (2026-09-14) 數值文字要整串是數字(「12abc」拒絕,原本會收成 12);風格名稱要是合法 UTF-8 且無控制字元
 // 舊: r15 (2026-09-13) 收輪舵機行程預設改小行程 1400~1600µs(GG:避免還沒搞清楚方向就撞壞)
 // 舊: r14 (2026-09-13) 版面 v8:機輪收腳 6 個參數(行程下限<上限-100);讀 v7 共用設定尾端補預設,風格讀 v4/v6/v7/v8
@@ -39,6 +41,8 @@ static_assert(SHARED_V6_SIZE == offsetof(SharedSettings, gestureEnable) + 4, "Sh
 static const size_t SHARED_V7_SIZE = offsetof(SharedSettings, gearEnable);
 static_assert(SHARED_V7_SIZE == SHARED_V6_SIZE + 4, "SharedSettings v7 size");
 static_assert(sizeof(SharedSettings) == SHARED_V7_SIZE + 12, "SharedSettings v8 size");
+// armWaitMin 占用 v8 收腳區塊的預留位元組:位置不可移動
+static_assert(offsetof(SharedSettings, armWaitMin) == offsetof(SharedSettings, gearRetractSec) + 1, "SharedSettings armWaitMin");
 
 static SharedSettings savedShared;
 static ProfileSettings savedProfiles[PROFILE_COUNT];
@@ -68,7 +72,9 @@ static void defaultShared(SharedSettings &s) {
   s.crashG = 14.0f;
   s.lineLengthM = 18.0f;
   s.lapSec = 5.2f;
-  s.calibHoldSec = 2.0f;
+  // 電變校正最高油門保持(GG 2026-09-14 實測):控制器開機很快,電變自己開機要約 1 秒. 2 秒太短,電變還沒記住最高點
+  // 就切到最低;太久有些電變會進設定模式. GG 用 4~5 秒,出廠取 4(也在多數廠牌說明的 3~6 秒,ZTW 3~4 秒內).
+  s.calibHoldSec = 4.0f;
   // 觸地提早降落預設關閉:門檻要看紀錄頁的實飛抖動數值才訂得準. 模擬(tools/sim_impact.py)
   // 特技中水平時抖動最大 1.04g 但撐不過 1 秒,地面滑行約 3.8 秒觸發.
   s.earlyLandEnable = 0;
@@ -79,6 +85,7 @@ static void defaultShared(SharedSettings &s) {
   // 扭轉機尾取消起飛(GG 指定 45 度,取消後 5 秒不接受手勢)
   s.twistCancelDeg = 45;
   s.twistBlockSec = 5;
+  s.armWaitMin = ARM_WAIT_DEFAULT_MIN;
   s.escRpmTelemetry = 0;   // 有些電變收到雙向訊號會不工作,預設關(GG)
   s.motorPoles = 14;       // Betaflight 預設
   // 機輪收腳:預設關閉(沒裝收腳的飛機不受影響). 行程預設只開 1400~1600µs 小行程(GG):
@@ -151,6 +158,7 @@ static const ParamDef SHARED_PARAMS[] = {
     // 下限 0.5g:大飛機人手推不快(GG 實測). 越低越容易在搬運時誤觸發,用設定頁試推燈確認.
     SP("gestureG", PARAM_F32, gestureG, 0.5f, 6, 0.1f, 0.5f),
     SP("startLevel", PARAM_U8, startLevelDeg, 10, 90, 1, 5),
+    SP("armWait", PARAM_U8, armWaitMin, 1, 30, 1, 5),       // 分鐘:起飛程序開始後沒按安全開關就自動取消
     SP("countdownSec", PARAM_U8, countdownSec, 5, 120, 1, 5),
     SP("disturbG", PARAM_F32, disturbG, 0.05f, 1.0f, 0.01f, 0.05f),
     SP("disturbMode", PARAM_U8, disturbMode, 0, 2, 1, 1),
@@ -386,6 +394,7 @@ static bool loadShared(Preferences &prefs, SharedSettings &out) {
   if (s.escPwmHz == 0) s.escPwmHz = 50;   // 加 PWM 頻率之前的存檔,這兩個位元組是預留的 0
   if (s.motorPoles < 2) s.motorPoles = 14; // v7 早期這格是預留的 0
   if (s.startLevelDeg < 10) s.startLevelDeg = 35;   // 以前是預留位元組 0
+  if (s.armWaitMin < 1 || s.armWaitMin > 30) s.armWaitMin = ARM_WAIT_DEFAULT_MIN;   // 以前是收腳區塊的預留位元組 0
   if (validateShared(s)) return false;
   if (ver != SETTINGS_LAYOUT_VERSION) Serial.printf("settings shared migrated v%u -> v%u\n", ver, SETTINGS_LAYOUT_VERSION);
   out = s;

@@ -1,4 +1,5 @@
-// 版本流水號: r14 (2026-09-14) 飛行中油門下限最低 THROTTLE_FLOOR_PCT = 10%(版面不變,舊存檔載入時補到 10)
+// 版本流水號: r15 (2026-09-14) 預留位元組 gearReserved 改為安全開關等待上限 armWaitMin(大小不變,讀到 0 當 3 分鐘)
+// 舊: r14 (2026-09-14) 飛行中油門下限最低 THROTTLE_FLOOR_PCT = 10%(版面不變,舊存檔載入時補到 10)
 // 舊: r13 (2026-09-13) 版面 v8:共用設定尾端加機輪收腳(啟用,反轉,行程下限/上限,起飛後收輪秒數,舵機速度)
 // 舊: r12 (2026-09-13) 預留位元組 reserved1 改為起飛前水平限制 startLevelDeg(大小不變)
 // 舊: r11 (2026-09-13) v7 尾端預留兩格改為轉速回傳開關與馬達極數(大小不變)
@@ -38,6 +39,7 @@ const uint8_t CURVE_MAX_POINTS = 4;
 const uint8_t CURVE_MIN_POINTS = 1;
 const uint8_t PROFILE_NAME_BUFFER = 24;   // UTF-8,中文一字 3 位元組,約 7 個中文字
 const uint16_t SETTINGS_LAYOUT_VERSION = 8;
+const uint8_t ARM_WAIT_DEFAULT_MIN = 3;   // 安全開關等待上限出廠值(GG 2026-09-14:3 分鐘,可調)
 
 enum DisturbMode : uint8_t { DISTURB_EXTEND = 0, DISTURB_RESET = 1, DISTURB_OFF = 2 };
 // 換段方式:直接跳 / 直接跳但以換段加力秒數過渡 / 把兩段的油門差平均分攤在第一段時間內
@@ -85,7 +87,8 @@ struct SharedSettings {
   uint16_t gearMinUs;        // 舵機行程下限
   uint16_t gearMaxUs;        // 舵機行程上限
   uint8_t gearRetractSec;    // 馬達啟動後幾秒收輪
-  uint8_t gearReserved;
+  // 原本是收腳區塊的預留位元組(舊存檔一定是 0,載入時補 3). 起飛程序開始後這麼多分鐘沒按安全開關就自動取消
+  uint8_t armWaitMin;
   float gearTravelSec;       // 舵機從一端走到另一端的秒數(0 = 直接跳)
 };
 

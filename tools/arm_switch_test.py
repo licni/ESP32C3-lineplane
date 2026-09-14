@@ -1,4 +1,5 @@
-# 版本流水號: r2 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG)
+# 版本流水號: r3 (2026-09-14) 安全開關等待上限(GG:3 分鐘可調):第 9~11 段,用序列指令 armwait 縮短成 8/6 秒
+# 舊: r2 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG)
 # 舊: r1 (2026-09-14) 安全開關 GPIO21 與撞擊斷電連續 2 拍(安全審查後的修正)實機測試
 # ============================================================================
 # 開發板沒接微動開關:真的腳位是內部上拉 = 沒按. 用序列指令 armsw 0|1|off 覆寫.
@@ -10,7 +11,10 @@
 #  5. 倒數中外力介入 → 退回等待放穩 → 重新放穩後繼續倒數,不必再按開關;取消
 #  6. 上電後直接倒數 + 開關沒按:解鎖後待機等(aw=1,al=0,事件 28/1),燈慢閃,不倒數;按下 → 開始倒數;取消
 #  7. 上電後直接倒數 + 開關按著重開:解鎖後直接倒數,沒有「等開關」事件;取消
-#  8. 撞擊斷電:飛行中一拍 20g 不關馬達;連續 15ms 20g 關馬達(原因 5)
+#  9. 等待上限(armwait 8):手勢起飛沒按開關,狀態回報剩餘秒數,8 秒後取消回待機(結束原因 10,事件 28/3,設定解鎖,燈長亮);之後按開關不倒數
+# 10. 等待上限(armwait 6):一直晃著沒放穩時按一下開關 → 不再計時,超過上限也不取消;放穩後倒數
+# 11. 等待上限(armwait 8):上電後直接倒數沒按開關,解鎖後 8 秒不再等(事件 28/4,au=1),之後按開關不倒數
+#  8. 撞擊斷電:飛行中一拍 20g 不關馬達;連續 15ms 20g 關馬達(原因 5)(撞擊後手勢鎖住,放最後)
 # 設定先備份,結束還原比對. 不接馬達.
 # ============================================================================
 import os
@@ -155,7 +159,83 @@ T.check(f"解鎖後直接倒數({T.fstate(st)})", T.fstate(st) == "countdown", s
 T.check("沒有等開關事件", not any(e[2] == 28 and e[3] == 1 for e in T.events(0)["ev"]))
 T.check("取消回待機", cancel() == "standby")
 
+T.log("\n== 9. 等待上限:手勢起飛沒按開關,超過上限自動取消 ==")
+T.configure(shared={"gestureEnable": 1, "disturbMode": 2, "countdownSec": 20})
+T.sim("att 0 0")
+time.sleep(2.0)
+T.cmd("armsw 0", expect="OK")
+T.cmd("armwait 8", expect="OK armwait")
+n0 = T.ev_total()
+T.gesture_push()
+st = T.wait_state("wait_still", 3)
+T.check(f"進入起飛程序,狀態回報剩餘 awl={st['f']['awl']} 秒", T.fstate(st) == "wait_still" and 5 <= st["f"]["awl"] <= 8, st["f"])
+st = T.wait_state("standby", 12)
+T.check(f"超過上限自動取消回待機(結束原因 {st['f']['er']},lock={st['lock']},awl={st['f']['awl']})",
+        T.fstate(st) == "standby" and st["f"]["er"] == 10 and st["lock"] == 0 and st["f"]["awl"] == -1, st["f"])
+ev = T.events_after(n0)
+g = [e for e in ev if e[2] == 3]
+to = [e for e in ev if e[2] == 28 and e[3] == 3]
+T.check(f"事件 28/3(上限 {to[0][4] if to else '?'} 秒),手勢到取消 {(to[0][1] - g[0][1]) / 1000 if to and g else '?'} 秒",
+        to and g and to[0][4] == 8 and 7.9 <= (to[0][1] - g[0][1]) / 1000 <= 8.2, ev)
+runs = T.led_capture(1200)
+T.check("取消後燈長亮(待機)", len(runs) == 1 and runs[0][0], runs)
+T.cmd("armsw 1", expect="OK")
+time.sleep(1.5)
+T.check("取消後才按開關:不會倒數", T.fstate() == "standby")
+
+T.log("\n== 10. 等待上限:按過開關就不再計時 ==")
+T.cmd("armsw 0", expect="OK")
+T.cmd("armwait 6", expect="OK armwait")
+time.sleep(0.5)
+n0 = T.ev_total()
+T.gesture_push()
+st = T.wait_state("wait_still", 3)
+T.sim("vib 0.6 3")   # 一直晃:停在等待放穩
+time.sleep(1.0)
+T.cmd("armsw 1", expect="OK")
+time.sleep(0.3)
+T.cmd("armsw 0", expect="OK")
+st = T.status()
+T.check(f"晃動中按一下開關:記住(al={st['f']['al']}),不再倒數計時(awl={st['f']['awl']})", T.fstate(st) == "wait_still" and st["f"]["al"] == 1 and st["f"]["awl"] == -1, st["f"])
+time.sleep(7.5)
+st = T.status()
+T.check(f"超過 6 秒上限仍在等待放穩,沒有取消({T.fstate(st)})", T.fstate(st) == "wait_still" and not any(e[2] == 28 and e[3] == 3 for e in T.events_after(n0)), st["f"])
+T.sim("vib 0")
+st = T.wait_state("countdown", 4)
+T.check(f"放穩後開始倒數({T.fstate(st)})", T.fstate(st) == "countdown", st["f"])
+T.check("取消回待機", cancel() == "standby")
+
+T.log("\n== 11. 等待上限:上電後直接倒數沒按開關,逾時不再自動倒數 ==")
+T.configure(shared={"gestureEnable": 0, "disturbMode": 2, "countdownSec": 20})
+T.cmd("powerontest", expect="OK")
+T.cmd("armsw 0", expect="OK")
+T.cmd("armwait 8", expect="OK armwait")   # 覆寫存在 RTC,軟體重開保留
+T.post("/api/reboot")
+time.sleep(3)
+T.wait_back()
+time.sleep(4.5)   # 解鎖 3 秒後開始等
+st = T.status()
+T.check(f"解鎖後待機等開關(aw={st['f']['aw']},awl={st['f']['awl']})", T.fstate(st) == "standby" and st["f"]["aw"] == 1 and 1 <= st["f"]["awl"] <= 8, st["f"])
+t0 = time.time()
+while time.time() - t0 < 12 and T.status()["f"]["aw"] == 1:
+    time.sleep(0.2)
+st = T.status()
+T.check(f"逾時不再等(aw={st['f']['aw']},au={st['f']['au']},結束原因 {st['f']['er']},awl={st['f']['awl']})",
+        T.fstate(st) == "standby" and st["f"]["aw"] == 0 and st["f"]["au"] == 1 and st["f"]["er"] == 10 and st["f"]["awl"] == -1, st["f"])
+ev = T.events(0)["ev"]
+armed = [e for e in ev if e[2] == 2]
+to = [e for e in ev if e[2] == 28 and e[3] == 4]
+T.check(f"事件 28/4(上限 {to[0][4] if to else '?'} 秒),解鎖到逾時 {(to[0][1] - armed[0][1]) / 1000 if to and armed else '?'} 秒",
+        to and armed and to[0][4] == 8 and 7.9 <= (to[0][1] - armed[0][1]) / 1000 <= 8.2, ev)
+runs = T.led_capture(1200)
+T.check("逾時後燈長亮(不再慢閃)", len(runs) == 1 and runs[0][0], runs)
+T.cmd("armsw 1", expect="OK")
+time.sleep(2.0)
+T.check("逾時後才按開關:不會倒數", T.fstate() == "standby")
+T.cmd("armwait off", expect="OK armwait")
+
 T.log("\n== 8. 撞擊斷電連續 2 拍 ==")
+T.cmd("armsw 1", expect="OK")
 T.configure(shared={"gestureEnable": 1, "disturbMode": 2, "countdownSec": 5, "crashEnable": 1, "crashG": 14.0},
             profile={"takeoffRamp": 1.0, "noCompSec": 0, "flightSec": 60, "phase1Sec": 30})
 T.sim("att 0 0")

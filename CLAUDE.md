@@ -35,7 +35,8 @@
   **無線燒錄/網頁上傳/板子下載後,新韌體是「待確認」**(2026-09-14 起):開網頁會自動確認,或 `POST /api/fw/confirm`;
   WiFi 就緒後 **1 分鐘**沒確認會自動退回舊版(GG 2026-09-14 從 5 分鐘縮短),確認前不能起飛. USB 燒錄不會待確認.
   無線燒錄後要馬上確認(測試腳本裡燒完就 POST /api/fw/confirm).
-- 發布韌體給使用者(板子「檢查更新」):先改 `src/version.h` 的 FW_VERSION,再 `tools/publish_firmware.py --notes "說明"`,
+- **開發階段只有一塊板子**(GG 2026-09-14):就是接在電腦上的開發板. 發布,改腳位,改設定時不用顧慮其他使用者更新會不會出問題.
+- 發布韌體給使用者(板子「檢查更新」):先改 `src/version.h` 的 FW_VERSION(要比公開專案上的新:板子逐段比數字,只裝比較新的版本),再 `tools/publish_firmware.py --notes "說明"`,
   推到公開專案 licni/ESP32lineplane-firmware(本機複本 firmware_release/,不進主版本庫). 公開專案只放韌體檔,不放原始碼.
   首頁只放 README,CHANGELOG,manifest.json;韌體檔在 firmware/ 資料夾(GG:首頁不要越來越長). 每版一定寫修正說明.
   **每天只留當天最新一版**(GG 2026-09-14):同一天再發布時工具自動刪掉當天舊的 Release/tag/韌體檔,當天修改合併進最新版的 Release 與 CHANGELOG.
@@ -45,7 +46,9 @@
 - 開機安全:只有真的拔電再接電才會「上電後直接倒數」;軟體重開不會. 測試要模擬上電時先送序列指令 `powerontest`.
 - **安全開關 GPIO21**(GG 2026-09-14 改):起飛程序(推飛機,網頁開始,上電自動倒數)照常開始,**按下安全開關才開始倒數**;
   起飛程序中按過一次就記住(開始當下按著也算,所以飛場應急短路照樣能飛),倒數中被碰到重新放穩不必再按. 沒按時燈慢閃等待,事件 28.
+  **等待上限**(GG 2026-09-14,設定 armWait 出廠 3 分鐘,1~30):起飛程序開始後超過上限沒按就取消(上電自動倒數則這次通電不再倒數),按過就不再計時.
   開發板沒接開關:測試用序列指令 `armsw 1` 模擬一直按著(lp_test.protect() 已自動送;覆寫存 RTC,軟體重開保留,拔電清除),收尾 `armsw off`.
+  測等待上限用 `armwait <秒>` 縮短(同樣存 RTC),收尾 `armwait off`.
 - 硬體(GG 2026-09-14):板上降壓板支援 6~9V 的電變 BEC;收腳舵機從 BEC 分電,不經過控制器;USB 可以和電池同時接(二極體反接保護).
 - 測網頁:電腦無線網卡有臨時設定檔 `HappySuperGG_Plane`,`netsh wlan connect name=HappySuperGG_Plane interface="Wi-Fi"`
   (電腦上網走有線,連熱點不影響). 板子已連家用 WiFi,平常用 lineplane.local.

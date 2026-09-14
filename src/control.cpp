@@ -1,4 +1,5 @@
-// 版本流水號: r18 (2026-09-14) 安全開關 GPIO21 讀取與去抖(50ms),測試指令可覆寫
+// 版本流水號: r19 (2026-09-14) 飛行輸入加安全開關等待上限的測試覆寫秒數(序列指令 armwait)
+// 舊: r18 (2026-09-14) 安全開關 GPIO21 讀取與去抖(50ms),測試指令可覆寫
 // 舊: r17 (2026-09-14) 飛行輸入加韌體更新擋起飛原因;韌體寫入中拒絕手動輸出
 // 舊: r16 (2026-09-13) 機輪收腳舵機每拍更新;網頁試收輪(待機限定,10 秒自動放下)
 // 舊: r15 (2026-09-13) 感測器正常過之後故障就鎖定到重新上電(恢復回應也不採用,記事件一次)
@@ -231,6 +232,7 @@ static void controlTask(void *) {
       armLowTicks = low ? (armLowTicks < 255 ? armLowTicks + 1 : 255) : 0;
     }
     fin.armSwitch = armLowTicks >= ARM_DEBOUNCE_TICKS;
+    fin.armWaitTestS = testArmWaitOverride();
     fin.nowMs = nowMs;
     flightOut = flightUpdate(fin, DT);
 

@@ -1,5 +1,6 @@
-// 版本流水號: r16 (2026-09-14) 感測器改 GPIO5/6 後擋 GPIO5 測試指令 pwmcap/escemu;開機印 I2C 腳位;
-//   I2C 匯流排解鎖(開機與 mpu 指令):重開時感測器傳到一半會拉住 SDA,之後讀不到(燒錄後實際遇到)
+// 版本流水號: r17 (2026-09-14) 序列指令 armwait <秒>|off(測試用縮短安全開關等待上限,軟體重開保留)
+// 舊: r16 (2026-09-14) 感測器改 GPIO5/6 後擋 GPIO5 測試指令 pwmcap/escemu;開機印 I2C 腳位;
+//   I2C 匯流排解鎖(開機與 mpu 指令,預防):重開時感測器傳到一半會拉住 SDA,之後讀不到
 // 舊: r15 (2026-09-14) 校正旗標時效推進;序列指令 calexp(測試用縮短時效)
 // 舊: r14 (2026-09-14) 序列指令 armsw(測試用安全開關覆寫)
 // 舊: r13 (2026-09-14) 序列指令 fwurl(測試用更新來源,不存檔);sim pulse 延遲參數
@@ -316,6 +317,15 @@ static void handleSerial() {
     // 測試用:覆寫安全開關(開發板沒接 GPIO21 的微動開關). off = 讀真的腳位
     testArmOverrideSet(line == "armsw off" ? -1 : (line == "armsw 1" ? 1 : 0));
     Serial.println(line == "armsw off" ? F("OK armsw real pin") : (line == "armsw 1" ? F("OK armsw pressed") : F("OK armsw released")));
+  } else if (line == "armwait off" || line.startsWith("armwait ")) {
+    // 測試用:安全開關等待上限改成 N 秒(設定最少 1 分鐘,測試不想等). off = 用設定值. 軟體重開保留
+    const long sec = line == "armwait off" ? 0 : line.substring(8).toInt();
+    if (line != "armwait off" && (sec < 5 || sec > 600 || String(sec) != line.substring(8))) {
+      Serial.println(F("ERR usage: armwait <5~600>|off"));
+      return;
+    }
+    testArmWaitOverrideSet((uint16_t)sec);
+    Serial.printf("OK armwait %lds\n", sec);
   } else if (line == "powerontest") {
     // 測試用:下一次軟體重開也允許「上電後直接倒數」(平常只有真的拔電再接電才會自動倒數). 電變校正不受影響.
     Serial.println(escPowerOnTestArm() ? F("OK next reboot allows auto countdown") : F("ERR savefail"));
@@ -367,7 +377,7 @@ static void handleSerial() {
       controlSetImuPresent(ok);
     }
   } else if (line.length()) {
-    Serial.println(F("commands: t | net | fs | gesture | disturb | twist | tilt | cancel | estop | sim ... | pwmcap on|off|reset | pwm | ledcap [ms] | led | dshot | rpm | rpmtest [us] | timing | wifi <ssid> <pw> | txp <dBm> | fw | fwwin <s> | calexp <s> | armsw 0|1|off | powerontest | rescuetest | reboot | orient +x +z | save | mpu | scan | scanall"));
+    Serial.println(F("commands: t | net | fs | gesture | disturb | twist | tilt | cancel | estop | sim ... | pwmcap on|off|reset | pwm | ledcap [ms] | led | dshot | rpm | rpmtest [us] | timing | wifi <ssid> <pw> | txp <dBm> | fw | fwwin <s> | calexp <s> | armsw 0|1|off | armwait <s>|off | powerontest | rescuetest | reboot | orient +x +z | save | mpu | scan | scanall"));
   }
 }
 
@@ -418,6 +428,7 @@ void setup() {
 
   Serial.printf("FW version %s I2C SDA=%u SCL=%u\n", FW_VERSION, PIN_I2C_SDA, PIN_I2C_SCL);
   if (testArmOverride() >= 0) Serial.printf("TEST armsw override %d (kept across soft reboot)\n", testArmOverride());
+  if (testArmWaitOverride()) Serial.printf("TEST armwait override %us (kept across soft reboot)\n", (unsigned)testArmWaitOverride());
   fwUpdateBegin();   // 新韌體待確認或上次更新被退回;要在控制工作讀 fwUpdateBlockReason 之前設好,所以放 WiFi 前
   wifiBegin();
   Serial.println(F("READY (type 'help')"));

@@ -1,4 +1,6 @@
-// 版本流水號: r19 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG):開始不再拒絕(原因 7/8 不再產生),
+// 版本流水號: r20 (2026-09-14) 安全開關等待上限(GG:3 分鐘可調):起飛程序開始後超過上限沒按開關 → 取消回待機(事件 28/3);
+//   上電自動倒數等開關逾時 → 這次通電不再自動倒數(事件 28/4). 桌上碰到飛機誤觸發時不會一直鎖著設定
+// 舊: r19 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG):開始不再拒絕(原因 7/8 不再產生),
 //   起飛程序中按下一次就記住,放穩(或上電自動倒數放平 1 秒)後開始倒數;上電自動倒數等待中燈慢閃;事件 28
 // 舊: r18 (2026-09-14) 撞擊斷電後推飛機不算手勢(原因 9);飛行中油門下限保底 10%
 // 舊: r17 (2026-09-14) 安全開關 GPIO21 沒按下不開始起飛程序(手勢拒絕原因 7;自動倒數等按下,原因 8);撞擊斷電改連續 2 拍
@@ -60,6 +62,9 @@ static uint8_t crashTicks = 0;
 // 開始當下已經按著也算 —— 飛場上開關壞掉時把兩腳跳線短路(等於一直按著),照樣能飛.
 static bool armLatched = false;
 static bool armWaitLogged = false;   // 這趟起飛程序已記過「等安全開關」事件
+// 等待上限(GG 2026-09-14 r20):開發板放桌上被碰一下(手勢門檻調低時很容易)就進入起飛程序,沒按開關會一直等,設定也一直鎖著.
+// 從起飛程序開始(上電自動倒數是解鎖完開始等)累計沒按開關的時間,超過上限就取消. 按過就不再計.
+static float armWaitS = 0;
 
 static volatile bool reqCancel = false, reqEstop = false, reqGesture = false, reqDisturb = false, reqTwist = false,
                      reqTilt = false;
@@ -163,6 +168,17 @@ static void latchArm(const FlightInputs &in) {
   }
 }
 
+static float armWaitLimitS(const FlightInputs &in) {
+  return in.armWaitTestS ? (float)in.armWaitTestS : fs.armWaitMin * 60.0f;
+}
+
+// 還沒按安全開關:累計等待時間,超過上限回 true(呼叫端負責取消)
+static bool armWaitExpired(const FlightInputs &in, float dt) {
+  if (armLatched) return false;
+  armWaitS += dt;
+  return armWaitS >= armWaitLimitS(in);
+}
+
 static void rejectTilt(RejectReason r, const FlightInputs &in) {
   rejectReason = r;
   rejectMs = nowMsCache ? nowMsCache : 1;
@@ -202,6 +218,7 @@ static void tryStart(bool autoStart, const FlightInputs &in) {
   lastDisturbAction = DISTURB_ACT_NONE;
   resumeCountdown = false;
   armWaitLogged = false;
+  armWaitS = 0;
   captureSettleRef();
   if (autoStart) {
     // 上電直接倒數:不等放穩(資深飛友習慣),外力照設定處理. 安全開關已在待機等待時按過.
@@ -349,6 +366,7 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
           // 感測器異常時不看水平,交給 tryStart 拒絕.
           armLatched = in.armSwitch;
           armWaitLogged = false;
+          armWaitS = 0;
           const bool levelOk = !in.imuOk || withinStartLevel(in);
           if (armLatched && levelOk) {
             tryStart(true, in);
@@ -387,6 +405,14 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
         } else {
           // 安全開關按過就記住;飛機放平維持 1 秒(開關按下前就放平也算)才倒數
           latchArm(in);
+          if (armWaitExpired(in, dt)) {
+            // 等開關超過上限:不再等,這次通電不再自動倒數(和取消一樣,要飛請拔電再接電)
+            eventLog(EV_ARM_SWITCH, 4, armWaitLimitS(in));
+            autoWaitLevel = false;
+            autoStartUsed = true;
+            endReason = END_ARM_TIMEOUT;
+            break;
+          }
           const bool levelOk = !in.imuOk || withinStartLevel(in);
           levelHoldS = levelOk ? levelHoldS + dt : 0;
           if (armLatched && levelHoldS >= AUTO_LEVEL_HOLD_S) {
@@ -433,6 +459,13 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
         break;
       }
       latchArm(in);
+      if (armWaitExpired(in, dt)) {
+        // 起飛程序開始後超過等待上限還沒按安全開關:取消回待機(設定解鎖). 要飛再推一下或按網頁開始.
+        eventLog(EV_ARM_SWITCH, 3, armWaitLimitS(in));
+        endReason = END_ARM_TIMEOUT;
+        enter(FS_STANDBY);
+        break;
+      }
       if (settleS >= SETTLE_REQUIRED_S) {
         if (!armLatched) {
           // 已放穩,等安全開關按下才開始倒數(r19). 按開關碰動飛機的話,重新放穩 1 秒後開始.
@@ -635,6 +668,8 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
   status.autoWaitLevel = autoWaitLevel;
   status.armSwitch = in.armSwitch;
   status.armLatched = armLatched && (state == FS_WAIT_STILL || state == FS_COUNTDOWN || autoWaitLevel);
+  status.armWaitLeftS = !armLatched && (state == FS_WAIT_STILL || (state == FS_STANDBY && autoWaitLevel))
+                            ? max(0.0f, armWaitLimitS(in) - armWaitS) : -1.0f;
   status.gestureBlockS =
       gestureBlockUntilMs && (int32_t)(now - gestureBlockUntilMs) < 0 ? (gestureBlockUntilMs - now) / 1000.0f : 0;
   portEXIT_CRITICAL(&statusLock);

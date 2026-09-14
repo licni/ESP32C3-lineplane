@@ -1,4 +1,5 @@
-// 版本流水號: r2 (2026-09-14) 安全開關覆寫(armsw),sim pulse 延遲參數
+// 版本流水號: r3 (2026-09-14) 安全開關等待上限覆寫(armwait <秒>,測試不用等好幾分鐘)
+// 舊: r2 (2026-09-14) 安全開關覆寫(armsw),sim pulse 延遲參數
 // 舊: r1 (2026-09-13) 初版:感測器模擬注入,GPIO5 脈寬量測,狀態燈腳位取樣(全功能測試用)
 #pragma once
 #include <Arduino.h>
@@ -34,6 +35,10 @@ bool testSimActive();
 void testArmOverrideBoot();
 void testArmOverrideSet(int8_t v);
 int8_t testArmOverride();
+// 安全開關等待上限覆寫(序列指令 armwait <5~600 秒> | off):0 = 用設定的分鐘數. 一樣存 RTC(上電自動倒數的測試要軟體重開),
+// testArmOverrideBoot() 一起讀回.
+void testArmWaitOverrideSet(uint16_t seconds);
+uint16_t testArmWaitOverride();
 
 // GPIO5 脈寬量測(GPIO5 跳線接 GPIO4,只在 PWM 協定用;與 escemu 不可同時)
 struct PwmCapStats {

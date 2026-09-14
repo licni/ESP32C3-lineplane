@@ -1,4 +1,6 @@
-// 版本流水號: r4 (2026-09-14) manifest 的 file 可以是「一層資料夾/檔名」(公開專案韌體檔集中到 firmware/,GG)
+// 版本流水號: r5 (2026-09-14) 修正:網站版本和目前「不同」就當成新版(板子 .12,網站 .11 也說有新版本,GG 發現).
+//   改成逐段比數字,只有網站版本比較新才可以下載安裝;狀態加 remoteNewer
+// 舊: r4 (2026-09-14) manifest 的 file 可以是「一層資料夾/檔名」(公開專案韌體檔集中到 firmware/,GG)
 // 舊: r3 (2026-09-14) 測試用更新來源(序列指令 fwurl,只存 RAM):驗證檢查碼不符,大小不符,檔案不存在,下載中斷
 // 舊: r2 (2026-09-14) 修正:確認計時起點 nowMs|1 在偶數毫秒時相減溢位,新韌體一開機就被判逾時退回(約一半機率)
 // 舊: r1 (2026-09-14) 初版:更新鎖,新韌體確認與自動退回,板子自己下載更新(公開 GitHub 專案)
@@ -241,6 +243,21 @@ static bool jsonNum(const String &j, const char *key, uint32_t &out) {
   return true;
 }
 
+// 版本「年.月.日.序號」逐段比數字(字串比較會把 .9 排在 .10 後面). 每段取開頭的數字,缺的段當 0.
+int fwVersionCompare(const char *a, const char *b) {
+  while (*a || *b) {
+    uint32_t x = 0, y = 0;
+    while (isdigit((unsigned char)*a)) x = x * 10 + (*a++ - '0');
+    while (isdigit((unsigned char)*b)) y = y * 10 + (*b++ - '0');
+    if (x != y) return x > y ? 1 : -1;
+    while (*a && *a != '.') ++a;   // 段內數字後面的其他字元不比
+    while (*b && *b != '.') ++b;
+    if (*a == '.') ++a;
+    if (*b == '.') ++b;
+  }
+  return 0;
+}
+
 static String baseUrl() { return testBaseUrl[0] ? String(testBaseUrl) : String(FW_UPDATE_BASE_URL); }
 
 bool fwUpdateTestSetBaseUrl(const char *url) {
@@ -298,9 +315,10 @@ static void doCheck() {
   strlcpy(remoteFile, file, sizeof(remoteFile));
   for (size_t i = 0; i < 64; ++i) remoteSha[i] = tolower((unsigned char)sha[i]);
   remoteSha[64] = 0;
+  const int newer = fwVersionCompare(ver, FW_VERSION);
   LOCKED(strlcpy(st.remoteVersion, ver, sizeof(st.remoteVersion)); st.remoteSize = size; strlcpy(st.notes, notes, sizeof(st.notes));
-         st.err[0] = 0; st.check = FWC_CHECKED);
-  Serial.printf("FW manifest version=%s size=%lu\n", ver, (unsigned long)size);
+         st.remoteNewer = (int8_t)newer; st.err[0] = 0; st.check = FWC_CHECKED);
+  Serial.printf("FW manifest version=%s size=%lu newer=%d\n", ver, (unsigned long)size, newer);
 }
 
 static void doInstall() {
@@ -420,8 +438,10 @@ const char *fwUpdateInstallStart(const char *version) {
   if (settingsAnyDirty()) return "fwdirty";   // 重開機會丟掉沒儲存的設定
   if (wifiState() != WIFI_STATE_STA) return "nosta";
   bool ok;
-  LOCKED(ok = st.check == FWC_CHECKED && version && strcmp(version, st.remoteVersion) == 0);
+  bool newer;
+  LOCKED(ok = st.check == FWC_CHECKED && version && strcmp(version, st.remoteVersion) == 0; newer = st.remoteNewer > 0);
   if (!ok) return "fwstale";
+  if (!newer) return "fwnotnewer";   // 網站上的版本和目前一樣或比較舊:不裝(要換舊版請手動上傳韌體檔)
   LOCKED(st.check = FWC_DOWNLOADING; st.err[0] = 0; st.progress = 0);
   const char *err = startTask(true);
   if (err) setError(err);

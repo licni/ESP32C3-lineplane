@@ -1,4 +1,5 @@
-# 版本流水號: r1 (2026-09-14) 初版:使用說明書的目錄產生與內容核對
+# 版本流水號: r2 (2026-09-14) 加安全開關等待上限;出廠值寫成常數(例如 ARM_WAIT_DEFAULT_MIN)時從 settings.h 讀常數值
+# 舊: r1 (2026-09-14) 初版:使用說明書的目錄產生與內容核對
 # ============================================================================
 # docs/使用說明書.md 的維護工具. 改了參數表(src/settings.cpp)或說明書之後跑一次:
 #   1. 依 GitHub 錨點規則重新產生目錄(<!-- TOC --> 到 <!-- /TOC --> 之間),重跑不會改動沒變的檔案
@@ -81,7 +82,8 @@ for src in re.findall(r'<img src="([^"]+)"', text):
 
 # ---- 參數對照 settings.cpp ----
 cpp = open(os.path.join(ROOT, "src", "settings.cpp"), encoding="utf-8").read()
-CONST = {"THROTTLE_FLOOR_PCT": "10", "CURVE_MIN_POINTS": "1", "CURVE_MAX_POINTS": "4"}
+hdr = open(os.path.join(ROOT, "src", "settings.h"), encoding="utf-8").read()
+CONST = {m.group(1): m.group(2) for m in re.finditer(r"\bconst\s+\w+\s+([A-Z_]+)\s*=\s*(-?[\d.]+)f?;", hdr)}
 
 
 def cnum(s):
@@ -92,12 +94,13 @@ params = {}
 for m in re.finditer(r'(SP|PP)\("(\w+)", PARAM_\w+, ([\w.\[\]]+), ([-\w.f]+), ([-\w.f]+), ([\w.f]+), ([\w.f]+)\)', cpp):
     params[m.group(2)] = dict(field=m.group(3), mn=cnum(m.group(4)), mx=cnum(m.group(5)), fine=cnum(m.group(6)), coarse=cnum(m.group(7)))
 defaults = {}
-for m in re.finditer(r"\b[sp]\.([\w.\[\]]+) = (-?[\d.]+)f?;", cpp):
-    defaults.setdefault(m.group(1), float(m.group(2)))
+for m in re.finditer(r"\b[sp]\.([\w.\[\]]+) = (-?[\d.]+|[A-Z_]+)f?;", cpp):
+    if m.group(2)[0].isdigit() or m.group(2)[0] == "-" or m.group(2) in CONST:
+        defaults.setdefault(m.group(1), cnum(m.group(2)))
 
 # 說明書(網頁)上的參數名稱 → settings.cpp 參數鍵. 選單類參數(開關,方式)不在這裡.
 NAME = {"起飛前水平限制": "startLevel", "啟動手勢力道": "gestureG", "扭轉機尾取消起飛": "twistCancel", "取消後暫停手勢": "twistBlock",
-        "倒數秒數": "countdownSec", "外力門檻": "disturbG", "延長秒數": "extendSec", "Z 軸抖動門檻": "earlyLandVib",
+        "安全開關等待上限": "armWait", "倒數秒數": "countdownSec", "外力門檻": "disturbG", "延長秒數": "extendSec", "Z 軸抖動門檻": "earlyLandVib",
         "抖動持續秒數": "earlyLandHold", "正飛水平容許角度": "earlyLandTilt", "起飛後幾秒才啟用": "earlyLandArm",
         "降落觸地衝擊門檻": "touchdownG", "觸地靜止判定": "touchdownStill", "降落保險時間": "landingTimeout", "撞擊門檻": "crashG",
         "角度修正": "pitchTrim", "線長": "lineLength", "單圈秒數": "lapSec", "起飛後幾秒收輪": "gearRetractSec",

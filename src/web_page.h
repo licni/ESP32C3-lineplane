@@ -1,4 +1,7 @@
-// 版本流水號: r54 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG):狀態列等待安全開關,事件 28,監看頁開關文字,說明文字
+// 版本流水號: r55 (2026-09-14) 安全開關等待上限(GG):設定頁參數(分鐘),狀態列剩餘時間與逾時取消,事件 28/3,28/4;
+//   校正保持秒數說明(出廠 4 秒,電變開機時間);韌體更新只在網站版本比較新時提示(板子 .12 網站 .11 卻說有新版本);
+//   參數單位欄最小寬度 18 → 27px(兩個字的單位「分鐘」「公尺」那列輸入框原本往左偏,和上下列沒對齊)
+// 舊: r54 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG):狀態列等待安全開關,事件 28,監看頁開關文字,說明文字
 // 舊: r53 (2026-09-14) 韌體更新說明改清楚:開著的網頁自動確認(不用按按鈕),寫上由網頁確認的理由(GG)
 // 舊: r52 (2026-09-14) 校正旗標時效 10 秒:按鈕旁醒目注意,步驟與提示文字,倒數秒數(GG)
 // 舊: r51 (2026-09-14) 撞擊斷電後推飛機不啟動的文字(原因 9);校正旗標時效顯示,事件 26;WiFi 試用延後事件 27;下限拖曳最低 10%;發射功率與保持被拒時提示
@@ -164,7 +167,7 @@ button.b:disabled{opacity:.45;cursor:default}
 /* 數值框沒有 type 屬性,吃不到上面 input[type=…] 的配色,要自己給文字色與底色(暗色模式原本是黑字配深底) */
 .prm .val{width:68px;padding:1px 5px;text-align:right;font-size:20px;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums;
  color:var(--ink);background:var(--bg);border:1px solid var(--mute);border-radius:6px;font-family:inherit}
-.prm .unit{min-width:18px;color:var(--mute);font-size:13px}
+.prm .unit{min-width:27px;color:var(--mute);font-size:13px}
 .pts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin-top:8px}
 .pt{border:1px solid var(--line);border-radius:10px;padding:4px 10px 0;background:var(--bg)}
 .pt h4{margin:4px 0 0;font-size:14px}
@@ -519,7 +522,7 @@ const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔�
  updated:'更新完成,重新開機中…',updatefail:'更新失敗,檔案可能不對.',reboot:'重新開機中…',
  fwchecking:'檢查中…',fwinstalling:'開始下載安裝,請勿斷電.',fwconfirmed:'新韌體已確認.',fwconfirmfail:'確認失敗,請重新整理網頁.',
  fwbusy:'更新作業進行中,請稍候.',fwpending:'目前的韌體還沒確認,請重新整理網頁後再試.',fwdirty:'有未儲存的設定,請先儲存或放棄(更新會重新開機).',
- fwstale:'版本資訊已經變了,請重新檢查更新.',nosta:'要連上家用 WiFi(能上網)才能檢查更新,自身熱點模式沒有網路.',nomem:'記憶體不足,請重新開機後再試.',
+ fwstale:'版本資訊已經變了,請重新檢查更新.',fwnotnewer:'網站上的版本沒有比目前的新,不需要更新.',nosta:'要連上家用 WiFi(能上網)才能檢查更新,自身熱點模式沒有網路.',nomem:'記憶體不足,請重新開機後再試.',
  net:'連不上更新伺服器,請確認家用 WiFi 能上網.',http:'更新伺服器回應錯誤,請稍後再試.',nomanifest:'更新頁上還沒有韌體.',manifest:'更新資訊格式不對,請回報開發者.',
  toolarge:'韌體檔太大,裝不下.',url:'更新網址錯誤.',nofile:'找不到韌體檔(可能剛發布,幾分鐘後再試).',size:'下載的檔案大小不對,請稍後再試.',
  flashbegin:'無法開始寫入,請重新開機後再試.',flashwrite:'寫入失敗,目前韌體沒有改變.',flashend:'寫入檢查失敗,目前韌體沒有改變.',
@@ -532,7 +535,7 @@ const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔�
  calibdirty:'有未儲存的變更,請先儲存(校正用存檔裡的脈寬).',calibproto:'DShot 是數位油門,不需要校正行程.',
  calibon:'已設定:10 秒內拔掉電池再接上就開始校正,沒拔會自動取消.',caliboff:'已取消電變校正.'};
 const AXES=['晶片 +X','晶片 −X','晶片 +Y','晶片 −Y','晶片 +Z','晶片 −Z'];
-const UNIT={pct:'%',cpct:'%',sec:'秒',deg:'°',g:'g',us:'µs',m:'公尺',num:'',hz:'Hz'};
+const UNIT={pct:'%',cpct:'%',sec:'秒',min:'分鐘',deg:'°',g:'g',us:'µs',m:'公尺',num:'',hz:'Hz'};
 // 參數標籤:[名稱, 單位種類, 說明]
 const L={
  phase1Pct:['第一段基本油門','pct','馬達啟動後第一段的油門. 角度補償加在這個值上.'],
@@ -550,6 +553,7 @@ const L={
  dnDb:['減速開始角度','deg','機頭朝下超過這個角度才開始減速;在這之內不補償.'],
  pitchTrim:['角度修正','deg','加到量到的角度上. 飛機擺平飛姿勢時讀到 +2°,就設 −2. 出廠 0.'],
  gestureG:['啟動手勢力道','g','機身大致水平,往機頭方向推超過這個力道才算啟動. 推一下看下方試推燈有沒有亮來調整.'],
+ armWait:['安全開關等待上限','min','起飛程序開始後(推飛機,按「開始起飛程序」,或上電後直接倒數的電變解鎖完),這麼久都沒按安全開關就自動取消,回到待機. 飛機在桌上被碰到誤觸發時,不會一直停在起飛程序鎖著設定. 上電後直接倒數模式取消後,要飛請拔電再接電.'],
  countdownSec:['倒數秒數','sec','倒數完馬達啟動,也就是你走到手柄的時間. 安全開關按過,而且飛機已放穩(上電倒數是放平)的那一刻開始算.'],
  disturbG:['外力門檻','g','倒數中晃動超過這個值,視為有人碰到飛機. 碰一下飛機看下方橘燈調整,戶外有風時調大.'],
  startLevel:['起飛前水平限制','deg','機頭或滾轉超過這個角度就不起飛:推手勢會被拒絕;上電倒數會暫停,放平 1 秒才開始;等待放穩或倒數中超過則取消起飛. 後三點飛機停放時機頭本來就朝上,要設得比停放角度大. 原因記在監看頁事件紀錄.'],
@@ -568,7 +572,7 @@ const L={
  crashG:['撞擊門檻','g','飛行中衝擊連續 10 毫秒超過這個值,立即關馬達(單筆感測器錯誤資料不會觸發). 特技直角彎可達 8~10g,不要設太低.'],
  lineLength:['線長','m','姿態計算扣除繞圈向心力用,填大概的值即可.'],
  lapSec:['單圈秒數','sec','飛一圈大約幾秒,和線長一起換算飛行速度.'],
- calibHold:['最高油門保持秒數','sec','通電後輸出最高油門多久才切到最低. 預設 2 秒(好盈). 電變還沒響「已記住最高點」的提示音就被切掉時,調長一點.'],
+ calibHold:['最高油門保持秒數','sec','通電後輸出最高油門多久才切到最低. 出廠 4 秒:控制器開機很快,電變自己開機要約 1 秒,太短會在電變記住最高點之前就切掉;太長有些電變會進入設定模式. 各廠牌建議秒數見下方說明. 電變還沒響「已記住最高點」的提示音就被切掉時調長一點,聽到進入設定模式的提示音時調短.'],
  motorPoles:['馬達極數','num','馬達的磁鐵數(不是線圈槽數),只用來換算轉速顯示. 常見外轉子馬達 14 極.'],
  escPwmHz:['PWM 頻率','hz','每秒送幾個油門脈衝. 出廠 50Hz,所有電變都支援. 電變有標明支援更高頻率才調高,不支援的可能抖動或不解鎖(BLHeli_32 在 50Hz 不動時例外,可試調高). 頻率越高,100% 脈寬能設的上限越低.'],
  gearRetractSec:['起飛後幾秒收輪','sec','從馬達開始轉算起. 要比離地所需的時間長一點,確定輪子離地才收.'],
@@ -586,8 +590,8 @@ const PROF_LAYOUT=[
 ];
 const PROF_NOTE='時間都從馬達開始轉算起. 總飛行時間到了,或飛行中觸地提早降落(設定頁開啟),就開始降落;降落期間不做角度補償. 油門上下限在角度補償頁.';
 const SET_LAYOUT=[
- {t:'啟動與倒數',k:['gestureEnable','startLevel','gestureG','twistCancel','twistBlock','countdownSec','disturbG','disturbMode','extendSec'],
-  n:'推一下飛機(啟動手勢)或按上方「開始起飛程序」→ 等飛機放穩 → 按下安全開關 → 倒數 → 馬達啟動. 安全開關放穩前或放穩後按都可以. 倒數中可按「取消倒數」或扭轉機尾取消.'},
+ {t:'啟動與倒數',k:['gestureEnable','startLevel','gestureG','twistCancel','twistBlock','armWait','countdownSec','disturbG','disturbMode','extendSec'],
+  n:'推一下飛機(啟動手勢)或按上方「開始起飛程序」→ 等飛機放穩 → 按下安全開關 → 倒數 → 馬達啟動. 安全開關放穩前或放穩後按都可以,超過「安全開關等待上限」沒按就自動取消. 倒數中可按「取消倒數」或扭轉機尾取消.'},
  {t:'觸地提早降落',k:['earlyLand','earlyLandVib','earlyLandHold','earlyLandTilt','earlyLandArm'],n:'飛行中想提早結束時,讓飛機正飛水平貼地滑行,機輪在地上彈跳的抖動持續一段時間,就開始降落. 門檻請參考「紀錄」頁的實際數值.',id:'earlyCard'},
  {t:'降落與撞擊',k:['touchdownG','touchdownStill','landingTimeout','crashEnable','crashG'],n:'降落中以下任一成立就關馬達:觸地衝擊超過門檻;完全靜止;地面滑行抖動持續達標(用提早降落的抖動設定,不管開關). 都沒成立就等保險時間到.'},
  ];
@@ -1224,16 +1228,18 @@ function fwRender(){
  $('fwPendText').textContent=f.remain>=0?`網頁連上就會自動確認(不用按按鈕);${Math.ceil(f.remain)} 秒內沒有網頁連上會退回舊版. 確認前不能起飛.`:'等待 WiFi 就緒後開始計時. 確認前不能起飛.';
  $('fwRbBox').hidden=!f.rb;
  $('fwRbText').textContent=`上次更新${f.rbver?'到 '+f.rbver+' ':''}沒有完成確認,已自動退回,目前是 ${f.ver}. 請回報給提供韌體的人.`;
- const c=f.check,same=f.rver&&f.rver===f.ver;
+ // 板子逐段比版本數字(newer:1 網站比較新 / 0 相同 / -1 網站比較舊). 原本只比字串相不相同,板子 .12 網站 .11 也說有新版本.
+ const c=f.check,newer=f.newer>0;
  $('btnFwCheck').disabled=c===1||c===3||c===4||!!f.busy;
- const t=c===1?'檢查中…(約需數秒)':c===2?(same?`已是最新版 ${f.ver}`:`有新版本 ${f.rver}`):c===3?'下載安裝中,請勿斷電…':c===4?'安裝完成,重新開機中…':c===5?(CODES[f.err]||'失敗:'+f.err):'';
+ const t=c===1?'檢查中…(約需數秒)':c===2?(newer?`有新版本 ${f.rver}`:f.newer===0?`已是最新版 ${f.ver}`:`目前的 ${f.ver} 比網站上的 ${f.rver} 新,不需要更新`)
+  :c===3?'下載安裝中,請勿斷電…':c===4?'安裝完成,重新開機中…':c===5?(CODES[f.err]||'失敗:'+f.err):'';
  $('fwCheckText').textContent=t;$('fwCheckText').className='sub'+(c===5?' bad':'');
- const show=!!f.rver&&(c===2||c===3||c===4);
+ const show=!!f.rver&&((c===2&&f.newer>=0)||c===3||c===4);   // 網站版本比較舊時不顯示它的說明
  $('fwRemote').hidden=!show;
  if(show){
   $('fwNotes').textContent=`版本 ${f.rver}(${(f.rsize/1048576).toFixed(2)} MB)`+(f.notes?'\n'+f.notes:'');
-  const b=$('btnFwInstall');b.hidden=c!==2||same;if(!fwArm)b.textContent=`更新到 ${f.rver}`;
-  $('fwInstallText').textContent=c===3?`${f.prog}%,請勿斷電`:(c===2&&!same?'按兩下確認. 會重新開機,沒儲存的設定會不見.':'');
+  const b=$('btnFwInstall');b.hidden=c!==2||!newer;if(!fwArm)b.textContent=`更新到 ${f.rver}`;
+  $('fwInstallText').textContent=c===3?`${f.prog}%,請勿斷電`:(c===2&&newer?'按兩下確認. 會重新開機,沒儲存的設定會不見.':'');
  }
  $('fwDlProg').hidden=c!==3;$('fwDlProg').value=f.prog;
 }
@@ -1396,8 +1402,11 @@ function evText(e){
     {c:'bad',m:'韌體更新失敗,繼續使用目前的版本',h:'下載中斷或檔案不對時會這樣,目前韌體沒有改變,可以再試一次.'},
     {c:'bad',m:'新韌體沒有在時限內確認,退回舊版',h:''}][arg]||{c:'dim',m:`韌體更新(${arg})`,h:''}}
   case 23:return {c:'dim',m:arg?`收輪(飛行 ${mmss(Math.round(a))})`:(a>0?`放輪(飛行 ${mmss(Math.round(a))})`:'放輪'),h:''};
-  case 28:return arg===2?{c:'good',m:'安全開關按下',h:''}
-   :{c:'',m:arg===1?'上電自動倒數:等安全開關按下':'飛機已放穩,等安全開關按下才開始倒數',h:arg===1?'按下安全開關(飛機放平)就開始倒數.':'按下安全開關就開始倒數.'};
+  case 28:{const sec=Math.round(a),dur=sec>=60&&sec%60===0?`${sec/60} 分鐘`:`${sec} 秒`;
+   if(arg===3)return {c:'land',m:`等安全開關超過 ${dur},自動取消起飛程序`,h:'要飛再推一下飛機或按「開始起飛程序」. 等待時間在設定頁「安全開關等待上限」調整.'};
+   if(arg===4)return {c:'land',m:`上電自動倒數:等安全開關超過 ${dur},這次通電不再自動倒數`,h:'要飛請拔掉電池再接上. 等待時間在設定頁「安全開關等待上限」調整.'};
+   return arg===2?{c:'good',m:'安全開關按下',h:''}
+   :{c:'',m:arg===1?'上電自動倒數:等安全開關按下':'飛機已放穩,等安全開關按下才開始倒數',h:arg===1?'按下安全開關(飛機放平)就開始倒數.':'按下安全開關就開始倒數.'}}
   case 22:return {c:'bad',m:arg?'測試用感測器模擬開啟(USB 序列指令)':'測試用感測器模擬關閉',h:arg?'只有開發測試會出現. 模擬中角度與 G 力都是假的,重新開機即清除.':''};
   case 20:return {c:'land',m:(a>0?`扭轉機尾 ${Math.round(a)}°(門檻 ${Math.round(b)}°),取消起飛`:'序列埠模擬扭轉,取消起飛')+`,${arg} 秒內不接受手勢`,h:'如果不是故意扭轉:放飛機時轉動太多也會取消,可以在設定頁把角度調大.'};
  }
@@ -1423,7 +1432,7 @@ async function evSync(s){
 }
 
 // --- 飛行狀態列 ---
-const END_TEXT=['','降落觸地(衝擊)','降落觸地(靜止)','降落觸地(地面滑行)','降落保險時間到','撞擊斷電','緊急停止','已取消','扭轉機尾取消','角度超過水平限制取消'];
+const END_TEXT=['','降落觸地(衝擊)','降落觸地(靜止)','降落觸地(地面滑行)','降落保險時間到','撞擊斷電','緊急停止','已取消','扭轉機尾取消','角度超過水平限制取消','等安全開關超過上限取消'];
 let cdMax=0;
 function renderFlight(f){
  const bar=$('fbar'),tm=s=>mmss(Math.max(0,Math.floor(s)));
@@ -1434,14 +1443,16 @@ function renderFlight(f){
   case 0:badge='開機';title='電變解鎖中';break;
   case 1:badge='待機';title='待機';detail=f.ge?'推一下飛機,或按「開始起飛程序」;放穩後按安全開關開始倒數':(f.au?'要飛請拔掉電池再接上(上電倒數每次通電一次,重開機不算)':'');
    if(f.er===9&&f.ss<15){title='待機(角度超過水平限制,已取消起飛)';detail=(f.ge?'放平後再推一下飛機':'要再飛請重新上電')}
+   if(f.er===10)title='待機(等安全開關超過上限,已自動取消起飛)';   // 取消時通常沒人在旁邊,留著到下一次開始
    if(f.gb>0){title='待機(已扭轉機尾取消起飛)';detail=`${f.gb.toFixed(1)} 秒後才接受啟動手勢`}
    // 上電自動倒數在待機等:安全開關還沒按過 → 等安全開關;按過但沒放平 → 等待放平
    if(f.aw){cls='wait';badge=f.al?'等待放平':'等安全開關';title=f.al?'角度超過水平限制,暫不倒數':'等待安全開關';
-    detail=f.al?`把飛機放平(機頭與滾轉 ±${VALS?VALS.shared.startLevel:'?'}° 內)並維持 1 秒就開始倒數`:'按下安全開關就開始倒數(飛機要放平)'}
+    detail=f.al?`把飛機放平(機頭與滾轉 ±${VALS?VALS.shared.startLevel:'?'}° 內)並維持 1 秒就開始倒數`:'按下安全開關就開始倒數(飛機要放平)'+(f.awl>=0?`,${mmss(f.awl)} 內沒按自動取消`:'')}
    break;
   case 2:cls='wait';badge='起飛程序';
    if(!f.al&&f.set>=1){title='等待安全開關';detail='飛機已放穩,按下安全開關就開始倒數'}
    else{title='等待放穩';detail=`放穩 ${Math.min(1,f.set).toFixed(1)} / 1.0 秒`+(f.al?'':',放穩後按安全開關開始倒數')}
+   if(!f.al&&f.awl>=0)detail+=`,${mmss(f.awl)} 內沒按自動取消`;
    if(f.da&&f.dga>=0&&f.dga<600)detail+=`,外力最大 ${f.dg.toFixed(2)} g,放穩後${f.da===1?'延長秒數(倒數最多 '+((VALS?VALS.shared.countdownSec:0)+10)+' 秒)':'重新倒數'}`;break;
   case 3:cls='count';badge='起飛倒數';title=`倒數 ${f.cd.toFixed(1)} 秒`;detail=`風格${pname(f.fp)}`;break;
  }

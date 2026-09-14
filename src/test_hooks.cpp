@@ -1,4 +1,5 @@
-// 版本流水號: r4 (2026-09-14) sim pulse 加延遲參數(韌體寫入中 loop 被佔住收不到序列指令,要事先排好推力)
+// 版本流水號: r5 (2026-09-14) 安全開關等待上限覆寫 armwait(存 RTC,軟體重開保留,拔電清除)
+// 舊: r4 (2026-09-14) sim pulse 加延遲參數(韌體寫入中 loop 被佔住收不到序列指令,要事先排好推力)
 // 舊: r3 (2026-09-13) 重新定姿那一拍不加抖動與脈衝(抖動負半週讓定姿變倒飛 180°)
 // 舊: r2 (2026-09-13) 關閉模擬時用真的讀值重新定姿
 // 舊: r1 (2026-09-13) 初版:感測器模擬注入,GPIO5 脈寬量測,狀態燈腳位取樣(全功能測試用)
@@ -150,12 +151,25 @@ bool testSimActive() { return simOn; }
 static RTC_NOINIT_ATTR uint32_t armOverrideRtc;
 static const uint32_t ARM_OVERRIDE_MAGIC = 0xA5C30000;
 static volatile int8_t armOverride = -1;
+static RTC_NOINIT_ATTR uint32_t armWaitRtc;
+static const uint32_t ARM_WAIT_MAGIC = 0x5A3C0000;
+static volatile uint16_t armWaitOverride = 0;
 void testArmOverrideBoot() {
-  if (esp_reset_reason() != ESP_RST_POWERON && (armOverrideRtc & 0xFFFF0000) == ARM_OVERRIDE_MAGIC)
+  const bool powerOn = esp_reset_reason() == ESP_RST_POWERON;
+  if (!powerOn && (armOverrideRtc & 0xFFFF0000) == ARM_OVERRIDE_MAGIC)
     armOverride = (int8_t)(armOverrideRtc & 0xFF);
   else
     armOverrideRtc = 0;
+  if (!powerOn && (armWaitRtc & 0xFFFF0000) == ARM_WAIT_MAGIC)
+    armWaitOverride = (uint16_t)(armWaitRtc & 0xFFFF);
+  else
+    armWaitRtc = 0;
 }
+void testArmWaitOverrideSet(uint16_t seconds) {
+  armWaitOverride = seconds;
+  armWaitRtc = seconds ? (ARM_WAIT_MAGIC | seconds) : 0;
+}
+uint16_t testArmWaitOverride() { return armWaitOverride; }
 void testArmOverrideSet(int8_t v) {
   armOverride = v;
   armOverrideRtc = v < 0 ? 0 : (ARM_OVERRIDE_MAGIC | (uint8_t)v);

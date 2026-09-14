@@ -1,4 +1,5 @@
-# 版本流水號: r5 (2026-09-14) 修正 CHANGELOG 讀取:版本號只抓到第一個字,當天舊條目沒刪掉且標題壞成「## 2()」
+# 版本流水號: r6 (2026-09-14) 發布的版本號要比公開專案上的新(板子 fw_update r5 起只裝比目前新的版本,沒比較新的發布板子收不到)
+# 舊: r5 (2026-09-14) 修正 CHANGELOG 讀取:版本號只抓到第一個字,當天舊條目沒刪掉且標題壞成「## 2()」
 # 舊: r4 (2026-09-14) 每天只留最新一版(GG):同一天的舊 Release/tag/韌體檔刪掉,當天修改合併進最新版的 Release 與 CHANGELOG;--cleanup-only 整理現有版本
 # 舊: r3 (2026-09-14) 韌體檔集中放 firmware/ 資料夾,首頁舊檔搬進去;manifest file 帶資料夾
 # 舊: r2 (2026-09-14) 發布說明必填:CHANGELOG.md,commit 訊息,GitHub Release;--release-only
@@ -67,6 +68,12 @@ def day_of(ver):
     if not m:
         return None
     return f"{m.group(1)}.{m.group(2)}.{m.group(3)}", f"{m.group(1)}-{m.group(2)}-{m.group(3)}", int(m.group(4))
+
+
+def ver_key(ver):
+    """版本號逐段轉數字,和板子的 fwVersionCompare 同一規則(.10 比 .9 新). 格式不符回 None."""
+    m = VER_RE.match(ver)
+    return tuple(int(x) for x in m.groups()) if m else None
 
 
 def bullets(text):
@@ -204,8 +211,9 @@ def main():
 
     ver = fw_version()
     print(f"== 發布韌體 {ver}")
-    if old.get("version") == ver:
-        sys.exit(f"公開專案上已經是 {ver}:請先改 src/version.h 的 FW_VERSION")
+    old_ver = old.get("version", "")
+    if old_ver and ver_key(old_ver) and ver_key(ver) <= ver_key(old_ver):
+        sys.exit(f"公開專案上是 {old_ver},這次 {ver} 沒有比較新(板子只會更新到比目前新的版本):請改 src/version.h 的 FW_VERSION")
     if not a.no_build:
         run([PIO, "run", "-e", ENV], cwd=ROOT)
     src = os.path.join(ROOT, ".pio", "build", ENV, "firmware.bin")
