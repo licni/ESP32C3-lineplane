@@ -1,4 +1,5 @@
-// 版本流水號: r2 (2026-09-14) 世代 2:蜂鳴器電位 buzzerLow
+// 版本流水號: r3 (2026-09-14) 名稱長度 0 改對照本檔凍結的名稱表(出廠名稱第 6 組改成「測試」後,舊碼的 TEST 不會跟著變)
+// 舊: r2 (2026-09-14) 世代 2:蜂鳴器電位 buzzerLow
 // 舊: r1 (2026-09-14) 初版:設定備份碼(LP + base62,每個參數固定位元數,新功能往尾端加,CRC-24)
 #include "settings_backup.h"
 #include "settings.h"
@@ -6,7 +7,7 @@
 // ============================================================================
 // 位元組資料:
 //   [格式大版本 2 bit + 欄位世代 6 bit][飛行使用風格 3 bit]
-//   [六組名稱:5 bit 長度(0 = 出廠名稱)+ UTF-8][世代 1 欄位:共用 → 風格 0~5][世代 2 欄位 …]…[補 0 到整位元組][CRC-24]
+//   [六組名稱:5 bit 長度(0 = CODEC_DEFAULT_NAMES 的名稱)+ UTF-8][世代 1 欄位:共用 → 風格 0~5][世代 2 欄位 …]…[補 0 到整位元組][CRC-24]
 // 每個欄位存 (值 − 編碼下限) ÷ 步進 的整數,固定位元數(目前範圍所需 + 1 位元預留).
 //
 // ★ 編碼表定案後永遠不改(改了舊短碼就解錯):
@@ -22,6 +23,8 @@ const uint8_t FORMAT_MAJOR = 1;
 const uint8_t NAME_LEN_BITS = 5;
 const size_t MAX_BYTES = 640;
 const size_t MAX_CODE_CHARS = 2000;
+// 名稱長度 0 代表這個名稱(格式定案時的出廠名稱,永遠不改;韌體出廠名稱改了也不影響舊碼)
+const char *const CODEC_DEFAULT_NAMES[PROFILE_COUNT] = {"A", "B", "C", "D", "E", "TEST"};
 
 struct CodecField {
   const char *key;
@@ -212,16 +215,15 @@ void readField(BitReader &r, SettingsImage &img, int8_t scope, const CodecField 
 }  // namespace
 
 const char *backupEncode(String &out) {
-  static SettingsImage img, def;   // 各約 600 位元組,不放在 loop 的堆疊上
+  static SettingsImage img;   // 約 600 位元組,不放在 loop 的堆疊上
   settingsGetImage(img);
-  settingsDefaultImage(def);
   uint8_t buf[MAX_BYTES];
   BitWriter w{buf, sizeof(buf) - 3};
   w.put((FORMAT_MAJOR << 6) | MY_GENERATION, 8);
   w.put(img.active, 3);
   for (uint8_t i = 0; i < PROFILE_COUNT; ++i) {
     const char *name = img.profiles[i].name;
-    const bool isDefault = strncmp(name, def.profiles[i].name, PROFILE_NAME_BUFFER) == 0;
+    const bool isDefault = strncmp(name, CODEC_DEFAULT_NAMES[i], PROFILE_NAME_BUFFER) == 0;
     const size_t len = isDefault ? 0 : strnlen(name, PROFILE_NAME_BUFFER - 1);
     w.put(len, NAME_LEN_BITS);
     for (size_t k = 0; k < len; ++k) w.put((uint8_t)name[k], 8);
@@ -280,7 +282,10 @@ const char *backupDecode(const char *text, bool apply, BackupInfo &info) {
   }
   for (uint8_t i = 0; i < PROFILE_COUNT; ++i) {
     const uint8_t nl = (uint8_t)r.get(NAME_LEN_BITS);
-    if (nl == 0) continue;
+    if (nl == 0) {
+      settingsImageSetName(img, i, CODEC_DEFAULT_NAMES[i]);
+      continue;
+    }
     if (nl > PROFILE_NAME_BUFFER - 1) return "bkcrc";
     char name[PROFILE_NAME_BUFFER];
     for (uint8_t k = 0; k < nl; ++k) name[k] = (char)r.get(8);

@@ -1,4 +1,5 @@
-// 版本流水號: r17 (2026-09-14) 版面 v9:共用設定尾端加蜂鳴器電位 buzzerActiveLow(+3 預留);舊存檔尾端補預設
+// 版本流水號: r18 (2026-09-14) 出廠值改成 GG 的基準設定:安全開關等待上限 3 → 2 分鐘,出廠飛行風格第 6 組 DEFAULT_ACTIVE_PROFILE
+// 舊: r17 (2026-09-14) 版面 v9:共用設定尾端加蜂鳴器電位 buzzerActiveLow(+3 預留);舊存檔尾端補預設
 // 舊: r16 (2026-09-14) 設定備份碼用的整份設定介面 SettingsImage;備份碼套用的飛行風格要按儲存才寫入(settingsActiveDirty)
 // 舊: r15 (2026-09-14) 預留位元組 gearReserved 改為安全開關等待上限 armWaitMin(大小不變,讀到 0 當 3 分鐘)
 // 舊: r14 (2026-09-14) 飛行中油門下限最低 THROTTLE_FLOOR_PCT = 10%(版面不變,舊存檔載入時補到 10)
@@ -41,7 +42,8 @@ const uint8_t CURVE_MAX_POINTS = 4;
 const uint8_t CURVE_MIN_POINTS = 1;
 const uint8_t PROFILE_NAME_BUFFER = 24;   // UTF-8,中文一字 3 位元組,約 7 個中文字
 const uint16_t SETTINGS_LAYOUT_VERSION = 9;
-const uint8_t ARM_WAIT_DEFAULT_MIN = 3;   // 安全開關等待上限出廠值(GG 2026-09-14:3 分鐘,可調)
+const uint8_t ARM_WAIT_DEFAULT_MIN = 2;   // 安全開關等待上限出廠值(GG 2026-09-14 基準設定:2 分鐘,可調)
+const uint8_t DEFAULT_ACTIVE_PROFILE = 5; // 出廠飛行使用的風格(GG 基準設定:「測試」組)
 
 enum DisturbMode : uint8_t { DISTURB_EXTEND = 0, DISTURB_RESET = 1, DISTURB_OFF = 2 };
 // 換段方式:直接跳 / 直接跳但以換段加力秒數過渡 / 把兩段的油門差平均分攤在第一段時間內
@@ -81,7 +83,7 @@ struct SharedSettings {
   // --- v7 起加在尾端(v4~v6 的存檔讀進來時這幾格補預設) ---
   uint8_t twistCancelDeg;    // 手勢起飛後,抓著機尾繞機背軸扭轉超過這個角度就取消起飛(0 = 關閉)
   uint8_t twistBlockSec;     // 取消後幾秒內不接受啟動手勢(抬起尾巴放下時的撞擊不會又觸發)
-  uint8_t escRpmTelemetry;   // 雙向 DShot 轉速回傳(只在 DShot300 有效,開機套用;預設關)
+  uint8_t escRpmTelemetry;   // 雙向 DShot 轉速回傳(只在 DShot300 有效,開機套用;出廠開)
   uint8_t motorPoles;        // 馬達極數(轉速換算用,預設 14;0 視為 14)
   // --- v8 起加在尾端:機輪收腳(GG 2026-09-13;v4~v7 的存檔讀進來時補預設) ---
   uint8_t gearEnable;        // 收輪功能(觸地提早降落開啟時不作用)

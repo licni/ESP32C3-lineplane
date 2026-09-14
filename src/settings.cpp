@@ -1,4 +1,6 @@
-// 版本流水號: r20 (2026-09-14) 版面 v9:共用設定尾端加蜂鳴器電位 buzzerLow(0 高電位響 / 1 低電位響);讀 v8 共用設定尾端補預設,風格讀 v4/v6~v9
+// 版本流水號: r22 (2026-09-14) 出廠值改成 GG 的基準設定(共用 14 項,A 組與第 6 組「測試」的飛法與曲線,第 6 組名稱 TEST → 測試,出廠飛行風格第 6 組)
+// 舊: r21 (2026-09-14) 曲線點補償值範圍 ±50 → ±100(GG:基本油門 70% 時只能拉到 20%,要能降到總油門 10%;int8 放得下,版面不變)
+// 舊: r20 (2026-09-14) 版面 v9:共用設定尾端加蜂鳴器電位 buzzerLow(0 高電位響 / 1 低電位響);讀 v8 共用設定尾端補預設,風格讀 v4/v6~v9
 // 舊: r19 (2026-09-14) 設定備份碼:整份設定 SettingsImage 的讀寫驗證套用;備份碼套用的飛行風格 pendingActive 按儲存才寫入,放棄變更還原
 // 舊: r18 (2026-09-14) 加安全開關等待上限 armWait(1~30 分鐘,預設 3,用收腳區塊預留位元組,舊存檔讀到 0 補 3);
 //   電變校正最高油門保持出廠 2 → 4 秒(GG:電變自己開機要約 1 秒,4~5 秒剛好等電變開機又不會進設定模式)
@@ -28,7 +30,7 @@ static const uint32_t BLOB_MAGIC = 0x4C504346;   // "LPCF"
 
 SharedSettings sharedSettings;
 ProfileSettings profiles[PROFILE_COUNT];
-uint8_t activeProfile = 0;
+uint8_t activeProfile = DEFAULT_ACTIVE_PROFILE;
 // 備份碼套用的飛行風格:和其他設定一樣按儲存才寫入,放棄變更就不改(-1 = 沒有). 直接選用風格仍立即存檔.
 static int8_t pendingActive = -1;
 
@@ -63,36 +65,36 @@ static void defaultShared(SharedSettings &s) {
   s.pitchTrimDeg = 0;
   s.escMinUs = 1000;
   s.escMaxUs = 2000;
-  s.escPwmHz = 50;
+  // 出廠值 = GG 的基準設定(2026-09-14,test_logs/基準設定碼.txt 那組備份碼). 括號是改之前的出廠值.
+  s.escPwmHz = 100;        // (50)
   s.gestureEnable = 1;
-  s.startLevelDeg = 35;   // 原本手勢寫死的「機身大致水平」35 度
-  s.gestureG = 2.0f;
+  s.startLevelDeg = 35;    // 原本手勢寫死的「機身大致水平」35 度
+  s.gestureG = 1.0f;       // (2.0)
   s.countdownSec = 20;
   s.disturbMode = DISTURB_EXTEND;
   s.extendSec = 5;
-  s.crashEnable = 1;
-  s.disturbG = 0.15f;
+  s.crashEnable = 0;       // (1)
+  s.disturbG = 0.05f;      // (0.15)
   s.touchdownG = 3.0f;
   s.touchdownStillSec = 1.0f;
   s.landingTimeoutSec = 20;
-  s.crashG = 14.0f;
+  s.crashG = 15.0f;        // (14)
   s.lineLengthM = 18.0f;
-  s.lapSec = 5.2f;
-  // 電變校正最高油門保持(GG 2026-09-14 實測):控制器開機很快,電變自己開機要約 1 秒. 2 秒太短,電變還沒記住最高點
-  // 就切到最低;太久有些電變會進設定模式. GG 用 4~5 秒,出廠取 4(也在多數廠牌說明的 3~6 秒,ZTW 3~4 秒內).
-  s.calibHoldSec = 4.0f;
+  s.lapSec = 4.0f;         // (5.2)
+  // 電變校正最高油門保持:控制器開機很快,電變自己開機要約 1 秒,太短電變還沒記住最高點就切到最低;
+  // 太久有些電變會進設定模式(多數廠牌說明 3~6 秒,ZTW 3~4 秒).
+  s.calibHoldSec = 3.0f;   // (4)
   // 觸地提早降落預設關閉:門檻要看紀錄頁的實飛抖動數值才訂得準. 模擬(tools/sim_impact.py)
   // 特技中水平時抖動最大 1.04g 但撐不過 1 秒,地面滑行約 3.8 秒觸發.
   s.earlyLandEnable = 0;
   s.earlyLandArmSec = 10;
   s.earlyLandTiltDeg = 20;
-  s.earlyLandVibG = 0.8f;
-  s.earlyLandHoldSec = 1.0f;
-  // 扭轉機尾取消起飛(GG 指定 45 度,取消後 5 秒不接受手勢)
-  s.twistCancelDeg = 45;
+  s.earlyLandVibG = 1.0f;  // (0.8)
+  s.earlyLandHoldSec = 0.7f;   // (1.0)
+  s.twistCancelDeg = 15;   // (45) 扭轉機尾取消起飛的角度
   s.twistBlockSec = 5;
-  s.armWaitMin = ARM_WAIT_DEFAULT_MIN;
-  s.escRpmTelemetry = 0;   // 有些電變收到雙向訊號會不工作,預設關(GG)
+  s.armWaitMin = ARM_WAIT_DEFAULT_MIN;   // (3)
+  s.escRpmTelemetry = 1;   // (0) 只在 DShot300 作用;不支援雙向訊號的電變可能不解鎖
   s.motorPoles = 14;       // Betaflight 預設
   // 機輪收腳:預設關閉(沒裝收腳的飛機不受影響). 行程預設只開 1400~1600µs 小行程(GG):
   // 還沒搞清楚舵機方向與收腳機構的極限前,全行程 1000~2000 可能頂死撞壞東西,確認後再慢慢加大.
@@ -100,16 +102,25 @@ static void defaultShared(SharedSettings &s) {
   s.gearReverse = 0;
   s.gearMinUs = 1400;
   s.gearMaxUs = 1600;
-  s.gearRetractSec = 5;
-  s.gearTravelSec = 2.0f;
+  s.gearRetractSec = 15;   // (5)
+  s.gearTravelSec = 0.7f;  // (2.0)
   s.buzzerActiveLow = 0;   // GG 的蜂鳴器是高電位響
 }
 
-static const char *const PROFILE_DEFAULT_NAMES[PROFILE_COUNT] = {"A", "B", "C", "D", "E", "TEST"};
+// 第 6 組出廠名稱「測試」(原本 TEST). 備份碼的「沿用出廠名稱」用的是 settings_backup.cpp 自己凍結的舊名稱表.
+static const char *const PROFILE_DEFAULT_NAMES[PROFILE_COUNT] = {"A", "B", "C", "D", "E", "測試"};
+
+static void setSide(CurveSide &s, int8_t deadband, uint8_t count, const CurvePoint pts[4]) {
+  s.deadband = deadband;
+  s.count = count;
+  for (uint8_t i = 0; i < 4; ++i) s.pts[i] = pts[i];
+  s.pts[4] = pts[3];   // 第 5 格不再使用
+}
 
 static void defaultProfile(ProfileSettings &p, uint8_t index) {
   memset(&p, 0, sizeof(p));
   strncpy(p.name, PROFILE_DEFAULT_NAMES[index], sizeof(p.name) - 1);
+  // 出廠值 = GG 的基準設定:B~E 組是原本的出廠值;A 組與第 6 組「測試」是 GG 調過的值(在下面蓋掉)
   p.phase1Pct = 75;
   p.phase2Pct = 85;
   p.minPct = 30;
@@ -136,6 +147,32 @@ static void defaultProfile(ProfileSettings &p, uint8_t index) {
   p.down.pts[2] = {-90, -25};
   p.down.pts[3] = {-90, -25};
   p.down.pts[4] = {-90, -25};
+  if (index == 0) {   // A
+    p.phase1Pct = 50;
+    p.phase2Pct = 80;
+    p.minPct = 20;
+    p.maxPct = 90;
+    p.landingRampSec = 20.0f;
+    p.phaseMode = PHASE_STEP;
+    const CurvePoint up[4] = {{66, 20}, {90, 35}, {90, 35}, {90, 35}};
+    const CurvePoint dn[4] = {{-54, -14}, {-90, -46}, {-90, -46}, {-90, -46}};
+    setSide(p.up, 20, 2, up);
+    setSide(p.down, -20, 2, dn);
+  } else if (index == 5) {   // 測試
+    p.phase1Pct = 70;
+    p.phase2Pct = 80;
+    p.minPct = 10;
+    p.phase1Sec = 60;
+    p.flightSec = 90;
+    p.noCompSec = 10.0f;
+    p.landingRampSec = 20.0f;
+    p.landingPct = 40;
+    p.phaseMode = PHASE_SPREAD;
+    const CurvePoint up[4] = {{90, 19}, {90, 20}, {90, 20}, {90, 20}};
+    const CurvePoint dn[4] = {{-54, -24}, {-90, -25}, {-90, -25}, {-90, -25}};
+    setSide(p.up, 29, 1, up);
+    setSide(p.down, -30, 1, dn);
+  }
 }
 
 // --- 參數表 ----------------------------------------------------------------------
@@ -211,16 +248,16 @@ static const ParamDef PROFILE_PARAMS[] = {
     PP("phaseMode", PARAM_U8, phaseMode, 0, 2, 1, 1),
     PP("upDb", PARAM_I8, up.deadband, 0, 89, 1, 5),
     PP("upN", PARAM_U8, up.count, CURVE_MIN_POINTS, CURVE_MAX_POINTS, 1, 1),
-    PP("up1a", PARAM_I8, up.pts[0].angle, 1, 90, 1, 5), PP("up1p", PARAM_I8, up.pts[0].pct, -50, 50, 1, 5),
-    PP("up2a", PARAM_I8, up.pts[1].angle, 1, 90, 1, 5), PP("up2p", PARAM_I8, up.pts[1].pct, -50, 50, 1, 5),
-    PP("up3a", PARAM_I8, up.pts[2].angle, 1, 90, 1, 5), PP("up3p", PARAM_I8, up.pts[2].pct, -50, 50, 1, 5),
-    PP("up4a", PARAM_I8, up.pts[3].angle, 1, 90, 1, 5), PP("up4p", PARAM_I8, up.pts[3].pct, -50, 50, 1, 5),
+    PP("up1a", PARAM_I8, up.pts[0].angle, 1, 90, 1, 5), PP("up1p", PARAM_I8, up.pts[0].pct, -100, 100, 1, 5),
+    PP("up2a", PARAM_I8, up.pts[1].angle, 1, 90, 1, 5), PP("up2p", PARAM_I8, up.pts[1].pct, -100, 100, 1, 5),
+    PP("up3a", PARAM_I8, up.pts[2].angle, 1, 90, 1, 5), PP("up3p", PARAM_I8, up.pts[2].pct, -100, 100, 1, 5),
+    PP("up4a", PARAM_I8, up.pts[3].angle, 1, 90, 1, 5), PP("up4p", PARAM_I8, up.pts[3].pct, -100, 100, 1, 5),
     PP("dnDb", PARAM_I8, down.deadband, -89, 0, 1, 5),
     PP("dnN", PARAM_U8, down.count, CURVE_MIN_POINTS, CURVE_MAX_POINTS, 1, 1),
-    PP("dn1a", PARAM_I8, down.pts[0].angle, -90, -1, 1, 5), PP("dn1p", PARAM_I8, down.pts[0].pct, -50, 50, 1, 5),
-    PP("dn2a", PARAM_I8, down.pts[1].angle, -90, -1, 1, 5), PP("dn2p", PARAM_I8, down.pts[1].pct, -50, 50, 1, 5),
-    PP("dn3a", PARAM_I8, down.pts[2].angle, -90, -1, 1, 5), PP("dn3p", PARAM_I8, down.pts[2].pct, -50, 50, 1, 5),
-    PP("dn4a", PARAM_I8, down.pts[3].angle, -90, -1, 1, 5), PP("dn4p", PARAM_I8, down.pts[3].pct, -50, 50, 1, 5),
+    PP("dn1a", PARAM_I8, down.pts[0].angle, -90, -1, 1, 5), PP("dn1p", PARAM_I8, down.pts[0].pct, -100, 100, 1, 5),
+    PP("dn2a", PARAM_I8, down.pts[1].angle, -90, -1, 1, 5), PP("dn2p", PARAM_I8, down.pts[1].pct, -100, 100, 1, 5),
+    PP("dn3a", PARAM_I8, down.pts[2].angle, -90, -1, 1, 5), PP("dn3p", PARAM_I8, down.pts[2].pct, -100, 100, 1, 5),
+    PP("dn4a", PARAM_I8, down.pts[3].angle, -90, -1, 1, 5), PP("dn4p", PARAM_I8, down.pts[3].pct, -100, 100, 1, 5),
 };
 
 static const size_t SHARED_PARAM_COUNT = sizeof(SHARED_PARAMS) / sizeof(SHARED_PARAMS[0]);
@@ -460,7 +497,7 @@ static void applyHardwareSettings() {
 static void loadAll() {
   defaultShared(sharedSettings);
   for (uint8_t i = 0; i < PROFILE_COUNT; ++i) defaultProfile(profiles[i], i);
-  activeProfile = 0;
+  activeProfile = DEFAULT_ACTIVE_PROFILE;
   Preferences prefs;
   if (prefs.begin(PREF_NAMESPACE, true)) {
     loadShared(prefs, sharedSettings);
@@ -469,7 +506,7 @@ static void loadAll() {
       profileKey(i, key);
       loadProfile(prefs, key, profiles[i]);
     }
-    const uint8_t a = prefs.getUChar("active", 0);
+    const uint8_t a = prefs.getUChar("active", DEFAULT_ACTIVE_PROFILE);
     if (a < PROFILE_COUNT) activeProfile = a;
     prefs.end();
   }
@@ -690,7 +727,7 @@ void settingsGetImage(SettingsImage &out) {
 void settingsDefaultImage(SettingsImage &out) {
   defaultShared(out.shared);
   for (uint8_t i = 0; i < PROFILE_COUNT; ++i) defaultProfile(out.profiles[i], i);
-  out.active = 0;
+  out.active = DEFAULT_ACTIVE_PROFILE;
 }
 
 static const ParamDef *imageParam(int8_t scope, const char *key) {
