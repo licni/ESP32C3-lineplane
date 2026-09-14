@@ -11,10 +11,14 @@
   根目錄只放 README.md(公開用說明),CLAUDE.md,platformio.ini. 新文件一律放 docs/.
 
 ## 版本庫
-- GitHub 私人專案 https://github.com/licni/ESP32lineplane(分支 main,2026-09-14 建立). 本機身分只設在這個版本庫:SuperGG + GitHub noreply 信箱.
+- 兩個 GitHub 原始碼專案(GG 2026-09-14),本機身分只設在這個版本庫:SuperGG + GitHub noreply 信箱.
+  - `origin` = https://github.com/licni/ESP32lineplane:**GG 的私人雲端備份**,一直保持私人,不要刪除也不要公開.
+  - `public` = https://github.com/licni/ESP32C3-lineplane:要公開的原始碼專案,目前私人;整理好後由 GG 決定公開. 推送前先做個資檢查.
+  - GG 要求推送時兩邊都推同樣的提交(`git push origin main` 與 `git push public main`).
 - **授權 GPL-3.0**(GG 2026-09-14,LICENSE 在根目錄). 2026-09-14 為了之後公開,提交歷史壓成單一提交並清除個資(家用 WiFi 名稱,區網 IP,本機路徑).
   **不要把個資寫進版本庫**:家用 WiFi 名稱/密碼,區網 IP,Email,本機完整路徑;測試腳本預設位址用 lineplane.local,實際 IP 用參數傳.
   **韌體檔也不能帶個資**:Arduino 核心會把原始檔完整路徑(含使用者名稱)編進韌體,platformio.ini 的 `extra_scripts = pre:tools/pio_strip_paths.py` 不可拿掉;發布前可搜尋韌體檔確認沒有 "Users/".
+  2026.09.14.11 起發布的韌體乾淨;公開韌體專案的**舊提交紀錄**仍含舊韌體檔,重建做法與進度見 docs/開發紀錄.md 最後一段(要 GG 親自同意,原始碼公開前要處理完).
 - `test_logs/`(測試紀錄與板上設定備份)與 Python 暫存不進版本庫. GG 要求時才提交/推送.
 
 ## 工作方式

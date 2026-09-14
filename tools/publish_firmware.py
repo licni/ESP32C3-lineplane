@@ -1,4 +1,5 @@
-# 版本流水號: r4 (2026-09-14) 每天只留最新一版(GG):同一天的舊 Release/tag/韌體檔刪掉,當天修改合併進最新版的 Release 與 CHANGELOG;--cleanup-only 整理現有版本
+# 版本流水號: r5 (2026-09-14) 修正 CHANGELOG 讀取:版本號只抓到第一個字,當天舊條目沒刪掉且標題壞成「## 2()」
+# 舊: r4 (2026-09-14) 每天只留最新一版(GG):同一天的舊 Release/tag/韌體檔刪掉,當天修改合併進最新版的 Release 與 CHANGELOG;--cleanup-only 整理現有版本
 # 舊: r3 (2026-09-14) 韌體檔集中放 firmware/ 資料夾,首頁舊檔搬進去;manifest file 帶資料夾
 # 舊: r2 (2026-09-14) 發布說明必填:CHANGELOG.md,commit 訊息,GitHub Release;--release-only
 # 舊: r1 (2026-09-14) 初版:發布韌體到公開專案 licni/ESP32lineplane-firmware(板子「檢查更新」讀這裡)
@@ -79,8 +80,10 @@ def changelog_read():
     with open(path, encoding="utf-8") as f:
         text = f.read()
     entries = []   # [(版本, 內容)]
-    for m in re.finditer(r"(?ms)^## (\S+?)(?:(.*?))?\n(.*?)(?=^## |\Z)", text):
-        entries.append((m.group(1), m.group(3).strip()))
+    # 標題「## 年.月.日.序號(日期)」. r4 的正則把括號寫成群組,版本號只抓到第一個字「2」:當天舊條目刪不掉,標題壞成「## 2()」.
+    # 版本號格式不符的標題(例如壞掉的「## 2()」)連同內容略過.
+    for m in re.finditer(r"(?ms)^## (\d{4}\.\d{2}\.\d{2}\.\d+)[^\n]*\n(.*?)(?=^## |\Z)", text):
+        entries.append((m.group(1), m.group(2).strip()))
     return entries
 
 
