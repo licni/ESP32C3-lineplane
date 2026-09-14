@@ -1,4 +1,5 @@
-// 版本流水號: r18 (2026-09-14) 出廠值改成 GG 的基準設定:安全開關等待上限 3 → 2 分鐘,出廠飛行風格第 6 組 DEFAULT_ACTIVE_PROFILE
+// 版本流水號: r19 (2026-09-14) v9 預留位元組改為忽略安全開關 armSwitchOff(大小不變,舊存檔讀到 0 = 要按開關)
+// 舊: r18 (2026-09-14) 出廠值改成 GG 的基準設定:安全開關等待上限 3 → 2 分鐘,出廠飛行風格第 6 組 DEFAULT_ACTIVE_PROFILE
 // 舊: r17 (2026-09-14) 版面 v9:共用設定尾端加蜂鳴器電位 buzzerActiveLow(+3 預留);舊存檔尾端補預設
 // 舊: r16 (2026-09-14) 設定備份碼用的整份設定介面 SettingsImage;備份碼套用的飛行風格要按儲存才寫入(settingsActiveDirty)
 // 舊: r15 (2026-09-14) 預留位元組 gearReserved 改為安全開關等待上限 armWaitMin(大小不變,讀到 0 當 3 分鐘)
@@ -96,7 +97,10 @@ struct SharedSettings {
   float gearTravelSec;       // 舵機從一端走到另一端的秒數(0 = 直接跳)
   // --- v9 起加在尾端:蜂鳴器(GG 2026-09-14;v4~v8 的存檔讀進來時補預設) ---
   uint8_t buzzerActiveLow;   // 0 = 高電位響(出廠),1 = 低電位響
-  uint8_t reserved9[3];
+  // 忽略安全開關(GG 2026-09-14):1 = 不用按開關就倒數,讓使用者真的可以上電直接飛. 出廠 0.
+  // 用 v9 的預留位元組(舊存檔是 0 = 要按開關),版面不變. 網頁開啟時要打勾確認風險,置頂一直顯示警告.
+  uint8_t armSwitchOff;
+  uint8_t reserved9[2];
 };
 
 struct CurvePoint {

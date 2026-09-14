@@ -1,4 +1,5 @@
-// 版本流水號: r21 (2026-09-14) 降落保險時間改從減力走完才開始算(降落最長 = 減力秒數 + 保險時間;GG:減力 20 + 保險 20 時減力一完就關馬達)
+// 版本流水號: r22 (2026-09-14) 設定忽略安全開關(armSwitchOff)時開關一律算按下:上電自動倒數與手勢起飛都不等開關;起飛程序開始記事件 28/5
+// 舊: r21 (2026-09-14) 降落保險時間改從減力走完才開始算(降落最長 = 減力秒數 + 保險時間;GG:減力 20 + 保險 20 時減力一完就關馬達)
 // 舊: r20 (2026-09-14) 安全開關等待上限(GG:3 分鐘可調):起飛程序開始後超過上限沒按開關 → 取消回待機(事件 28/3);
 //   上電自動倒數等開關逾時 → 這次通電不再自動倒數(事件 28/4). 桌上碰到飛機誤觸發時不會一直鎖著設定
 // 舊: r19 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG):開始不再拒絕(原因 7/8 不再產生),
@@ -161,9 +162,18 @@ static bool withinStartLevel(const FlightInputs &in) {
   return in.imuOk && fabsf(in.pitchDeg) <= fs.startLevelDeg && fabsf(in.rollDeg) <= fs.startLevelDeg;
 }
 
+// 安全開關算不算按下:設定「忽略安全開關」時一律算按下(GG 2026-09-14:讓使用者真的可以上電直接飛).
+// 狀態回報的 armSwitch 仍是實體開關,監看頁看得出開關本身有沒有按.
+static bool armPressed(const FlightInputs &in) { return in.armSwitch || fs.armSwitchOff; }
+
+// 起飛程序開始時開關已停用:記一筆,事後看事件紀錄知道這趟沒有經過安全開關
+static void logArmSwitchOff() {
+  if (fs.armSwitchOff) eventLog(EV_ARM_SWITCH, 5);
+}
+
 // 起飛程序中安全開關按下 → 記住(開關去抖在 control.cpp:低電位連續 50ms)
 static void latchArm(const FlightInputs &in) {
-  if (in.armSwitch && !armLatched) {
+  if (armPressed(in) && !armLatched) {
     armLatched = true;
     eventLog(EV_ARM_SWITCH, 2);
   }
@@ -228,7 +238,8 @@ static void tryStart(bool autoStart, const FlightInputs &in) {
     enter(FS_COUNTDOWN);
     eventLog(EV_COUNTDOWN, 0, countdownRemain);
   } else {
-    armLatched = in.armSwitch;   // 推飛機或按網頁開始的當下已經按著也算
+    armLatched = armPressed(in);   // 推飛機或按網頁開始的當下已經按著也算
+    logArmSwitchOff();
     enter(FS_WAIT_STILL);
   }
 }
@@ -365,7 +376,8 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
         if (!fs.gestureEnable && !autoStartUsed) {
           // 上電自動倒數:安全開關按過而且飛機放平才倒數;還沒按或沒放平就在待機等(燈慢閃,不用掉自動倒數的機會).
           // 感測器異常時不看水平,交給 tryStart 拒絕.
-          armLatched = in.armSwitch;
+          armLatched = armPressed(in);
+          logArmSwitchOff();
           armWaitLogged = false;
           armWaitS = 0;
           const bool levelOk = !in.imuOk || withinStartLevel(in);

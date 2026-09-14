@@ -1,4 +1,5 @@
-// 版本流水號: r3 (2026-09-14) 名稱長度 0 改對照本檔凍結的名稱表(出廠名稱第 6 組改成「測試」後,舊碼的 TEST 不會跟著變)
+// 版本流水號: r4 (2026-09-14) 世代 3:忽略安全開關 armSwitchOff
+// 舊: r3 (2026-09-14) 名稱長度 0 改對照本檔凍結的名稱表(出廠名稱第 6 組改成「測試」後,舊碼的 TEST 不會跟著變)
 // 舊: r2 (2026-09-14) 世代 2:蜂鳴器電位 buzzerLow
 // 舊: r1 (2026-09-14) 初版:設定備份碼(LP + base62,每個參數固定位元數,新功能往尾端加,CRC-24)
 #include "settings_backup.h"
@@ -68,6 +69,11 @@ const CodecField GEN2_SHARED[] = {
     {"buzzerLow", 0, 1, 2},
 };
 
+// --- 世代 3(2026-09-14):忽略安全開關 -------------------------------------------------
+const CodecField GEN3_SHARED[] = {
+    {"armSwitchOff", 0, 1, 2},
+};
+
 struct Generation {
   const CodecField *shared;
   uint8_t sharedCount;
@@ -79,6 +85,7 @@ struct Generation {
 const Generation GENERATIONS[] = {
     {GEN1_SHARED, COUNT_OF(GEN1_SHARED), GEN1_PROFILE, COUNT_OF(GEN1_PROFILE)},
     {GEN2_SHARED, COUNT_OF(GEN2_SHARED), nullptr, 0},
+    {GEN3_SHARED, COUNT_OF(GEN3_SHARED), nullptr, 0},
 };
 const uint8_t MY_GENERATION = COUNT_OF(GENERATIONS);
 

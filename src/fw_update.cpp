@@ -1,4 +1,5 @@
-// 版本流水號: r5 (2026-09-14) 修正:網站版本和目前「不同」就當成新版(板子 .12,網站 .11 也說有新版本,GG 發現).
+// 版本流水號: r6 (2026-09-14) 韌體身分標記 FW_ID_MARK 與上傳檔案掃描(網頁上傳拿錯成別的 ESP32-C3 程式時擋下)
+// 舊: r5 (2026-09-14) 修正:網站版本和目前「不同」就當成新版(板子 .12,網站 .11 也說有新版本,GG 發現).
 //   改成逐段比數字,只有網站版本比較新才可以下載安裝;狀態加 remoteNewer
 // 舊: r4 (2026-09-14) manifest 的 file 可以是「一層資料夾/檔名」(公開專案韌體檔集中到 firmware/,GG)
 // 舊: r3 (2026-09-14) 測試用更新來源(序列指令 fwurl,只存 RAM):驗證檢查碼不符,大小不符,檔案不存在,下載中斷
@@ -48,6 +49,44 @@ static uint8_t dlBuf[2048];
 
 #define LOCKED(stmt) do { portENTER_CRITICAL(&lock); stmt; portEXIT_CRITICAL(&lock); } while (0)
 
+// --- 韌體身分標記 ------------------------------------------------------------------
+// 標記本身就是比對用的字串(被掃描程式引用,連結器不會丟掉),放在韌體檔的唯讀資料段,檔案裡是連續的原始位元組.
+__attribute__((used)) static const char FW_ID_MARK[] = FW_ID_PREFIX FW_VERSION "|";
+static const size_t FW_ID_PREFIX_LEN = sizeof(FW_ID_PREFIX) - 1;
+static size_t idMatch = 0;
+static char idVer[24] = "";
+static size_t idVerLen = 0;
+static bool idFound = false;
+
+void fwIdScanReset() {
+  idMatch = 0;
+  idVerLen = 0;
+  idVer[0] = 0;
+  idFound = false;
+}
+
+void fwIdScanFeed(const uint8_t *data, size_t len) {
+  for (size_t i = 0; i < len && !idFound; ++i) {
+    const char c = (char)data[i];
+    if (idMatch < FW_ID_PREFIX_LEN) {
+      if (c == FW_ID_MARK[idMatch]) ++idMatch;
+      else idMatch = c == FW_ID_MARK[0] ? 1 : 0;
+      idVerLen = 0;
+    } else if (c == '|' && idVerLen > 0) {
+      idVer[idVerLen] = 0;
+      idFound = true;
+    } else if (((c >= '0' && c <= '9') || c == '.') && idVerLen < sizeof(idVer) - 1) {
+      idVer[idVerLen++] = c;
+    } else {
+      // 開頭對上但後面不是「版本|」(例如網頁程式裡的比對字串):重新找
+      idMatch = c == FW_ID_MARK[0] ? 1 : 0;
+      idVerLen = 0;
+    }
+  }
+}
+
+const char *fwIdScanVersion() { return idFound ? idVer : nullptr; }
+
 static void setError(const char *code) {
   LOCKED(strlcpy(st.err, code, sizeof(st.err)); st.check = FWC_ERROR);
 }
@@ -59,6 +98,7 @@ static void clearPrefs(Preferences &p) {
 
 // --- 開機判斷 --------------------------------------------------------------------
 void fwUpdateBegin() {
+  Serial.printf("FW id %s\n", FW_ID_MARK);   // 整段標記都要留在韌體裡(網頁上傳靠它認檔案)
   const esp_partition_t *running = esp_ota_get_running_partition();
   esp_ota_img_states_t runState;
   const bool pending = running && esp_ota_get_state_partition(running, &runState) == ESP_OK && runState == ESP_OTA_IMG_PENDING_VERIFY;

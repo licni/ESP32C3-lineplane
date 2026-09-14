@@ -1,4 +1,6 @@
-// 版本流水號: r22 (2026-09-14) 設定備份碼:GET /api/backup(產生),POST /api/backup/check(貼上檢查),/api/backup/apply(套用,要按儲存)
+// 版本流水號: r24 (2026-09-14) 狀態加 asoff(設定忽略安全開關,網頁置頂警告用;含還沒儲存的值)
+// 舊: r23 (2026-09-14) 網頁上傳韌體檢查身分標記:找不到就不切換(fwnotours);完成時回傳檔案版本與是否比目前舊
+// 舊: r22 (2026-09-14) 設定備份碼:GET /api/backup(產生),POST /api/backup/check(貼上檢查),/api/backup/apply(套用,要按儲存)
 // 舊: r21 (2026-09-14) 狀態 f 加 awl(等安全開關剩餘秒數);/api/fw 加 newer(網站版本比目前新 1 / 相同 0 / 較舊 -1)
 // 舊: r20 (2026-09-14) 狀態 f 加 al(這趟起飛程序已按過安全開關)
 // 舊: r19 (2026-09-14) 起飛程序與飛行中拒絕:儲存 WiFi 設定,發射功率,保持,檢查更新,校正設定/取消(安全審查 B5);狀態 cal 加時效剩餘秒數
@@ -106,7 +108,7 @@ static void handleStatus() {
            "\"f\":{\"s\":%u,\"ss\":%.1f,\"cd\":%.1f,\"t\":%.1f,\"base\":%.1f,\"comp\":%.1f,\"out\":%.1f,\"ph\":%u,"
            "\"lc\":%u,\"er\":%u,\"rj\":%u,\"rja\":%ld,\"da\":%u,\"dg\":%.2f,\"dga\":%ld,\"ge\":%d,\"au\":%d,\"fp\":%u,\"set\":%.1f,\"tw\":%.0f,\"gb\":%.1f,\"aw\":%d,\"arm\":%d,\"al\":%d,\"awl\":%ld},"
            "\"man\":%d,\"cal\":[%u,%.1f,%d,%d,%.0f],\"dsh\":%ld,\"proto\":%u,\"hz\":%u,\"evn\":%lu,\"rpm\":[%d,%lu,%lu,%lu,%lu,%lu,%lu,%ld],"
-           "\"sim\":%d,\"cap\":[%d,%lu,%lu,%lu,%lu,%lu,%ld],\"gear\":[%.0f,%u,%d],\"wt\":[%.0f,%d,%.0f,%u],\"fw\":[%d,%d,%.0f,%u,%u,%d]}",
+           "\"sim\":%d,\"cap\":[%d,%lu,%lu,%lu,%lu,%lu,%ld],\"gear\":[%.0f,%u,%d],\"wt\":[%.0f,%d,%.0f,%u],\"fw\":[%d,%d,%.0f,%u,%u,%d],\"asoff\":%d}",
            t.pitchDeg, t.rawPitchDeg, t.rollDeg, t.accMagG, t.gyroDps[0], t.gyroDps[1], t.gyroDps[2], t.biasDps[0],
            t.biasDps[1], t.biasDps[2], t.still ? 1 : 0, t.stillSeconds, imu, t.escUs, (unsigned long)t.maxExecUs,
            (unsigned long)t.maxLateMs, (unsigned long)(millis() / 1000), (unsigned long)ESP.getFreeHeap(),
@@ -129,7 +131,7 @@ static void handleStatus() {
            (unsigned long)cap.minHighUs, (unsigned long)cap.maxHighUs, cap.edgeAgeMs == UINT32_MAX ? -1L : (long)cap.edgeAgeMs,
            gearPosition() * 100.0f, (unsigned)gearCurrentUs(), controlGearTesting() ? 1 : 0, wtTxp, wtBoot ? 1 : 0, wtBootRemain,
            (unsigned)wifiLiveTxPower(), fw.busy ? 1 : 0, fw.pending ? 1 : 0, fw.confirmRemainS, (unsigned)fw.check,
-           (unsigned)fw.progress, fw.rolledBack ? 1 : 0);
+           (unsigned)fw.progress, fw.rolledBack ? 1 : 0, sharedSettings.armSwitchOff ? 1 : 0);
   server.send(200, "application/json", buf);
 }
 
@@ -463,6 +465,8 @@ static void handleReboot() {
 // --- 網頁韌體更新 ---------------------------------------------------------------
 // 讓沒有開發環境的使用者也能更新:瀏覽器選 firmware.bin 上傳. 只在待機狀態允許.
 static bool updateRefused = false;
+static const char *uploadErr = nullptr;   // 身分標記檢查失敗的錯誤代碼
+static char uploadVer[24] = "";
 
 static void handleUpdateUpload() {
   HTTPUpload &up = server.upload();
@@ -470,17 +474,31 @@ static void handleUpdateUpload() {
     // 板子自己下載更新進行中也不接受上傳(兩邊會搶同一個分區)
     updateRefused = !controlOtaAllowed() || fwUpdateBlockReason() == 1;
     if (updateRefused) return;
+    uploadErr = nullptr;
+    uploadVer[0] = 0;
+    fwIdScanReset();
     Serial.printf("WEB OTA start %s\n", up.filename.c_str());
     fwUpdateStarted(FWS_WEB_UPLOAD);   // 寫入期間拒絕起飛與手動輸出
     if (!Update.begin(UPDATE_SIZE_UNKNOWN)) Update.printError(Serial);
   } else if (up.status == UPLOAD_FILE_WRITE) {
     if (updateRefused || Update.hasError()) return;
+    fwIdScanFeed(up.buf, up.currentSize);
     if (Update.write(up.buf, up.currentSize) != up.currentSize) Update.printError(Serial);
   } else if (up.status == UPLOAD_FILE_END) {
     if (updateRefused) return;
+    const char *ver = fwIdScanVersion();
+    if (!ver && !Update.hasError()) {
+      // 格式,晶片,檢查碼都可能是對的(別的 ESP32-C3 程式),但不是這個控制器的韌體:不切換開機分區
+      Serial.println(F("WEB OTA refused: firmware id not found"));
+      Update.abort();
+      uploadErr = "fwnotours";
+      fwUpdateFlashed(false);
+      return;
+    }
     if (Update.end(true)) {
-      Serial.printf("WEB OTA done %u bytes\n", (unsigned)up.totalSize);
-      fwUpdateFlashed(true);
+      strlcpy(uploadVer, ver, sizeof(uploadVer));
+      Serial.printf("WEB OTA done %u bytes, version %s\n", (unsigned)up.totalSize, uploadVer);
+      fwUpdateFlashed(true, uploadVer);
     } else {
       Update.printError(Serial);
       fwUpdateFlashed(false);
@@ -546,8 +564,11 @@ static void handleFwConfirm() {
 
 static void handleUpdateDone() {
   if (updateRefused) return sendResult(false, "busy");
+  if (uploadErr) return sendResult(false, uploadErr);
   if (Update.hasError() || !Update.isFinished()) return sendResult(false, "updatefail");
-  sendResult(true, "updated");
+  // older:上傳的版本比目前舊(允許,等於退回舊版)
+  server.send(200, "application/json", String("{\"ok\":true,\"code\":\"updated\",\"ver\":\"") + uploadVer +
+                                           "\",\"older\":" + (fwVersionCompare(uploadVer, FW_VERSION) < 0 ? "1" : "0") + "}");
   delay(500);
   ESP.restart();
 }

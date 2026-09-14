@@ -1,4 +1,5 @@
-// 版本流水號: r22 (2026-09-14) 出廠值改成 GG 的基準設定(共用 14 項,A 組與第 6 組「測試」的飛法與曲線,第 6 組名稱 TEST → 測試,出廠飛行風格第 6 組)
+// 版本流水號: r23 (2026-09-14) 參數 armSwitchOff 忽略安全開關(0/1,出廠 0,用 v9 預留位元組)
+// 舊: r22 (2026-09-14) 出廠值改成 GG 的基準設定(共用 14 項,A 組與第 6 組「測試」的飛法與曲線,第 6 組名稱 TEST → 測試,出廠飛行風格第 6 組)
 // 舊: r21 (2026-09-14) 曲線點補償值範圍 ±50 → ±100(GG:基本油門 70% 時只能拉到 20%,要能降到總油門 10%;int8 放得下,版面不變)
 // 舊: r20 (2026-09-14) 版面 v9:共用設定尾端加蜂鳴器電位 buzzerLow(0 高電位響 / 1 低電位響);讀 v8 共用設定尾端補預設,風格讀 v4/v6~v9
 // 舊: r19 (2026-09-14) 設定備份碼:整份設定 SettingsImage 的讀寫驗證套用;備份碼套用的飛行風格 pendingActive 按儲存才寫入,放棄變更還原
@@ -105,6 +106,7 @@ static void defaultShared(SharedSettings &s) {
   s.gearRetractSec = 15;   // (5)
   s.gearTravelSec = 0.7f;  // (2.0)
   s.buzzerActiveLow = 0;   // GG 的蜂鳴器是高電位響
+  s.armSwitchOff = 0;      // 出廠一定要按安全開關才倒數
 }
 
 // 第 6 組出廠名稱「測試」(原本 TEST). 備份碼的「沿用出廠名稱」用的是 settings_backup.cpp 自己凍結的舊名稱表.
@@ -231,6 +233,7 @@ static const ParamDef SHARED_PARAMS[] = {
     SP("gearRetractSec", PARAM_U8, gearRetractSec, 1, 120, 1, 5),
     SP("gearTravelSec", PARAM_F32, gearTravelSec, 0, 10, 0.1f, 0.5f),
     SP("buzzerLow", PARAM_U8, buzzerActiveLow, 0, 1, 1, 1),   // 立即生效
+    SP("armSwitchOff", PARAM_U8, armSwitchOff, 0, 1, 1, 1),   // 1 = 忽略安全開關(網頁要打勾確認)
 };
 
 static const ParamDef PROFILE_PARAMS[] = {
@@ -442,6 +445,7 @@ static bool loadShared(Preferences &prefs, SharedSettings &out) {
   if (s.motorPoles < 2) s.motorPoles = 14; // v7 早期這格是預留的 0
   if (s.startLevelDeg < 10) s.startLevelDeg = 35;   // 以前是預留位元組 0
   if (s.armWaitMin < 1 || s.armWaitMin > 30) s.armWaitMin = ARM_WAIT_DEFAULT_MIN;   // 以前是收腳區塊的預留位元組 0
+  if (s.armSwitchOff > 1) s.armSwitchOff = 0;   // 預留位元組不是 0/1 時當成要按開關(安全側)
   if (validateShared(s)) return false;
   if (ver != SETTINGS_LAYOUT_VERSION) Serial.printf("settings shared migrated v%u -> v%u\n", ver, SETTINGS_LAYOUT_VERSION);
   out = s;

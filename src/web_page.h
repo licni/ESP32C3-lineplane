@@ -1,4 +1,6 @@
-// 版本流水號: r56 (2026-09-14) 設定頁「設定備份碼」卡片(產生並複製,貼上即檢查,套用,清空;未儲存時停用);安裝頁「蜂鳴器」電位切換;
+// 版本流水號: r58 (2026-09-14) 停用安全開關(GG):設定頁風險說明 + 三項打勾才送出,每一頁上方紅色警告列(狀態 asoff),監看頁開關顯示已停用,事件 28/5
+// 舊: r57 (2026-09-14) 手動上傳韌體:選檔後找身分標記,不是這個控制器的韌體就不讓上傳,是的話顯示版本比目前新/相同/舊(允許退回舊版)
+// 舊: r56 (2026-09-14) 設定頁「設定備份碼」卡片(產生並複製,貼上即檢查,套用,清空;未儲存時停用);安裝頁「蜂鳴器」電位切換;
 //   曲線點拖曳改用總油門 10%~100% 夾(GG:基本油門 70% 時只能拉到 20%),補償值 ±100;未儲存判斷含備份碼套用的飛行風格;
 //   出廠值改成 GG 基準設定後的說明文字(校正保持 3 秒,PWM 100Hz,轉速回傳出廠開啟);降落保險時間說明改成從減力走完才算
 // 舊: r55 (2026-09-14) 安全開關等待上限(GG):設定頁參數(分鐘),狀態列剩餘時間與逾時取消,事件 28/3,28/4;
@@ -105,6 +107,13 @@ header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px 
 @keyframes fbPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.18)}}
 @keyframes fbBreath{0%,100%{box-shadow:inset 0 0 0 0 rgba(180,83,9,0)}50%{box-shadow:inset 0 0 0 3px rgba(180,83,9,.55)}}
 @media (prefers-reduced-motion:reduce){.fbar.wait,.fbar.count{animation:none}}
+/* 忽略安全開關:置頂一直顯示的紅色警告(GG 2026-09-14),設定頁的風險確認框 */
+.asoff{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;padding:8px 10px;background:#b91c1c;color:#fff;border-top:1px solid #7f1d1d;animation:asPulse 1.6s ease-in-out infinite}
+.asoff b{font-size:17px;font-weight:800;letter-spacing:.02em}.asoff span{font-size:13.5px;font-weight:600}
+@keyframes asPulse{50%{background:#dc2626}}
+.aorow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.aowarn{margin:8px 0 2px;padding:8px 10px;border:2px solid var(--bad);border-radius:8px;background:rgba(209,36,47,.08);font-size:13.5px;line-height:1.55}
+.aowarn .aoh{color:var(--bad);font-weight:800;font-size:15px;margin-bottom:4px}.aowarn .chk{display:flex;gap:6px;align-items:flex-start;margin:6px 0 0;font-weight:600}
 .wtrial{display:flex;align-items:center;gap:10px;padding:6px 10px;background:#fef3c7;color:#78350f;border-top:1px solid #f59e0b;font-size:13.5px;font-weight:600}
 .wtrial span{flex:1 1 auto}.wtrial .b{flex:0 0 auto;padding:6px 16px}
 button.b.start{background:var(--ok);border-color:var(--ok);color:#fff;font-weight:700;padding:8px 14px}
@@ -273,6 +282,7 @@ progress{width:100%;height:10px}
   <span id="pillLock" class="pill warn" hidden>設定已鎖定</span><span id="pillImu" class="pill">感測器</span><span id="pillNet" class="pill">網路</span></div>
  <div class="fbar" id="fbar"><div class="ft"><span class="fbadge" id="fBadge">狀態</span><b id="fState">--</b><span class="sub" id="fDetail"></span></div><div class="fprog" id="fProgBox" hidden><i id="fProg"></i></div>
   <button class="b start" id="btnStart" hidden>開始起飛程序</button><button class="b" id="btnCancel" hidden>取消倒數</button><button class="b estop" id="btnEstop" hidden>緊急停止(連按三下)</button></div>
+ <div class="asoff" id="asOffBar" hidden><b>⚠ 安全開關已停用</b><span id="asOffText"></span></div>
  <div class="wtrial" id="wifiTrial" hidden><span id="wifiTrialText"></span><button class="b pri" id="btnWifiKeep">保持</button></div>
  <div class="wtrial" id="fwBar" hidden><span id="fwBarText"></span></div>
  <nav><button data-pane="mon" class="on">監看</button><button data-pane="prof">計時器</button><button data-pane="comp">角度補償</button><button data-pane="set">設定</button><button data-pane="log">紀錄</button><button data-pane="inst">安裝</button><button data-pane="esc">電變</button><button data-pane="sys">系統</button></nav>
@@ -540,6 +550,7 @@ const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔�
  pwlong:'密碼太長.',hostbad:'裝置名稱只能用英文,數字與連字號,且不可頭尾為連字號.',tmo:'等待秒數要在 10~120.',
  txp:'發射功率超出範圍.',savefail:'寫入失敗,請再試一次.',badform:'欄位不齊.',busy:'飛行中不能執行.',
  updated:'更新完成,重新開機中…',updatefail:'更新失敗,檔案可能不對.',reboot:'重新開機中…',
+ fwnotours:'這個檔案不是線控飛機控制器的韌體(找不到身分標記),已放棄,目前韌體不變. 2026.09.14.16 和更早的版本沒有標記,不能用上傳的方式安裝.',
  fwchecking:'檢查中…',fwinstalling:'開始下載安裝,請勿斷電.',fwconfirmed:'新韌體已確認.',fwconfirmfail:'確認失敗,請重新整理網頁.',
  fwbusy:'更新作業進行中,請稍候.',fwpending:'目前的韌體還沒確認,請重新整理網頁後再試.',fwdirty:'有未儲存的設定,請先儲存或放棄(更新會重新開機).',
  fwstale:'版本資訊已經變了,請重新檢查更新.',fwnotnewer:'網站上的版本沒有比目前的新,不需要更新.',nosta:'要連上家用 WiFi(能上網)才能檢查更新,自身熱點模式沒有網路.',nomem:'記憶體不足,請重新開機後再試.',
@@ -613,7 +624,7 @@ const PROF_LAYOUT=[
 ];
 const PROF_NOTE='時間都從馬達開始轉算起. 總飛行時間到了,或飛行中觸地提早降落(設定頁開啟),就開始降落;降落期間不做角度補償. 油門上下限在角度補償頁.';
 const SET_LAYOUT=[
- {t:'啟動與倒數',k:['gestureEnable','startLevel','gestureG','twistCancel','twistBlock','armWait','countdownSec','disturbG','disturbMode','extendSec'],
+ {t:'啟動與倒數',k:['gestureEnable','startLevel','gestureG','twistCancel','twistBlock','armSwitchOff','armWait','countdownSec','disturbG','disturbMode','extendSec'],
   n:'推一下飛機(啟動手勢)或按上方「開始起飛程序」→ 等飛機放穩 → 按下安全開關 → 倒數 → 馬達啟動. 安全開關放穩前或放穩後按都可以,超過「安全開關等待上限」沒按就自動取消. 倒數中可按「取消倒數」或扭轉機尾取消.'},
  {t:'觸地提早降落',k:['earlyLand','earlyLandVib','earlyLandHold','earlyLandTilt','earlyLandArm'],n:'飛行中想提早結束時,讓飛機正飛水平貼地滑行,機輪在地上彈跳的抖動持續一段時間,就開始降落. 門檻請參考「紀錄」頁的實際數值.',id:'earlyCard'},
  {t:'降落與撞擊',k:['touchdownG','touchdownStill','landingTimeout','crashEnable','crashG'],n:'降落中以下任一成立就關馬達:觸地衝擊超過門檻;完全靜止;地面滑行抖動持續達標(用提早降落的抖動設定,不管開關). 觸地判斷在減力秒數走完後才開始;都沒成立就再等保險時間到.'},
@@ -740,6 +751,39 @@ function makeSelect(scope,key,label,options,hint){
  const sel=el.querySelector('select');sel.onchange=()=>setParam(scope,key,sel.value);
  WIDGETS.push({scope,key,el,sel});
  return el;
+}
+// 忽略安全開關(GG 2026-09-14):停用要展開風險說明,三項全部打勾才送出;恢復使用一鍵. 都要按儲存才生效.
+function makeArmOff(){
+ const el=document.createElement('div');el.className='prm';el.id='armOffBox';
+ el.innerHTML=`<div class="aorow"><span>安全開關</span><b id="armOffState">--</b>
+   <button class="b danger sm" id="btnArmOffOpen" style="margin-left:auto">停用安全開關…</button><button class="b pri sm" id="btnArmOn" hidden style="margin-left:auto">恢復使用安全開關</button></div>
+  <div class="aowarn" id="armOffWarn" hidden>
+   <div class="aoh">⚠ 停用後,不按安全開關也會倒數,倒數完馬達就啟動</div>
+   <div>「上電後直接倒數」:<b>接上電池,飛機放平就開始倒數</b>. 「推一下才倒數」:推一下飛機或按網頁開始,飛機放穩就開始倒數.</div>
+   <div>安全開關是接錯電池,搬運時誤觸,手還在螺旋槳旁邊時,防止馬達啟動的最後一道保護. 停用後網頁每一頁上方會一直顯示紅色警告,直到恢復使用;事件紀錄也會記下這趟沒有經過安全開關.</div>
+   <label class="chk"><input type="checkbox" class="aock"><span>我了解停用後,接上電池或推一下飛機就會倒數,倒數完馬達會啟動.</span></label>
+   <label class="chk"><input type="checkbox" class="aock"><span>接電池與倒數時,我會確認螺旋槳旋轉範圍內沒有人,手不靠近螺旋槳.</span></label>
+   <label class="chk"><input type="checkbox" class="aock"><span>我自行承擔停用安全開關的風險.</span></label>
+   <div class="row" style="margin:8px 0 0"><button class="b danger" id="btnArmOffGo" disabled>確認停用安全開關</button><button class="b" id="btnArmOffCancel">取消</button></div>
+  </div>`;
+ const q=s=>el.querySelector(s),cks=[...el.querySelectorAll('.aock')];
+ const send=async v=>{try{const r=await post('/api/set',{p:'s',k:'armSwitchOff',v});
+   toast(r.ok?(v?'已停用安全開關,按上方的儲存才生效.':'已恢復使用安全開關,按上方的儲存才生效.'):(CODES[r.code]||r.code),!r.ok||!!v)}catch(e){toast('連線失敗.',true)}
+  q('#armOffWarn').hidden=true;loadVals()};
+ q('#btnArmOffOpen').onclick=()=>{cks.forEach(c=>c.checked=false);q('#btnArmOffGo').disabled=true;q('#armOffWarn').hidden=false};
+ cks.forEach(c=>c.onchange=()=>{q('#btnArmOffGo').disabled=!cks.every(x=>x.checked)});
+ q('#btnArmOffCancel').onclick=()=>{q('#armOffWarn').hidden=true};
+ q('#btnArmOffGo').onclick=()=>{if(cks.every(x=>x.checked))send(1)};
+ q('#btnArmOn').onclick=()=>send(0);
+ return el;
+}
+function armOffRender(){
+ const box=$('armOffBox');if(!box||!VALS)return;
+ const off=!!VALS.shared.armSwitchOff,st=$('armOffState');
+ st.textContent=off?'⚠ 已停用(不按開關也會倒數)':'使用中(按下才倒數)';st.style.color=off?'var(--bad)':'var(--ok)';
+ $('btnArmOffOpen').hidden=off;$('btnArmOn').hidden=!off;
+ if(off)$('armOffWarn').hidden=true;
+ for(const w of WIDGETS)if(w.key==='armWait')w.el.hidden=off;   // 不等開關,等待上限用不到
 }
 function renderWidgets(){
  for(let i=WIDGETS.length-1;i>=0;i--)if(!WIDGETS[i].el.isConnected)WIDGETS.splice(i,1);   // 曲線卡重建後丟掉舊元件
@@ -1114,6 +1158,7 @@ function buildShared(){
    else if(k==='earlyLand')c.appendChild(makeSelect('s',k,'觸地提早降落',['關閉','開啟'],'建議先關閉,到紀錄頁看過特技與地面滑行各自的 Z 軸抖動,確定門檻不會誤觸再開啟. 開啟時收輪不作用.'));
    else if(k==='gearEnable')c.appendChild(makeSelect('s',k,'收輪功能',['關閉','開啟'],'沒有收腳的飛機保持關閉. 觸地提早降落開啟時不收輪:不知道什麼時候要貼地降落,輪子要一直放著.'));
    else if(k==='gearReverse')c.appendChild(makeSelect('s',k,'舵機方向',['正轉(收起在上限)','反轉(收起在下限)'],'正轉:放下在下限,收起在上限. 反轉:相反. 按「試收輪」看方向,收的方向反了就切換.'));
+   else if(k==='armSwitchOff')c.appendChild(makeArmOff());
    else if(k==='buzzerLow')c.appendChild(makeSelect('s',k,'蜂鳴器響的電位',['高電位響','低電位響'],'依蜂鳴器模組選擇. 一般有源蜂鳴器正極接 GPIO7 是高電位響;模組標示「低電平觸發」選低電位響. 改完按上方的儲存.'));
    else if(k==='crashEnable')c.appendChild(makeSelect('s',k,'撞擊斷電',['關閉','開啟'],'開啟時,飛行中衝擊超過撞擊門檻立即關馬達.'));
    else if(k==='escRpm')c.appendChild(makeSelect('s',k,'轉速回傳(雙向 DShot)',['關閉','開啟'],'電變把馬達轉速送回來顯示. 只有 DShot300 可用,電變韌體要支援雙向 DShot(Bluejay,AM32,BLHeli_32 32.7 以上). 出廠開啟,但只在 DShot300 作用. <b>不支援的電變開了可能不解鎖,不轉</b>:換成 DShot300 後先用手動輸出確認馬達會轉,不轉就關閉. 儲存並重新開機生效. 收不到回傳只顯示警告,不擋起飛.'));
@@ -1182,6 +1227,7 @@ function render(){
  document.querySelectorAll('#noseSeg button').forEach(b=>b.classList.toggle('on',Number(b.dataset.v)===s.noseRight));
  const st=$('speedText');if(st){const v=2*Math.PI*s.lineLength/s.lapSec;st.textContent=`換算飛行速度約 ${v.toFixed(1)} m/s(${(v*3.6).toFixed(0)} km/h)`}
  renderWidgets();
+ armOffRender();
  const dirty=valsDirty();
  $('saveBar').hidden=!dirty;$('topBar').classList.toggle('dirty',dirty);
  bkRender();
@@ -1314,7 +1360,7 @@ function renderStatus(s){
  $('plane').setAttribute('transform',`rotate(${noseRightNow?-s.p:s.p})`);
  $('acc').textContent=s.a.toFixed(2)+' g';
  $('still').textContent=s.st?`是(${s.sts.toFixed(1)} 秒)`:'否';
- {const e=$('armSw');e.textContent=s.f.arm?'已按下':'沒按下';e.style.color=s.f.arm?'var(--ok)':'var(--mute)'}
+ {const e=$('armSw');e.textContent=(s.f.arm?'已按下':'沒按下')+(s.asoff?'(已停用)':'');e.style.color=s.asoff?'var(--bad)':s.f.arm?'var(--ok)':'var(--mute)'}
  {const t=rpmText(s);$('esc').textContent=(s.proto?`DShot ${s.dsh}`:s.esc+' µs')+(t?(t.ok?` · ${t.rpm} RPM`:' · 轉速收不到'):'')}
  $('gyro').textContent=s.g.map(v=>v.toFixed(1)).join(' / ');
  $('bias').textContent=s.b.map(v=>v.toFixed(2)).join(' / ');
@@ -1347,6 +1393,9 @@ function renderStatus(s){
  const modes=['連線中','家用 WiFi','自身熱點'];
  pill('pillNet',s.ws===0?'warn':'ok',modes[s.ws]||'?');
  $('pillLock').hidden=!s.lock;
+ // 忽略安全開關:每一頁上方都一直顯示(含還沒儲存的值,寧可多警告)
+ $('asOffBar').hidden=!s.asoff;
+ if(s.asoff)$('asOffText').textContent=s.f.ge?'推一下飛機或按開始,放穩後就倒數,不必按開關. 倒數完馬達啟動.':'接上電池,飛機放平就開始倒數,倒數完馬達啟動. 接電池前確認螺旋槳旁沒有人.';
  $('netMode').textContent=modes[s.ws]+(s.ws===0?`(剩 ${s.cd} 秒)`:'');
  $('netIp').textContent=s.ip||'--';
  $('netRssi').textContent=s.ws===1?s.rssi+' dBm':'--';
@@ -1436,6 +1485,7 @@ function evText(e){
   case 28:{const sec=Math.round(a),dur=sec>=60&&sec%60===0?`${sec/60} 分鐘`:`${sec} 秒`;
    if(arg===3)return {c:'land',m:`等安全開關超過 ${dur},自動取消起飛程序`,h:'要飛再推一下飛機或按「開始起飛程序」. 等待時間在設定頁「安全開關等待上限」調整.'};
    if(arg===4)return {c:'land',m:`上電自動倒數:等安全開關超過 ${dur},這次通電不再自動倒數`,h:'要飛請拔掉電池再接上. 等待時間在設定頁「安全開關等待上限」調整.'};
+   if(arg===5)return {c:'bad',m:'安全開關已停用:這趟起飛程序不等開關',h:'設定頁「啟動與倒數」停用了安全開關. 要恢復,按「恢復使用安全開關」再儲存.'};
    return arg===2?{c:'good',m:'安全開關按下',h:''}
    :{c:'',m:arg===1?'上電自動倒數:等安全開關按下':'飛機已放穩,等安全開關按下才開始倒數',h:arg===1?'按下安全開關(飛機放平)就開始倒數.':'按下安全開關就開始倒數.'}}
   case 22:return {c:'bad',m:arg?'測試用感測器模擬開啟(USB 序列指令)':'測試用感測器模擬關閉',h:arg?'只有開發測試會出現. 模擬中角度與 G 力都是假的,重新開機即清除.':''};
@@ -1866,7 +1916,7 @@ $('btnRevert').onclick=async()=>{try{const r=await post('/api/revert');toast(COD
 // --- 設定備份碼(GG 2026-09-14,設計見 docs/設定備份碼設計_2026-09-14.md) ---
 // 有未儲存變更時整張卡不能用. 貼上當下就送板子檢查;不是 LP 開頭或檢查碼錯就提示並清空.
 const BK_NAMES={noseAxis:'朝機頭的軸',upAxis:'朝機背的軸',noseRight:'圖示機頭方向',escProtocol:'輸出協定',gestureEnable:'啟動手勢',
- earlyLand:'觸地提早降落',escRpm:'轉速回傳',gearEnable:'機輪收腳',gearReverse:'舵機反轉',buzzerLow:'蜂鳴器電位',phaseMode:'換段方式',upN:'補速曲線點數',dnN:'減速曲線點數'};
+ earlyLand:'觸地提早降落',escRpm:'轉速回傳',gearEnable:'機輪收腳',gearReverse:'舵機反轉',buzzerLow:'蜂鳴器電位',armSwitchOff:'停用安全開關',phaseMode:'換段方式',upN:'補速曲線點數',dnN:'減速曲線點數'};
 const BK_SHARED_ERR=['axis','escrange','pwmhz','twistdeg','gearrange'];
 function bkLabel(item){
  if(item==='act')return '飛行使用的風格';
@@ -1954,12 +2004,37 @@ $('btnWifiSave').onclick=async()=>{
 };
 $('btnReboot').onclick=async()=>{try{const r=await post('/api/reboot');msg('wifiMsg',r.ok,r.code)}catch(e){}};
 $('btnTiming').onclick=()=>post('/api/timing/reset').catch(()=>{});
+// 選好檔案先在瀏覽器找韌體身分標記(板子上傳時也會再檢查一次):不是這個控制器的韌體就不讓上傳,是的話顯示版本新舊.
+// 比對字串拆開寫:網頁本身也在韌體裡,整段連在一起會被當成標記的開頭(板子掃描會因為後面不是版本號而略過,拆開更單純).
+const FW_ID_PREFIX='LPFWID1:'+'ESP32C3-lineplane|';
+let fwFileVer=null;   // null = 還沒檢查,'' = 找不到標記
+function fwVerCmp(a,b){const x=a.split('.').map(Number),y=b.split('.').map(Number);
+ for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1}return 0}
+$('fwFile').onchange=async()=>{
+ const f=$('fwFile').files[0];fwFileVer=null;$('fwMsg').textContent='';if(!f)return;
+ try{
+  const b=new Uint8Array(await f.arrayBuffer()),p=[...FW_ID_PREFIX].map(c=>c.charCodeAt(0));let ver='';
+  for(let i=b.indexOf(p[0]);i>=0&&!ver;i=b.indexOf(p[0],i+1)){
+   let k=1;while(k<p.length&&b[i+k]===p[k])k++;if(k<p.length)continue;
+   let j=i+p.length,v='';while(j<b.length&&v.length<23&&((b[j]>=48&&b[j]<=57)||b[j]===46))v+=String.fromCharCode(b[j++]);
+   if(v&&b[j]===124)ver=v;
+  }
+  fwFileVer=ver;
+  if(!ver){msg('fwMsg',false,'fwnotours');return}
+  const cur=$('fwVer').textContent,c=fwVerCmp(ver,cur);
+  $('fwMsg').className='msg '+(c<0?'bad':'ok');
+  $('fwMsg').textContent=c>0?`檔案版本 ${ver},比目前的 ${cur} 新,可以上傳更新.`:c===0?`檔案版本 ${ver},和目前相同.`:`檔案版本 ${ver},比目前的 ${cur} 舊:上傳後會退回舊版.`;
+ }catch(e){fwFileVer=null}
+};
 $('btnFw').onclick=()=>{
  const f=$('fwFile').files[0];if(!f){msg('fwMsg',false,'請先選擇檔案.');return}
+ if(fwFileVer===''){msg('fwMsg',false,'fwnotours');return}
  const fd=new FormData();fd.append('firmware',f,f.name);
  const x=new XMLHttpRequest(),pg=$('fwProg');pg.hidden=false;pg.value=0;$('btnFw').disabled=true;
  x.upload.onprogress=e=>{if(e.lengthComputable)pg.value=e.loaded*100/e.total};
- x.onload=()=>{let r={};try{r=JSON.parse(x.responseText)}catch(e){}msg('fwMsg',!!r.ok,r.code||'updatefail');$('btnFw').disabled=false};
+ x.onload=()=>{let r={};try{r=JSON.parse(x.responseText)}catch(e){}
+  if(r.ok&&r.ver)msg('fwMsg',true,`更新為 ${r.ver}${r.older?'(退回舊版)':''}完成,重新開機中…`);else msg('fwMsg',!!r.ok,r.code||'updatefail');
+  $('btnFw').disabled=false};
  x.onerror=()=>{msg('fwMsg',false,'上傳中斷.');$('btnFw').disabled=false};
  x.open('POST','/update');x.send(fd);
 };

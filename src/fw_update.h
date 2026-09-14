@@ -1,4 +1,5 @@
-// 版本流水號: r3 (2026-09-14) 版本逐段比數字(fwVersionCompare),狀態加 remoteNewer;板子下載只裝比目前新的版本
+// 版本流水號: r4 (2026-09-14) 韌體身分標記 FW_ID_PREFIX + 上傳檔案掃描(fwIdScan*):網頁上傳找不到標記就不切換
+// 舊: r3 (2026-09-14) 版本逐段比數字(fwVersionCompare),狀態加 remoteNewer;板子下載只裝比目前新的版本
 // 舊: r2 (2026-09-14) 確認時限 WiFi 就緒後 300 → 60 秒,開機後上限 420 → 240 秒(GG)
 // 舊: r1 (2026-09-14) 初版:更新鎖,新韌體確認與自動退回,板子自己下載更新(公開 GitHub 專案)
 #pragma once
@@ -24,6 +25,16 @@ const uint16_t FW_CONFIRM_WINDOW_S = 60;
 // 不管 WiFi 有沒有就緒,開機後最久等這麼久:家用 WiFi 連不上最多 120 秒改開熱點,再加確認時限與餘裕.
 const uint16_t FW_CONFIRM_HARD_LIMIT_S = 240;
 const size_t FW_NOTES_MAX = 400;                // 更新說明最長位元組(UTF-8)
+
+// 韌體身分標記(GG 2026-09-14):韌體裡有一段「LPFWID1:ESP32C3-lineplane|版本|」.
+// 網頁上傳的檔案一邊寫入一邊找,寫完沒找到就放棄不切換:拿錯成別的 ESP32-C3 程式時,格式,晶片,檢查碼都對,
+// 只靠 ESP-IDF 的驗證擋不下來;而且那種程式開機會自己確認,不會退回,還可能亂動電變訊號腳.
+// 允許上傳比目前舊的版本(退回舊版). 2026.09.14.16 和更早發布的版本沒有標記,不能用網頁上傳.
+// 開頭大寫 L 在標記裡只出現一次,掃描比對失敗時不必回溯.
+#define FW_ID_PREFIX "LPFWID1:ESP32C3-lineplane|"
+void fwIdScanReset();
+void fwIdScanFeed(const uint8_t *data, size_t len);
+const char *fwIdScanVersion();   // 找到標記回檔案的版本字串,沒找到回 nullptr
 
 enum FwCheckState : uint8_t {
   FWC_IDLE = 0,     // 還沒檢查
