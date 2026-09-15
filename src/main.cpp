@@ -396,7 +396,7 @@ void setup() {
   const bool calibFlag = escCalibTakeAtBoot();
   settingsBegin();   // 在控制工作啟動前載入:協定,脈寬,安裝方位與角度修正要先就位
   backupSelfCheck();
-  buzzerBegin(sharedSettings.buzzerActiveLow != 0);   // 電位看設定,所以在載入設定之後
+  const bool buzzerOk = buzzerBegin(sharedSettings.buzzerActiveLow);
   const bool escCalibrate = calibFlag && sharedSettings.escProtocol == ESC_PROTO_PWM50;
   const bool escOk = escBegin(sharedSettings.escProtocol, escCalibrate ? sharedSettings.escMaxUs : ESC_US_SAFE_IDLE,
                               sharedSettings.escPwmHz, sharedSettings.escRpmTelemetry != 0);
@@ -412,6 +412,7 @@ void setup() {
   Serial.setTxBufferSize(SERIAL_TX_BUFFER_BYTES);
   Serial.setTxTimeoutMs(0);
   Serial.begin(115200);
+  if (!buzzerOk) Serial.println(F("ERR buzzer PWM unavailable (passive buzzer silent)"));
 
   const bool i2cWasStuck = i2cBusRecover(PIN_I2C_SDA, PIN_I2C_SCL);   // 上次在感測器傳資料到一半時重開,匯流排會卡住
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);

@@ -241,7 +241,7 @@ static const ParamDef SHARED_PARAMS[] = {
     SP("gearMaxUs", PARAM_U16, gearMaxUs, 1500, 2500, 5, 50),
     SP("gearRetractSec", PARAM_U8, gearRetractSec, 1, 120, 1, 5),
     SP("gearTravelSec", PARAM_F32, gearTravelSec, 0, 10, 0.1f, 0.5f),
-    SP("buzzerLow", PARAM_U8, buzzerActiveLow, 0, 1, 1, 1),   // 立即生效
+    SP("buzzerLow", PARAM_U8, buzzerActiveLow, 0, 2, 1, 1),   // 高電位/低電位/無源,立即生效
     SP("armSwitchOff", PARAM_U8, armSwitchOff, 0, 1, 1, 1),   // 1 = 忽略安全開關(網頁要打勾確認)
 };
 

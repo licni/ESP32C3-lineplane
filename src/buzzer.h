@@ -8,8 +8,9 @@
 //   開機就緒(電變解鎖完成,離開 FS_ARMING):滴滴兩聲
 //   等安全開關按下:長音 0.5 秒,每 2.5 秒一次(響 0.5 + 停 2)
 //   倒數:短音,剩越少間隔越短;最後 3 秒連續長音,一直響到馬達啟動
-// low = 低電位響(設定 buzzerLow);待機時改設定下一拍就生效.
+// mode = 有源高電位/有源低電位/無源 2kHz(設定沿用 buzzerLow);待機修改下一拍生效.
 // ============================================================================
 
-void buzzerBegin(bool low);   // 載入設定後馬上呼叫:腳位先設成不響
-void buzzerUpdate(uint32_t nowMs, const FlightStatus &f, bool low);
+enum BuzzerMode : uint8_t { BUZZER_ACTIVE_HIGH = 0, BUZZER_ACTIVE_LOW = 1, BUZZER_PASSIVE = 2 };
+bool buzzerBegin(uint8_t mode);   // 載入設定後先靜音,回傳硬體 PWM 是否就緒
+void buzzerUpdate(uint32_t nowMs, const FlightStatus &f, uint8_t mode);

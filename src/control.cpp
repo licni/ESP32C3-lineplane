@@ -300,7 +300,7 @@ static void controlTask(void *) {
     FlightStatus fst;
     flightGetStatus(fst);
     lastFlightState = fst.state;
-    buzzerUpdate(nowMs, fst, cfg.buzzerActiveLow != 0);
+    buzzerUpdate(nowMs, fst, cfg.buzzerActiveLow);
     uint8_t flags = 0;
     if (groundRoll.level()) flags |= LOG_FLAG_LEVEL;
     if (groundRoll.holdSeconds() >= cfg.earlyLandHoldSec) flags |= LOG_FLAG_ROLL_HOLD;

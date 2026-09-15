@@ -97,6 +97,11 @@ const CodecField GEN4_PROFILE[] = {
     {"takeoffPct", 0, 1, 8}, {"takeoffHold", 0, 0.5f, 8},
 };
 
+// --- 世代 5(2026-09-15):蜂鳴器範圍放寬為 0~2,保留世代 2 原表 ------------------------
+const CodecField GEN5_SHARED[] = {
+    {"buzzerLow", 0, 1, 3},
+};
+
 // --- 共用參數的分區(與網頁分頁一致;★ 登記後永遠不改,參數刪掉也保留) -----------------------------
 struct KeySection {
   const char *key;
@@ -142,6 +147,7 @@ const Generation GENERATIONS[] = {
     {GEN2_SHARED, COUNT_OF(GEN2_SHARED), nullptr, 0},
     {GEN3_SHARED, COUNT_OF(GEN3_SHARED), nullptr, 0},
     {nullptr, 0, GEN4_PROFILE, COUNT_OF(GEN4_PROFILE)},
+    {GEN5_SHARED, COUNT_OF(GEN5_SHARED), nullptr, 0},
 };
 const uint8_t MY_GENERATION = COUNT_OF(GENERATIONS);
 

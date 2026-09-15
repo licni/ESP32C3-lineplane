@@ -761,7 +761,7 @@ const INST_LAYOUT=[
  {t:'機輪收腳',k:['gearEnable','gearRetractSec','gearTravelSec','gearMinUs','gearMaxUs','gearReverse'],id:'gearCard',
   n:'收腳舵機訊號線接 GPIO3. 馬達啟動後到設定秒數收輪,降落開始減力時放輪;緊急停止,撞擊斷電等馬達停下時立即放輪. 開機,待機,倒數中一律放下. 所有計時器共用.'},
  {t:'蜂鳴器',k:['buzzerLow'],id:'buzzCard',
-  n:'有源蜂鳴器(通電就響)接 GPIO7. 開機就緒響「滴滴」;等安全開關按下時每 2.5 秒響一聲長音;倒數時短音越來越急,最後 3 秒連續響到馬達啟動. 待機時一直在響,就是電位選反了,切換後立即生效.'}
+  n:'蜂鳴器訊號接 GPIO7,與控制器共地. 支援有源高電位觸發、有源低電位觸發與無源蜂鳴器(2 kHz). 開機就緒響「滴滴」;等安全開關按下時每 2.5 秒響一聲長音;倒數時短音越來越急,最後 3 秒連續響到馬達啟動. 切換後立即生效.'}
 ];
 const ESC_LAYOUT=[
  {t:'輸出協定',k:['escProtocol','escPwmHz','escRpm','motorPoles'],id:'protoCard',n:'一般電變用 PWM(出廠 100Hz). 開源韌體電變(BLHeli_S,Bluejay,BLHeli_32,AM32)可選 DShot:數位油門,不用校正行程,也不看下面的脈寬. 換協定或頻率要<b>儲存後重新開機</b>才生效,電變也要重新通電.'},
@@ -1330,7 +1330,7 @@ function buildShared(){
    else if(k==='gearEnable')c.appendChild(makeSelect('s',k,'收輪功能',['關閉','開啟'],'沒有收腳的飛機保持關閉. 觸地提早降落開啟時不收輪:不知道什麼時候要貼地降落,輪子要一直放著.'));
    else if(k==='gearReverse')c.appendChild(makeSelect('s',k,'舵機方向',['正轉(收起在上限)','反轉(收起在下限)'],'正轉:放下在下限,收起在上限. 反轉:相反. 按「試收輪」看方向,收的方向反了就切換.'));
    else if(k==='armSwitchOff')c.appendChild(makeArmOff());
-   else if(k==='buzzerLow')c.appendChild(makeSelect('s',k,'蜂鳴器響的電位',['高電位響','低電位響'],'依蜂鳴器模組選擇. 一般有源蜂鳴器正極接 GPIO7 是高電位響;模組標示「低電平觸發」選低電位響. 改完按上方的儲存.'));
+   else if(k==='buzzerLow')c.appendChild(makeSelect('s',k,'蜂鳴器類型',['有源:高電位觸發','有源:低電位觸發','無源蜂鳴器(2 kHz)'],'通電就響的有源模組依標示選高/低電位;需要方波驅動的選無源. 無源模式輸出 2 kHz、50% 占空比,靜音時為低電位. GPIO7 是 3.3V 訊號,需較大電流的蜂鳴器請透過驅動模組連接. 改完按上方的儲存.'));
    else if(k==='crashEnable')c.appendChild(makeSelect('s',k,'撞擊斷電',['關閉','開啟'],'開啟時,飛行中衝擊超過撞擊門檻立即關馬達.'));
    else if(k==='escRpm')c.appendChild(makeSelect('s',k,'轉速回傳(雙向 DShot)',['關閉','開啟'],'電變把馬達轉速送回來顯示. 只有 DShot300 可用,電變韌體要支援雙向 DShot(Bluejay,AM32,BLHeli_32 32.7 以上). 出廠開啟,但只在 DShot300 作用. <b>不支援的電變開了可能不解鎖,不轉</b>:換成 DShot300 後先用手動輸出確認馬達會轉,不轉就關閉. 儲存並重新開機生效. 收不到回傳只顯示警告,不擋起飛.'));
    else if(k==='escProtocol')c.appendChild(makeSelect('s',k,'電變訊號',['PWM(一般電變)','DShot150','DShot300'],'一般電變用 PWM. Bluejay 只能用 DShot. BLHeli_S 的 L 型(24MHz)晶片官方建議 DShot150,其他開源電變用 DShot300. 詳見下方廠牌說明.'));
@@ -2098,7 +2098,7 @@ $('btnRevert').onclick=async()=>{try{const r=await post('/api/revert');toast(COD
 // --- 設定備份碼(GG 2026-09-14,設計見 docs/設定備份碼設計_2026-09-14.md) ---
 // 有未儲存變更時整張卡不能用. 貼上當下就送板子檢查;不是 LP 開頭或檢查碼錯就提示並清空.
 const BK_NAMES={noseAxis:'朝機頭的軸',upAxis:'朝機背的軸',noseRight:'圖示機頭方向',escProtocol:'輸出協定',gestureEnable:'啟動手勢',
- earlyLand:'觸地提早降落',escRpm:'轉速回傳',gearEnable:'機輪收腳',gearReverse:'舵機反轉',buzzerLow:'蜂鳴器電位',armSwitchOff:'停用安全開關',phaseMode:'換段方式',upN:'補速曲線點數',dnN:'減速曲線點數'};
+ earlyLand:'觸地提早降落',escRpm:'轉速回傳',gearEnable:'機輪收腳',gearReverse:'舵機反轉',buzzerLow:'蜂鳴器類型',armSwitchOff:'停用安全開關',phaseMode:'換段方式',upN:'補速曲線點數',dnN:'減速曲線點數'};
 const BK_SHARED_ERR=['axis','escrange','pwmhz','twistdeg','gearrange'];
 function bkLabel(item){
  if(item==='act')return '飛行使用的風格';

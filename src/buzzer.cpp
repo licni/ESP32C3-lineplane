@@ -14,7 +14,13 @@ static const float COUNT_INTERVAL_PER_S = 0.06f;
 static const float COUNT_INTERVAL_MIN_S = 0.2f;
 static const float COUNT_INTERVAL_MAX_S = 1.2f;
 
-static bool activeLow = false;
+// 固定頻率與解析度,核心會配獨立計時器,不與電變/舵機的 14 bit PWM 共用.
+// 開機一次掛好,控制工作只改 duty,不配置硬體也不忙等產生聲波.
+static const uint16_t BUZZER_HZ = 2000;
+static const uint8_t BUZZER_BITS = 8;
+static const uint32_t BUZZER_HIGH = 255;   // ledcWrite 將最大值轉成持續高電位
+static uint8_t outputMode = 0;
+static bool attached = false;
 static bool outOn = false;
 static bool readyDone = false;
 static uint32_t readyStartMs = 0;
@@ -24,21 +30,28 @@ static uint32_t armWaitStartMs = 0;
 static uint32_t nextCountBeepMs = 0;
 static uint32_t countBeepEndMs = 0;
 
-static void writeOut(bool on, bool low) {
-  if (on == outOn && low == activeLow) return;
+static void writeOut(bool on, uint8_t mode) {
+  if (on == outOn && mode == outputMode) return;
   outOn = on;
-  activeLow = low;
-  digitalWrite(PIN_BUZZER, on != low ? HIGH : LOW);
+  outputMode = mode;
+  const uint32_t duty = mode == BUZZER_PASSIVE ? (on ? 128 : 0)
+                                              : (on != (mode == BUZZER_ACTIVE_LOW) ? BUZZER_HIGH : 0);
+  if (attached) ledcWrite(PIN_BUZZER, duty);
+  else digitalWrite(PIN_BUZZER, mode == BUZZER_PASSIVE ? LOW : (duty ? HIGH : LOW));
 }
 
-void buzzerBegin(bool low) {
-  activeLow = low;
+bool buzzerBegin(uint8_t mode) {
+  outputMode = 255;   // 強制寫入第一次靜音
   outOn = false;
-  digitalWrite(PIN_BUZZER, low ? HIGH : LOW);   // 先設準位再切輸出,切換瞬間不會響一下
+  digitalWrite(PIN_BUZZER, mode == BUZZER_ACTIVE_LOW ? HIGH : LOW);
   pinMode(PIN_BUZZER, OUTPUT);
+  attached = ledcAttach(PIN_BUZZER, BUZZER_HZ, BUZZER_BITS);
+  if (!attached) pinMode(PIN_BUZZER, OUTPUT);
+  writeOut(false, mode);
+  return attached;
 }
 
-void buzzerUpdate(uint32_t now, const FlightStatus &f, bool low) {
+void buzzerUpdate(uint32_t now, const FlightStatus &f, uint8_t mode) {
   bool on = false;
 
   // 等安全開關(起飛程序等待中,或上電自動倒數在待機等):從開始等的那一刻起算週期,第一聲馬上響
@@ -82,5 +95,5 @@ void buzzerUpdate(uint32_t now, const FlightStatus &f, bool low) {
   }
 
   lastState = f.state;
-  writeOut(on, low);
+  writeOut(on, mode);
 }

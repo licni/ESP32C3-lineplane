@@ -103,7 +103,7 @@ struct SharedSettings {
   uint8_t armWaitMin;
   float gearTravelSec;       // 舵機從一端走到另一端的秒數(0 = 直接跳)
   // --- v9 起加在尾端:蜂鳴器(GG 2026-09-14;v4~v8 的存檔讀進來時補預設) ---
-  uint8_t buzzerActiveLow;   // 0 = 高電位響(出廠),1 = 低電位響
+  uint8_t buzzerActiveLow;   // 沿用欄位與版面:0 = 有源高電位(出廠),1 = 有源低電位,2 = 無源 2kHz
   // 忽略安全開關(GG 2026-09-14):1 = 不用按開關就倒數,讓使用者真的可以上電直接飛. 出廠 0.
   // 用 v9 的預留位元組(舊存檔是 0 = 要按開關),版面不變. 網頁開啟時要打勾確認風險,置頂一直顯示警告.
   uint8_t armSwitchOff;
