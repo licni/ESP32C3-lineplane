@@ -86,6 +86,16 @@
 // 舊: r3 (2026-09-13) 數字放大,斜坡改稱加力/減力秒數,換段方式(線性/階梯),曲線點分框,觸地提早降落設定,監看頁最近觸地衝擊
 // 舊: r2 (2026-09-13) 加風格頁(六組,命名/選用/複製/回預設,時間軸,斜坡,上下限,補償曲線數值)與設定頁(方位,啟動,降落撞擊,速度,電變脈寬);參數一律 +/- 粗細調
 // 舊: r1 (2026-09-13) 初版:監看頁(飛機側視姿態圖,感測器與控制迴圈狀態),系統頁(WiFi,韌體更新)
+// r85 (2026-09-15) 三軸格標籤緊貼自己的數字(數字接在標籤後),欄間加細分隔線,避免前一個數字看起來屬於下一個標籤.
+// r84 (2026-09-15) 角速度/零點改獨占一整排的三等分固定欄(頭/翼/背各一欄單行靠右),拿掉這兩格的自動縮字與兩行排法,數值變動不再換行或改框高.
+// r83 (2026-09-15) 角速度/零點固定兩位小數與負號欄,三軸固定位置,不隨正負/位數自動換行.
+// r82 (2026-09-15) 監看數值恢復 17px,僅對實際溢出的欄位自動縮字,維持小格尺寸.
+// r81 (2026-09-15) 監看資訊框縮為緊湊等高小格,手機兩欄/桌面三欄,減少留白與框線重量.
+// r80 (2026-09-15) 監看資訊框固定標題/數值高度,長資訊加寬,避免數值換行造成版面跳動.
+// r79 (2026-09-15) SuperGG 字母彈跳改正向延遲,由左到右依序開始.
+// r78 (2026-09-15) 深色頁籤加亮底色/邊框/文字,選中改實心琥珀底與深色粗字.
+// r77 (2026-09-15) 移除無用的飛行控制台圖案與識別列,保留科技風格.
+// r76 (2026-09-15) 航電控制台:石墨黑/琥珀橙,工程格線,儀表數字與飛機識別.
 #pragma once
 #include <Arduino.h>
 
@@ -94,22 +104,17 @@ const char WEB_PAGE_HTML[] PROGMEM = R"HTML(<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>線控飛機油門控制器</title>
 <style>
-/* 暖色系主題(GG 2026-09-15:藍色對眼睛不好):主色焦橙,底色米白/深咖啡;綠 = 正常,紅 = 危險不變 */
-:root{color-scheme:light dark;--bg:#f6f0e8;--card:#fffcf7;--ink:#2b221c;--mute:#7b6d61;--line:#e6dacb;--accent:#c2551a;--accentBg:rgba(194,85,26,.10);
---ok:#3d8a36;--warn:#a86a00;--bad:#c62828;--plane:#3a2f28;--sky:#fbefdf;--ground:#eadbc6}
-@media (prefers-color-scheme:dark){:root{--bg:#16110d;--card:#221a14;--ink:#f1e6da;--mute:#a8978a;
---line:#3b2f26;--accent:#d9722f;--accentBg:rgba(217,114,47,.16);--ok:#6fbf5f;--warn:#e0a83a;--bad:#ff6b5b;--plane:#e6d7c8;--sky:#2e2118;--ground:#3a2d22}}
 *{box-sizing:border-box}
 a{color:var(--accent)}
 input,progress{accent-color:var(--accent)}
-::selection{background:rgba(217,114,47,.35);color:inherit}
+::selection{background:rgba(240,179,91,.35);color:inherit}
 /* 頁尾作者(GG):每個分頁最下方,SuperGG 要醒目 */
 .credit{display:flex;align-items:baseline;justify-content:center;flex-wrap:wrap;gap:4px 22px;padding:22px 16px 30px;margin-top:8px;border-top:1px solid var(--line);color:var(--mute);font-size:14px}
 /* 設計者署名 SuperGG(GG:浮誇一點,七彩霓虹 + 動畫):每個字母一段彩虹漸層接起來,整體色相輪轉(光暈跟著變色),字母波浪跳動,兩側星星閃爍 */
 .credit .gg{position:relative;display:inline-flex;font-size:32px;font-weight:900;letter-spacing:.03em;padding:4px 20px;animation:ggHue 4s linear infinite}
 .credit .gg i{font-style:normal;display:inline-block;color:transparent;-webkit-background-clip:text;background-clip:text;
  background-image:linear-gradient(90deg,#ff1f5a,#ff8a00,#ffd400,#3ddc4a,#00c2ff,#7a5cff,#e040fb);background-size:700% 100%;
- background-position:calc(var(--i)*100%/6) 0;animation:ggWave 1.6s ease-in-out infinite;animation-delay:calc(var(--i)*-.14s)}
+ background-position:calc(var(--i)*100%/6) 0;animation:ggWave 1.6s ease-in-out infinite;animation-delay:calc(var(--i)*.14s)}
 .credit .gg::before,.credit .gg::after{content:'✦';position:absolute;font-size:15px;color:#ffd400;animation:ggTwinkle 1.8s ease-in-out infinite}
 .credit .gg::before{left:0;top:0}
 .credit .gg::after{right:0;bottom:2px;animation-delay:-.9s}
@@ -362,6 +367,58 @@ details.card>summary{cursor:pointer;padding:2px 0}
 .ev.bad .em>b{color:var(--bad)}.ev.good .em>b{color:var(--ok)}.ev.dim{color:var(--mute)}
 progress{width:100%;height:10px}
 [hidden]{display:none!important}
+/* 航電面板:低彩度石墨底,琥珀標記;離線可用,保留控制項排列與警示色. */
+:root{color-scheme:dark;--bg:#111315;--card:#1b1e21;--ink:#edece6;--mute:#a8aaa6;--line:#3b3f41;--accent:#f0b35b;--accentBg:rgba(240,179,91,.10);--ok:#38804c;--warn:#946014;--bad:#c93636;--plane:#e9e5d9;--sky:#20272a;--ground:#302a21;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+body{background-image:linear-gradient(rgba(240,179,91,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(240,179,91,.025) 1px,transparent 1px);background-size:32px 32px}
+header{box-shadow:0 6px 24px #0005;border-top:2px solid var(--accent)}
+.bar{background:#151719}.bar h1{letter-spacing:.04em}
+.bar h1::before{content:'';display:inline-block;width:7px;height:14px;margin-right:8px;background:var(--accent);vertical-align:-2px;transform:skew(-15deg)}
+.pill{border-radius:4px;font-size:12px;font-weight:600}
+.fbar .fbadge{border-radius:3px;background:#584020;color:#ffe4b8}
+.fbar.reject,.fbar.reject .sub{color:#7f1d1d}.fbar.done .fbadge{color:#161819}
+nav{gap:5px;padding:6px;counter-reset:panel;background:#151719}
+nav button{counter-increment:panel;border:1px solid #666c70;border-radius:4px;background:#30363a;color:#e4e7e5;font-weight:600;padding:7px 2px}
+nav button::before{content:counter(panel,decimal-leading-zero);font:10px var(--mono);margin-right:5px;opacity:.8}
+nav button.on{color:#21190e;background:var(--accent);border-color:#ffda99;font-weight:800;box-shadow:inset 0 -3px #a66b21,0 0 0 1px #f0b35b33}
+.card{border-radius:6px;border-top-color:#50504a;box-shadow:0 3px 12px #0003;padding:12px 14px;margin-bottom:10px}
+.card h2{letter-spacing:.035em;margin-bottom:8px}
+.card h2::before{content:'';width:3px;height:13px;background:var(--accent);flex:0 0 auto;margin-right:5px}
+.card h3.grp{color:var(--accent)}
+.stat{background:#15181a;border-radius:4px;padding:7px 9px;border-left:2px solid #665034}
+.stat .k{margin-bottom:4px}.stat .v{font-family:var(--mono);font-size:17px}
+/* 小型儀表格:單行標題 + 固定兩行數值,更新不改尺寸;極長資料仍可在格內捲動查看. */
+.sensor-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+.sensor-grid .stat{padding:5px 7px;border:1px solid #383d40;border-radius:4px;background:#171a1c}
+.sensor-grid .stat .k{height:15px;line-height:15px;font-size:11.5px;margin-bottom:2px;white-space:nowrap;overflow:auto}
+.sensor-grid .stat .v{height:34px;line-height:17px;font-size:17px;font-weight:600;overflow:auto}
+/* 三軸格(角速度/零點):獨占一整排,固定三等分欄,每軸單行靠右;數值怎麼變都不換行,不縮字,框高固定 */
+.sensor-grid .stat.axes{grid-column:1/-1}
+.sensor-grid .stat .v.ax{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:7px;height:20px;line-height:20px;overflow:hidden;white-space:nowrap}
+.v.ax>span{display:flex;align-items:baseline;gap:5px;min-width:0;overflow:hidden}
+.v.ax>span+span{border-left:1px solid var(--line);padding-left:7px}
+.v.ax i{font:400 11.5px system-ui,sans-serif;color:var(--mute)}
+.v.ax b{font-weight:600}
+@media (min-width:600px){.sensor-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.big{font-family:var(--mono);color:var(--accent);font-size:46px;letter-spacing:-.04em}
+.att svg{border:1px solid var(--line);border-radius:4px}
+.att .read{padding:10px;background:#15181a;border:1px solid var(--line);border-radius:4px}
+.att .rd2 b,.man-read b,.prm .val{font-family:var(--mono)}
+.prm .val{background:#101214;border-color:#5a5b53;border-radius:4px;color:#ffe1ae}
+input[type=text],input[type=password],input[type=number],select,.bktext{border-radius:4px;background:#121517}
+button.b{border-radius:4px;background:#262a2d;font-weight:600;box-shadow:inset 0 1px #ffffff08}
+button.b.pri,.seg button.on,.bksel button.on,.seg.phseg button.on,.prm .ctl .b.st.on{color:#21190e;background:var(--accent);border-color:var(--accent)}
+button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
+.seg,.seg.phseg,.bksel button,.bkprof,.bks,.pt,.wgrp,.cnt2 .prm,.gesture,.side,.evbox,.subd,.brand,.inst-views figure{border-radius:4px}
+.bkprof{border-width:1px;border-left-width:3px}
+.bksel button{font-size:15px}.bksel button.on{box-shadow:none}
+.evbox{background:#121517}.ev{padding-top:6px;padding-bottom:6px}
+.msg.ok,.ev.good .em>b{color:#88d39a}.msg.bad,.sub.bad,.ev.bad .em>b,.ev.stop .em>b,.aowarn .aoh{color:#ff9292}
+.ev.land .em>b{color:#f0b35b}
+.credit{border-top-style:dashed;font-size:12px}
+:where(button,input,select,textarea,summary,a):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (hover:hover){button.b:not(:disabled):hover,nav button:hover,.bksel button:hover{filter:brightness(1.16);border-color:var(--accent)}}
+@media (max-width:600px){.card{padding:10px}nav button::before{display:none}nav button{min-height:36px}}
+@media (prefers-reduced-motion:reduce){.asoff{animation:none}.fbar .fprog i{transition:none}}
 </style></head><body>
 <header>
  <div class="bar" id="topBar"><h1>線控飛機油門控制器</h1>
@@ -375,7 +432,6 @@ progress{width:100%;height:10px}
  <nav><button data-pane="mon" class="on">監看</button><button data-pane="prof">計時器</button><button data-pane="comp">角度補償</button><button data-pane="set">設定</button><button data-pane="log">紀錄</button><button data-pane="inst">安裝</button><button data-pane="esc">電變</button><button data-pane="sys">系統</button><button data-pane="bak">備份</button></nav>
 </header>
 <main>
-
 <section id="mon">
  <div class="card">
   <h2>機頭角度</h2>
@@ -418,16 +474,16 @@ progress{width:100%;height:10px}
  <div class="card">
   <h2>感測器與輸出<span class="h2r"><button class="b sm" id="btnTiming">清除迴圈紀錄</button></span></h2>
   <div class="cnote">靜止時自動學習陀螺儀零點. 觸地衝擊只記錄 80 毫秒內結束的短衝擊,拿飛機輕敲地面看數值,用來決定觸地門檻. 「清除迴圈紀錄」把控制迴圈的最長執行與延遲歸零.</div>
-  <div class="grid">
+  <div class="grid sensor-grid">
    <div class="stat"><div class="k">加速度大小</div><div class="v" id="acc">--</div></div>
    <div class="stat"><div class="k">靜止</div><div class="v" id="still">--</div></div>
    <div class="stat"><div class="k">安全開關(GPIO21)</div><div class="v" id="armSw">--</div></div>
    <div class="stat"><div class="k">電變輸出</div><div class="v" id="esc">--</div></div>
    <div class="stat"><div class="k">迴圈 最長執行 / 延遲</div><div class="v" id="timing">--</div></div>
-   <div class="stat"><div class="k">角速度 °/秒 頭/翼/背</div><div class="v" id="gyro">--</div></div>
-   <div class="stat"><div class="k">陀螺儀零點 °/秒</div><div class="v" id="bias">--</div></div>
    <div class="stat"><div class="k">最近觸地衝擊</div><div class="v" id="impact">--</div></div>
    <div class="stat"><div class="k">Z 軸抖動 / 正飛水平</div><div class="v" id="vib">--</div></div>
+   <div class="stat axes"><div class="k">角速度 °/秒</div><div class="v ax" id="gyro"><span><i>頭</i><b>--</b></span><span><i>翼</i><b>--</b></span><span><i>背</i><b>--</b></span></div></div>
+   <div class="stat axes"><div class="k">陀螺儀零點 °/秒</div><div class="v ax" id="bias"><span><i>頭</i><b>--</b></span><span><i>翼</i><b>--</b></span><span><i>背</i><b>--</b></span></div></div>
   </div>
  </div>
 </section>
@@ -1520,6 +1576,23 @@ $('btnFwInstall').onclick=async()=>{
  try{const r=await post('/api/fw/install',{ver:FW.rver});toast(CODES[r.code]||r.code,!r.ok)}catch(e){toast('連線失敗.',true)}
  fwLoad()};
 let inverted=false;
+// 三軸格只換 <b> 裡的數字;格式最多 6 字元(角速度 ±999.9,超過 1000 改整數 ±2000;零點兩位小數),欄寬固定不會換行
+function setAxes(id,values,dec){
+ const b=document.getElementById(id).querySelectorAll('b');
+ values.forEach((v,i)=>{b[i].textContent=v.toFixed(Math.abs(v)>=999.95?0:dec)});
+}
+// 只縮放真正超出兩行的數值;寬度/內容相同時不重算,文字變短會回到原始字級. 三軸格固定版面,不參與縮字
+function fitSensorValues(){
+ document.querySelectorAll('.sensor-grid .v:not(.ax)').forEach(e=>{
+  const w=e.clientWidth;if(!w)return;
+  const key=w+'|'+e.textContent;if(e._fitKey===key)return;
+  e.style.fontSize='17px';
+  const over=()=>e.scrollHeight>e.clientHeight||e.scrollWidth>e.clientWidth;
+  for(let size=16.5;size>=11&&over();size-=.5)e.style.fontSize=size+'px';
+  e._fitKey=e.clientWidth+'|'+e.textContent;
+ });
+}
+window.addEventListener('resize',()=>requestAnimationFrame(fitSensorValues));
 function renderStatus(s){
  ensureActiveProfile(s.act);
  drawMonitorCurve(s);
@@ -1543,8 +1616,8 @@ function renderStatus(s){
  $('still').textContent=s.st?`是(${s.sts.toFixed(1)} 秒)`:'否';
  {const e=$('armSw');e.textContent=(s.f.arm?'已按下':'沒按下')+(s.asoff?'(已停用)':'');e.style.color=s.asoff?'var(--bad)':s.f.arm?'var(--ok)':'var(--mute)'}
  {const t=rpmText(s);$('esc').textContent=(s.proto?`DShot ${s.dsh}`:s.esc+' µs')+(t?(t.ok?` · ${t.rpm} RPM`:' · 轉速收不到'):'')}
- $('gyro').textContent=s.g.map(v=>v.toFixed(1)).join(' / ');
- $('bias').textContent=s.b.map(v=>v.toFixed(2)).join(' / ');
+ setAxes('gyro',s.g,1);
+ setAxes('bias',s.b,2);
  $('timing').textContent=`${(s.ex/1000).toFixed(1)} ms / ${s.late} ms`;
  $('vib').textContent=s.vib.toFixed(2)+' g / '+(s.lvl?'是':'否');
  // 設定頁:手勢試推燈與提早降落即時狀態
@@ -1588,6 +1661,7 @@ function renderStatus(s){
  // 別的裝置或序列埠存檔後,這裡的未儲存提示要跟著消失
  if(VALS){if(valsDirty()!==!!s.dirty)loadVals()}
  if(pane==='bak')bkRender();   // 起飛程序鎖定時不能套用
+ if(pane==='mon')fitSensorValues();
 }
 
 let busy=false;
