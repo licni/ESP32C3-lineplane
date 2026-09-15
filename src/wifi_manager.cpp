@@ -1,4 +1,7 @@
-// 版本流水號: r6 (2026-09-14) 起飛程序與飛行中暫停功率試用與設定試用的計時,退回延後到落地(安全審查 B5),事件 27
+// 版本流水號: r9 (2026-09-15) 安全審查 3-C:存了還沒重開生效的 WiFi 設定後按「保持」,只停掉目前的退回計時,試用旗標與備份保留給重開後的新設定
+// 舊: r8 (2026-09-15) wifiValidateConfig:只驗證不存檔(設定備份碼含 WiFi 時,檢查階段用)
+// 舊: r7 (2026-09-15) 熱點密碼可改(NVS 鍵 appw,沒有或不合法用出廠 12345678;試用退回與開關電救援都涵蓋)
+// 舊: r6 (2026-09-14) 起飛程序與飛行中暫停功率試用與設定試用的計時,退回延後到落地(安全審查 B5),事件 27
 // 舊: r5 (2026-09-14) 無線燒錄等資料逾時 1 → 5 秒(低發射功率時中途卡住就放棄)
 // 舊: r4 (2026-09-14) 無線燒錄(ArduinoOTA)接韌體更新保護:寫入中擋起飛,寫完記預期開機分區
 // 舊: r3 (2026-09-14) 家用 WiFi 斷線重連,超過等待秒數改開熱點;設定保護:發射功率試用 15 秒,網頁儲存的設定重開後 3 分鐘內要確認否則退回;連續開關電 3 次回出廠
@@ -55,6 +58,21 @@ const char *wifiApSuffixError(const char *s) {
   return nullptr;
 }
 
+const char *wifiApPasswordError(const char *pw) {
+  const size_t n = strlen(pw);
+  if (n < 8) return "appwshort";
+  if (n > 63) return "appwlong";
+  if (pw[0] == ' ' || pw[n - 1] == ' ') return "appwspace";   // 頭尾空白看不出來,手機輸入時一定連不上
+  // 只收可見 ASCII:中文或全形符號在各家手機的 WPA2 編碼不一定相同,容易連不上
+  for (size_t i = 0; i < n; ++i)
+    if ((uint8_t)pw[i] < 0x20 || (uint8_t)pw[i] > 0x7E) return "appwbad";
+  return nullptr;
+}
+
+static void setDefaultApPassword(WifiConfig &c) {
+  strncpy(c.apPassword, WIFI_AP_PASSWORD_DEFAULT, sizeof(c.apPassword) - 1);
+}
+
 static char activeApSsid[WIFI_SSID_BUFFER] = {0};
 
 String wifiApSsid(bool saved) {
@@ -70,13 +88,14 @@ static const uint32_t TXP_TRIAL_MS = 15000;
 static const uint32_t BOOT_TRIAL_MS = 180000;
 static const uint32_t RESCUE_WINDOW_MS = 5000;
 static const uint8_t RESCUE_BOOTS = 3;
-static const char *const CONFIG_KEYS[] = {"ssid", "pw", "host", "tmo", "forceap", "txp", "apsfx"};
+static const char *const CONFIG_KEYS[] = {"ssid", "pw", "host", "tmo", "forceap", "txp", "apsfx", "appw"};
 
 static uint8_t liveTxp = 0;
 static uint8_t txpPrev = 0;
 static uint32_t txpTrialUntilMs = 0;
 static bool bootTrial = false;
 static uint32_t bootTrialStartMs = 0;   // WiFi 就緒(連上家用或開熱點)才開始計時
+static bool savedPendingReboot = false; // 這次開機後網頁存過 WiFi 設定(試用),還沒重開生效
 static bool bootCountPending = false;
 static uint32_t staLostMs = 0;          // 家用 WiFi 斷線的時刻(0 = 沒斷)
 static uint32_t staRetryMs = 0;
@@ -97,6 +116,7 @@ static void readConfigKeys(Preferences &prefs, WifiConfig &c, const char *prefix
   c.staTimeoutSec = WIFI_STA_TIMEOUT_DEFAULT_S;
   c.txPowerDbm = WIFI_TX_POWER_DEFAULT_DBM;
   strncpy(c.host, DEFAULT_MDNS_HOST, sizeof(c.host) - 1);
+  setDefaultApPassword(c);
   char key[16];
   const auto k = [&](const char *name) { snprintf(key, sizeof(key), "%s%s", prefix, name); return key; };
   // 先 isKey 再讀:不存在的鍵直接 getString 會印一行 NOT_FOUND 紅字,那是預期情況不是錯誤.
@@ -117,6 +137,12 @@ static void readConfigKeys(Preferences &prefs, WifiConfig &c, const char *prefix
     prefs.getString(key, sfx, sizeof(sfx));
     if (!wifiApSuffixError(sfx)) strncpy(c.apSuffix, sfx, sizeof(c.apSuffix) - 1);   // 不合法就用固定開頭
   }
+  // 沒有這個鍵(加這個功能之前的板子,或開關電救援清掉)或不合法:用出廠密碼
+  if (prefs.isKey(k("appw"))) {
+    char pw[WIFI_PASS_BUFFER] = {0};
+    prefs.getString(key, pw, sizeof(pw));
+    if (!wifiApPasswordError(pw)) strncpy(c.apPassword, pw, sizeof(c.apPassword) - 1);
+  }
 }
 
 static bool writeConfigKeys(Preferences &prefs, const WifiConfig &c, const char *prefix) {
@@ -129,6 +155,7 @@ static bool writeConfigKeys(Preferences &prefs, const WifiConfig &c, const char 
   ok = prefs.putBool(k("forceap"), c.forceAp) && ok;
   ok = prefs.putUChar(k("txp"), c.txPowerDbm) && ok;
   ok = (prefs.putString(k("apsfx"), c.apSuffix) == strlen(c.apSuffix)) && ok;
+  ok = (prefs.putString(k("appw"), c.apPassword) == strlen(c.apPassword)) && ok;
   return ok;
 }
 
@@ -149,6 +176,7 @@ static void loadConfig() {
     d.staTimeoutSec = WIFI_STA_TIMEOUT_DEFAULT_S;
     d.txPowerDbm = WIFI_TX_POWER_DEFAULT_DBM;
     strncpy(d.host, DEFAULT_MDNS_HOST, sizeof(d.host) - 1);
+    setDefaultApPassword(d);
     config = d;
     bootTrial = false;
     return;
@@ -188,12 +216,18 @@ static void rescueCheckAtBoot() {
 
 const WifiConfig &wifiConfig() { return config; }
 
-const char *wifiSaveConfig(const WifiConfig &cfg, bool trial) {
+const char *wifiValidateConfig(const WifiConfig &cfg) {
   if (strlen(cfg.password) > 0 && strlen(cfg.password) < 8) return "pwshort";
   if (cfg.staTimeoutSec < WIFI_STA_TIMEOUT_MIN_S || cfg.staTimeoutSec > WIFI_STA_TIMEOUT_MAX_S) return "tmo";
   if (cfg.txPowerDbm < WIFI_TX_POWER_MIN_DBM || cfg.txPowerDbm > WIFI_TX_POWER_MAX_DBM) return "txp";
   if (!wifiHostIsValid(cfg.host)) return "hostbad";
   if (const char *e = wifiApSuffixError(cfg.apSuffix)) return e;
+  if (const char *e = wifiApPasswordError(cfg.apPassword)) return e;
+  return nullptr;
+}
+
+const char *wifiSaveConfig(const WifiConfig &cfg, bool trial) {
+  if (const char *e = wifiValidateConfig(cfg)) return e;
   Preferences prefs;
   if (!prefs.begin(PREF_NAMESPACE, false)) return "savefail";
   bool ok = true;
@@ -205,6 +239,7 @@ const char *wifiSaveConfig(const WifiConfig &cfg, bool trial) {
       ok = writeConfigKeys(prefs, prev, "b_") && ok;
     }
     ok = prefs.putBool("trial", true) && ok;
+    savedPendingReboot = true;   // 新設定要重開才生效;在那之前按「保持」不能把它當成已驗證(安全審查 3-C)
   } else {
     removeBackupKeys(prefs);   // USB 指令直接生效,不需要確認
     bootTrial = false;
@@ -239,6 +274,14 @@ bool wifiTryTxPower(uint8_t dbm) {
 
 void wifiKeep() {
   txpTrialUntilMs = 0;
+  if (savedPendingReboot) {
+    // 網頁(或含 WiFi 的備份碼)剛存了一組還沒重開生效的設定:現在按保持只能確認「目前正在用的」這組不退回,
+    // 新的那組重開後照樣試用 3 分鐘,沒按保持就退回目前這組的前一版備份. 不能在這裡把 trial 與備份清掉,
+    // 否則沒驗證過的新設定就直接固定(安全審查 3-C).
+    bootTrialStartMs = 0;
+    Serial.println(F("WiFi settings kept for now; new settings still on trial after reboot"));
+    return;
+  }
   if (bootTrial) {
     Preferences prefs;
     if (prefs.begin(PREF_NAMESPACE, false)) {
@@ -254,7 +297,8 @@ void wifiKeep() {
 void wifiTrialStatus(float &txpRemainS, bool &bootPending, float &bootRemainS) {
   const uint32_t now = millis();
   txpRemainS = txpTrialUntilMs && (int32_t)(txpTrialUntilMs - now) > 0 ? (txpTrialUntilMs - now) / 1000.0f : 0;
-  bootPending = bootTrial;
+  // 存了新設定後按過保持(計時停掉):頁首不再顯示試用列,重開後新設定自己會有一輪試用
+  bootPending = bootTrial && !(savedPendingReboot && !bootTrialStartMs);
   // 起點可能是 millis()|1 比現在大 1:相減前先確認不是負的(否則溢位成很大,剩餘顯示 0)
   const int32_t elapsed = bootTrialStartMs ? (int32_t)(now - bootTrialStartMs) : 0;
   bootRemainS = bootTrial && bootTrialStartMs ? max(0.0f, ((float)BOOT_TRIAL_MS - (float)max((int32_t)0, elapsed)) / 1000.0f) : -1;
@@ -313,7 +357,8 @@ static void startAp() {
   wifiApplyTxPower(config.txPowerDbm);
   WiFi.softAPConfig(AP_IP, AP_IP, AP_SUBNET);
   snprintf(activeApSsid, sizeof(activeApSsid), "%s%s", WIFI_AP_SSID, config.apSuffix);
-  WiFi.softAP(activeApSsid, WIFI_AP_PASSWORD);   // 密碼固定
+  // 存檔讀進來時已驗證;萬一不合法 softAP 會開不起來,保險用出廠密碼
+  WiFi.softAP(activeApSsid, wifiApPasswordError(config.apPassword) ? WIFI_AP_PASSWORD_DEFAULT : config.apPassword);
   state = WIFI_STATE_AP;
   if (bootTrial && !bootTrialStartMs) bootTrialStartMs = millis() | 1;   // 熱點開好,使用者可以連進來確認了
   startServices();

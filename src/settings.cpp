@@ -1,4 +1,7 @@
-// 版本流水號: r23 (2026-09-14) 參數 armSwitchOff 忽略安全開關(0/1,出廠 0,用 v9 預留位元組)
+// 版本流水號: r25 (2026-09-15) 「測試」組(PROFILE_TEST_INDEX)名稱鎖定:改名回 namelocked,備份碼套用略過這組名稱
+// 舊: r24 (2026-09-15) 版面 v10:風格尾端加起飛油門 takeoffPct(10~100)與持續時間 takeoffHold(0~30 秒,0 = 不使用);
+//   讀 v4~v9 風格尾端補「不使用」(起飛油門 = 第一段油門),共用設定 v9 版面相同照讀;交叉驗證 takeofftime
+// 舊: r23 (2026-09-14) 參數 armSwitchOff 忽略安全開關(0/1,出廠 0,用 v9 預留位元組)
 // 舊: r22 (2026-09-14) 出廠值改成 GG 的基準設定(共用 14 項,A 組與第 6 組「測試」的飛法與曲線,第 6 組名稱 TEST → 測試,出廠飛行風格第 6 組)
 // 舊: r21 (2026-09-14) 曲線點補償值範圍 ±50 → ±100(GG:基本油門 70% 時只能拉到 20%,要能降到總油門 10%;int8 放得下,版面不變)
 // 舊: r20 (2026-09-14) 版面 v9:共用設定尾端加蜂鳴器電位 buzzerLow(0 高電位響 / 1 低電位響);讀 v8 共用設定尾端補預設,風格讀 v4/v6~v9
@@ -52,6 +55,9 @@ static_assert(SHARED_V8_SIZE == SHARED_V7_SIZE + 12, "SharedSettings v8 size");
 static_assert(sizeof(SharedSettings) == SHARED_V8_SIZE + 4, "SharedSettings v9 size");
 // armWaitMin 占用 v8 收腳區塊的預留位元組:位置不可移動
 static_assert(offsetof(SharedSettings, armWaitMin) == offsetof(SharedSettings, gearRetractSec) + 1, "SharedSettings armWaitMin");
+// 風格 v4,v6~v9 的長度到 takeoffPct 為止;v10 在尾端加起飛油門 8 位元組
+static const size_t PROFILE_V9_SIZE = offsetof(ProfileSettings, takeoffPct);
+static_assert(sizeof(ProfileSettings) == PROFILE_V9_SIZE + 8, "ProfileSettings v10 size");
 
 static SharedSettings savedShared;
 static ProfileSettings savedProfiles[PROFILE_COUNT];
@@ -175,6 +181,9 @@ static void defaultProfile(ProfileSettings &p, uint8_t index) {
     setSide(p.up, 29, 1, up);
     setSide(p.down, -30, 1, dn);
   }
+  // 起飛油門出廠不使用(持續時間 0),飛法和加這個功能之前一樣;油門值先放第一段油門,開啟時從這裡調
+  p.takeoffPct = p.phase1Pct;
+  p.takeoffHoldSec = 0;
 }
 
 // --- 參數表 ----------------------------------------------------------------------
@@ -242,6 +251,8 @@ static const ParamDef PROFILE_PARAMS[] = {
     PP("phase2Pct", PARAM_U8, phase2Pct, 0, 100, 1, 5),
     PP("flightSec", PARAM_U16, flightSec, 30, 1800, 5, 30),
     PP("takeoffRamp", PARAM_F32, takeoffRampSec, 0, 10, 0.1f, 0.5f),
+    PP("takeoffPct", PARAM_U8, takeoffPct, THROTTLE_FLOOR_PCT, 100, 1, 5),
+    PP("takeoffHold", PARAM_F32, takeoffHoldSec, 0, 30, 0.5f, 1),   // 0 = 不使用起飛油門
     PP("phaseRamp", PARAM_F32, phaseRampSec, 0, 30, 0.5f, 1),
     PP("noCompSec", PARAM_F32, noCompSec, 0, 30, 0.5f, 1),
     PP("minPct", PARAM_U8, minPct, THROTTLE_FLOOR_PCT, 100, 1, 5),   // 最低 10%(安全審查 B4)
@@ -386,6 +397,8 @@ static const char *validateSide(const CurveSide &s, bool upSide) {
 static const char *validateProfile(const ProfileSettings &p) {
   if (p.minPct >= p.maxPct) return "minmax";
   if (p.phase1Sec >= p.flightSec) return "phasetime";
+  // 起飛油門(含換回第一段的過渡)要在第一段時間內結束,不然會蓋到換段
+  if (p.takeoffHoldSec > 0 && p.takeoffRampSec + p.takeoffHoldSec + TAKEOFF_BLEND_S > p.phase1Sec) return "takeofftime";
   if (const char *e = validateSide(p.up, true)) return e;
   if (const char *e = validateSide(p.down, false)) return e;
   return nullptr;
@@ -422,7 +435,8 @@ static bool loadBlobAny(Preferences &prefs, const char *key, uint8_t *data, size
 //   v7:共用設定尾端加扭轉機尾取消起飛(角度,封鎖秒數)+ 2 預留;風格不變
 //   v8:共用設定尾端加機輪收腳 12 位元組;風格不變
 //   v9:共用設定尾端加蜂鳴器電位 + 3 預留;風格不變
-// 所以風格 v4/v6/v7/v8 原樣沿用,v5 取前段;共用設定 v4~v6 較短,尾端補預設. GG 已經在板子上調好參數,改版不可洗掉.
+//   v10:風格尾端加起飛油門(油門 + 3 預留 + 持續時間);共用設定不變
+// 所以風格 v4/v6~v9 原樣沿用後尾端補「不使用」,v5 取前段;共用設定 v4~v6 較短,尾端補預設. GG 已經在板子上調好參數,改版不可洗掉.
 static const size_t CURVE_SIDE_SIZE = sizeof(CurveSide);
 
 static bool loadShared(Preferences &prefs, SharedSettings &out) {
@@ -430,7 +444,7 @@ static bool loadShared(Preferences &prefs, SharedSettings &out) {
   defaultShared(s);   // v6 以前的存檔比較短,尾端新欄位保留預設值
   uint16_t ver = 0, size = 0;
   if (!loadBlobAny(prefs, "shared", (uint8_t *)&s, sizeof(s), ver, size)) return false;
-  const bool current = ver == SETTINGS_LAYOUT_VERSION && size == sizeof(s);
+  const bool current = (ver == SETTINGS_LAYOUT_VERSION || ver == 9) && size == sizeof(s);   // v10 只改了風格
   const bool old6 = ver >= 4 && ver <= 6 && size == SHARED_V6_SIZE;
   const bool old7 = ver == 7 && size == SHARED_V7_SIZE;
   const bool old8 = ver == 8 && size == SHARED_V8_SIZE;
@@ -456,13 +470,20 @@ static bool loadProfile(Preferences &prefs, const char *key, ProfileSettings &ou
   uint8_t raw[512];
   uint16_t ver = 0, size = 0;
   if (!loadBlobAny(prefs, key, raw, sizeof(raw), ver, size)) return false;
-  // 風格結構 v4,v6~v9 版面相同(v7~v9 只改了共用設定)
-  const bool current =
-      (ver == SETTINGS_LAYOUT_VERSION || ver == 8 || ver == 7 || ver == 6 || ver == 4) && size == sizeof(ProfileSettings);
-  const bool v5 = ver == 5 && size == sizeof(ProfileSettings) + 2 * CURVE_SIDE_SIZE;
-  if (!current && !v5) return false;
+  // 風格結構 v4,v6~v9 版面相同(v7~v9 只改了共用設定),v10 尾端多了起飛油門
+  const bool current = ver == SETTINGS_LAYOUT_VERSION && size == sizeof(ProfileSettings);
+  const bool old9 = (ver == 9 || ver == 8 || ver == 7 || ver == 6 || ver == 4) && size == PROFILE_V9_SIZE;
+  const bool v5 = ver == 5 && size == PROFILE_V9_SIZE + 2 * CURVE_SIDE_SIZE;
+  if (!current && !old9 && !v5) return false;
   ProfileSettings p;
-  memcpy(&p, raw, sizeof(p));   // v5 多出來的第二段曲線在尾端,直接不取
+  memcpy(&p, raw, current ? sizeof(p) : PROFILE_V9_SIZE);   // v5 多出來的第二段曲線在尾端,直接不取
+  if (!current) {
+    // 加起飛油門之前的存檔:不使用(飛法不變),油門值先放第一段油門
+    memset(p.reserved10, 0, sizeof(p.reserved10));
+    p.takeoffPct = max(p.phase1Pct, THROTTLE_FLOOR_PCT);
+    p.takeoffHoldSec = 0;
+  }
+  if (p.takeoffPct < THROTTLE_FLOOR_PCT || p.takeoffPct > 100) p.takeoffPct = max(p.phase1Pct, THROTTLE_FLOOR_PCT);
   const bool trimmed = trimSide(p.up, true) | trimSide(p.down, false);   // 用 | 兩側都要做
   if (trimmed) Serial.printf("settings %s curve trimmed to %u points max\n", key, CURVE_MAX_POINTS);
   // 飛行中油門下限改成最低 10% 之前的存檔可能是 0~9:補到 10,其他設定照舊(不可因此整組回預設)
@@ -510,6 +531,9 @@ static void loadAll() {
       profileKey(i, key);
       loadProfile(prefs, key, profiles[i]);
     }
+    // 名稱鎖定之前改過名的存檔:開機一律改回「測試」(存檔裡的舊名稱不動,每次載入都蓋掉,不算未儲存變更)
+    memset(profiles[PROFILE_TEST_INDEX].name, 0, PROFILE_NAME_BUFFER);
+    strncpy(profiles[PROFILE_TEST_INDEX].name, PROFILE_DEFAULT_NAMES[PROFILE_TEST_INDEX], PROFILE_NAME_BUFFER - 1);
     const uint8_t a = prefs.getUChar("active", DEFAULT_ACTIVE_PROFILE);
     if (a < PROFILE_COUNT) activeProfile = a;
     prefs.end();
@@ -647,6 +671,7 @@ static const char *nameToBuffer(const char *name, char out[PROFILE_NAME_BUFFER])
 
 const char *settingsSetName(uint8_t index, const char *name) {
   if (index >= PROFILE_COUNT) return "scope";
+  if (index == PROFILE_TEST_INDEX) return "namelocked";   // 「測試」組名稱固定(GG 2026-09-15)
   char buf[PROFILE_NAME_BUFFER];
   if (const char *e = nameToBuffer(name, buf)) return e;
   LOCKED(memcpy(profiles[index].name, buf, PROFILE_NAME_BUFFER));
@@ -770,6 +795,7 @@ bool settingsImagePut(SettingsImage &img, int8_t scope, const char *key, float v
 
 const char *settingsImageSetName(SettingsImage &img, uint8_t index, const char *name) {
   if (index >= PROFILE_COUNT) return "scope";
+  if (index == PROFILE_TEST_INDEX) return nullptr;   // 名稱鎖定:舊備份碼裡不管寫什麼,都維持「測試」
   return nameToBuffer(name, img.profiles[index].name);
 }
 

@@ -1,4 +1,6 @@
-// 版本流水號: r19 (2026-09-14) v9 預留位元組改為忽略安全開關 armSwitchOff(大小不變,舊存檔讀到 0 = 要按開關)
+// 版本流水號: r21 (2026-09-15) PROFILE_TEST_INDEX:「測試」組名稱鎖定
+// 舊: r20 (2026-09-15) 版面 v10:風格尾端加起飛油門 takeoffPct 與持續時間 takeoffHoldSec(舊存檔補「不使用」)
+// 舊: r19 (2026-09-14) v9 預留位元組改為忽略安全開關 armSwitchOff(大小不變,舊存檔讀到 0 = 要按開關)
 // 舊: r18 (2026-09-14) 出廠值改成 GG 的基準設定:安全開關等待上限 3 → 2 分鐘,出廠飛行風格第 6 組 DEFAULT_ACTIVE_PROFILE
 // 舊: r17 (2026-09-14) 版面 v9:共用設定尾端加蜂鳴器電位 buzzerActiveLow(+3 預留);舊存檔尾端補預設
 // 舊: r16 (2026-09-14) 設定備份碼用的整份設定介面 SettingsImage;備份碼套用的飛行風格要按儲存才寫入(settingsActiveDirty)
@@ -42,9 +44,14 @@ const uint8_t CURVE_STORE_POINTS = 5;
 const uint8_t CURVE_MAX_POINTS = 4;
 const uint8_t CURVE_MIN_POINTS = 1;
 const uint8_t PROFILE_NAME_BUFFER = 24;   // UTF-8,中文一字 3 位元組,約 7 個中文字
-const uint16_t SETTINGS_LAYOUT_VERSION = 9;
+const uint16_t SETTINGS_LAYOUT_VERSION = 10;
+// 起飛油門持續時間走完後,用這麼多秒平順換到時間軸的基本油門(不直接跳,免得剛離地推力突然掉)
+const float TAKEOFF_BLEND_S = 1.0f;
 const uint8_t ARM_WAIT_DEFAULT_MIN = 2;   // 安全開關等待上限出廠值(GG 2026-09-14 基準設定:2 分鐘,可調)
 const uint8_t DEFAULT_ACTIVE_PROFILE = 5; // 出廠飛行使用的風格(GG 基準設定:「測試」組)
+// 「測試」固定是第 6 組,名稱鎖定不能改(GG 2026-09-15):備份碼預設只選這組,新格式不存它的名稱.
+// 網頁 JS 的 PROFILE_TEST_INDEX 要和這裡一致.
+const uint8_t PROFILE_TEST_INDEX = 5;
 
 enum DisturbMode : uint8_t { DISTURB_EXTEND = 0, DISTURB_RESET = 1, DISTURB_OFF = 2 };
 // 換段方式:直接跳 / 直接跳但以換段加力秒數過渡 / 把兩段的油門差平均分攤在第一段時間內
@@ -122,7 +129,7 @@ struct ProfileSettings {
   uint8_t maxPct;            // 飛行中油門上限
   uint16_t phase1Sec;        // 第一段持續時間(從馬達啟動算)
   uint16_t flightSec;        // 總飛行時間(到了開始降落)
-  float takeoffRampSec;      // 緩啟動加力秒數:從 0 加到第一段油門
+  float takeoffRampSec;      // 緩啟動加力秒數:從 0 加到起飛油門(起飛油門不使用時是第一段油門)
   float phaseRampSec;        // 換段加力秒數(線性增加時)
   float noCompSec;           // 馬達啟動後幾秒內不補償
   float landingRampSec;      // 降落減力秒數
@@ -131,6 +138,10 @@ struct ProfileSettings {
   uint8_t reserved0[2];
   CurveSide up;              // 補償曲線(兩段飛行共用同一條;第二段只是基本油門不同)
   CurveSide down;
+  // --- v10 起加在尾端:起飛油門(GG 2026-09-15;v9 以前的存檔讀進來時補「不使用」) ---
+  uint8_t takeoffPct;        // 起飛油門:緩啟動加到這個值,維持 takeoffHoldSec 秒後換到第一段
+  uint8_t reserved10[3];
+  float takeoffHoldSec;      // 起飛油門持續時間(緩啟動走完才開始算). 0 = 不使用,緩啟動直接加到第一段油門
 };
 
 // --- 目前生效的設定(RAM) -----------------------------------------------------
@@ -148,7 +159,7 @@ bool settingsAnyDirty();
 const char *settingsSet(int8_t scope, const char *key, const char *valueText);
 // 一次設定多個參數(每行 key=value),全部寫完才驗證並整塊套用. text 會被改寫(切詞).
 const char *settingsSetMany(int8_t scope, char *text);
-const char *settingsSetName(uint8_t index, const char *name);
+const char *settingsSetName(uint8_t index, const char *name);   // 「測試」組回 namelocked
 const char *settingsSelectProfile(uint8_t index);
 const char *settingsCopyProfile(uint8_t from, uint8_t to);// 回預設只改 RAM,真正覆蓋是按儲存那一刻;在那之前按「放棄變更」都救得回來.
 void settingsDefaults(int8_t scope);
@@ -173,6 +184,7 @@ const char *settingsParamKey(bool shared, size_t index);   // 參數表第 index
 bool settingsImageGet(const SettingsImage &img, int8_t scope, const char *key, float &v);
 // 寫入一個參數:夾到參數表範圍並對齊步進. clamped = 原值超出範圍被夾. 沒有這個參數回 false. 不做交叉驗證,點數鍵直接寫.
 bool settingsImagePut(SettingsImage &img, int8_t scope, const char *key, float v, bool &clamped);
+// 「測試」組名稱鎖定:直接略過回 nullptr(舊備份碼裡的名稱不會蓋掉「測試」)
 const char *settingsImageSetName(SettingsImage &img, uint8_t index, const char *name);
 // 交叉驗證整份設定. 失敗回錯誤代碼,badScope = -1 共用或 0~5 風格.
 const char *settingsImageValidate(const SettingsImage &img, int8_t &badScope);

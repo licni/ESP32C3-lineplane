@@ -1,4 +1,28 @@
-// 版本流水號: r62 (2026-09-15) 曲線朝上點數/朝下點數各自加圓角框(GG:標籤和選單離得遠,看不出是一組)
+// 版本流水號: r75 (2026-09-15) 安全審查:油門 0% 脈寬要先勾「螺旋槳已拆除」才能改並加警語;起飛油門超出上下限時時間軸文字提示;
+//   新錯誤碼 startbusy/cancelstate,startblock 文字改成「剛取消或剛停止馬達」;拒絕原因 10 電變輸出沒訊號;事件 28/6
+// 舊: r74 (2026-09-15) 頁尾 SuperGG 七彩霓虹動畫(GG):字母各一段彩虹漸層,色相輪轉光暈,波浪跳動,兩側星星閃爍;減少動態效果時停止;
+//   拉桿/勾選框/進度條 accent-color 改主色(瀏覽器預設藍)
+// 舊: r73 (2026-09-15) 暖色系主題(GG:藍色對眼睛不好):主色藍 → 焦橙(深色模式亮橙),底色/文字/框線改米白與咖啡色系,新增 --accentBg;
+//   降落狀態列藍 → 棕;角度補償死區,時間軸第二段/換段,監看頁第二段曲線,紀錄頁角度/抖動線條換成暖色,文字說明跟著改;頁尾漸層去掉紫色;
+//   連結與文字選取反白也改主色(瀏覽器預設是藍色)
+// 舊: r72 (2026-09-15) 備份頁外觀(GG):計時器風格加藍色粗框淺藍底,按鈕加大加粗,說明收進 ⓘ;其他設定改小方塊一行兩個(名稱 + ⓘ 展開說明,WiFi 標 ⚠);
+//   取消的項目拿掉刪除線,只變灰打 ✕
+// 舊: r71 (2026-09-15) 套用備份碼可取消項目(GG):檢查通過後列出碼裡的風格(顯示碼裡的名稱)與分區,預設全亮,點一下變灰打 ✕ 加刪除線;
+//   套用帶 sel/sec,結果寫出已套用與取消沒套用的項目;分區說明分成產生時/套用時的建議
+// 舊: r70 (2026-09-15) 備份獨立分頁(GG):產生卡(六組風格 + 起飛降落與安全/安裝/電變/WiFi 各自勾選,每項說明包含什麼,全選/只選測試/全部取消)
+//   與套用卡分開,顯示碼裡的內容與 WiFi 已存提示;設定頁移除備份卡;分頁列改兩行(一行 5 個)不橫捲
+// 舊: r69 (2026-09-15) 設定備份碼選組(GG):六組風格按鈕點亮要包含的組(預設只選測試,全選/只選測試),產生帶 sel,
+//   貼上檢查與套用顯示碼裡包含哪幾組;計時器頁「測試」組改名欄停用(namelocked)
+// 舊: r68 (2026-09-15) 角度補償圖:「機頭朝上」移到直軸 +90° 上方,拿掉角落段別文字,圖高回 366(基本油門標籤縮成一排);
+//   第一段/第二段按鈕加強(整列等寬,粗框,大字);刪除「編輯「…」· 飛行使用中」文字(GG)
+// 舊: r67 (2026-09-15) 角度補償圖:基本油門標籤移到圖框外上方(圖高 366 → 398);紅色「目前」文字跟著紅線與曲線交點移動(GG)
+// 舊: r66 (2026-09-15) 系統頁家用 WiFi 欄位寫清楚:標籤「家用 WiFi 名稱(SSID)」「家用 WiFi 密碼」,SSID 說明(大小寫要一樣,只支援 2.4GHz,不支援隱藏名稱)(GG);
+//   自身熱點(名稱,密碼)與家用 WiFi(SSID,密碼)各自框成一組並加小標題(GG)
+// 舊: r65 (2026-09-15) 時間軸圖分段名稱從 X 軸下方移到圖內下方兩排交錯,不補償標籤第三排;上下限數值改寫在顏色說明;圖高 214 → 194(GG:X 軸文字重疊)
+// 舊: r64 (2026-09-15) 時間軸圖每段不同底色(緩啟動/起飛油門/第一段/換段/第二段/降落),不補償改斜線並標秒數,圖下方加顏色說明(GG);拿掉淡綠補償範圍
+// 舊: r63 (2026-09-15) 計時器頁起飛區加起飛油門與持續時間(時間軸圖多一段「起飛」,時間軸文字,監看頁「起飛油門」,馬達啟動事件);
+//   系統頁 WiFi 卡加熱點密碼欄(可改,顯示/隱藏,儲存後提示新密碼),說明文字改成出廠 12345678 可改
+// 舊: r62 (2026-09-15) 曲線朝上點數/朝下點數各自加圓角框(GG:標籤和選單離得遠,看不出是一組)
 // 舊: r61 (2026-09-14) 補速/減速起點(死區邊界)的點改成實心小點(半徑 5 空心 → 3 實心),和可拖的空心點區分(GG)
 // 舊: r60 (2026-09-14) 曲線點縮小:半徑 9/選取 11 → 6/7.5,框線 3 → 2.2(GG:太肥),觸控範圍維持半徑 20
 // 舊: r59 (2026-09-14) 曲線拖曳放開:角度與補償一次送出(setmany),拖曳中與送出中不讓讀回的舊設定覆蓋畫面(GG:放開瞬間點先跳回原位)
@@ -70,14 +94,29 @@ const char WEB_PAGE_HTML[] PROGMEM = R"HTML(<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>線控飛機油門控制器</title>
 <style>
-:root{color-scheme:light dark;--bg:#f4f5f7;--card:#fff;--ink:#1c2230;--mute:#6b7385;--line:#dde1e8;--accent:#1f6feb;
---ok:#1a8f4c;--warn:#c77700;--bad:#d1242f;--plane:#2b3444;--sky:#e8f0fb;--ground:#efe6d8}
-@media (prefers-color-scheme:dark){:root{--bg:#10141b;--card:#1a202b;--ink:#e6e9ef;--mute:#8d96a8;
---line:#2c3441;--accent:#4c8dff;--ok:#3fbf73;--warn:#e0a13a;--bad:#ff5f5f;--plane:#cfd6e3;--sky:#1b2a40;--ground:#2e2a22}}
+/* 暖色系主題(GG 2026-09-15:藍色對眼睛不好):主色焦橙,底色米白/深咖啡;綠 = 正常,紅 = 危險不變 */
+:root{color-scheme:light dark;--bg:#f6f0e8;--card:#fffcf7;--ink:#2b221c;--mute:#7b6d61;--line:#e6dacb;--accent:#c2551a;--accentBg:rgba(194,85,26,.10);
+--ok:#3d8a36;--warn:#a86a00;--bad:#c62828;--plane:#3a2f28;--sky:#fbefdf;--ground:#eadbc6}
+@media (prefers-color-scheme:dark){:root{--bg:#16110d;--card:#221a14;--ink:#f1e6da;--mute:#a8978a;
+--line:#3b2f26;--accent:#d9722f;--accentBg:rgba(217,114,47,.16);--ok:#6fbf5f;--warn:#e0a83a;--bad:#ff6b5b;--plane:#e6d7c8;--sky:#2e2118;--ground:#3a2d22}}
 *{box-sizing:border-box}
+a{color:var(--accent)}
+input,progress{accent-color:var(--accent)}
+::selection{background:rgba(217,114,47,.35);color:inherit}
 /* 頁尾作者(GG):每個分頁最下方,SuperGG 要醒目 */
 .credit{display:flex;align-items:baseline;justify-content:center;flex-wrap:wrap;gap:4px 22px;padding:22px 16px 30px;margin-top:8px;border-top:1px solid var(--line);color:var(--mute);font-size:14px}
-.credit .gg{font-size:28px;font-weight:900;letter-spacing:.02em;background:linear-gradient(90deg,#ff6a00,#ee0979 50%,#7b2ff7);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 1px 0 rgba(0,0,0,.04)}
+/* 設計者署名 SuperGG(GG:浮誇一點,七彩霓虹 + 動畫):每個字母一段彩虹漸層接起來,整體色相輪轉(光暈跟著變色),字母波浪跳動,兩側星星閃爍 */
+.credit .gg{position:relative;display:inline-flex;font-size:32px;font-weight:900;letter-spacing:.03em;padding:4px 20px;animation:ggHue 4s linear infinite}
+.credit .gg i{font-style:normal;display:inline-block;color:transparent;-webkit-background-clip:text;background-clip:text;
+ background-image:linear-gradient(90deg,#ff1f5a,#ff8a00,#ffd400,#3ddc4a,#00c2ff,#7a5cff,#e040fb);background-size:700% 100%;
+ background-position:calc(var(--i)*100%/6) 0;animation:ggWave 1.6s ease-in-out infinite;animation-delay:calc(var(--i)*-.14s)}
+.credit .gg::before,.credit .gg::after{content:'✦';position:absolute;font-size:15px;color:#ffd400;animation:ggTwinkle 1.8s ease-in-out infinite}
+.credit .gg::before{left:0;top:0}
+.credit .gg::after{right:0;bottom:2px;animation-delay:-.9s}
+@keyframes ggHue{from{filter:drop-shadow(0 0 6px rgba(255,120,0,.75)) hue-rotate(0deg)}to{filter:drop-shadow(0 0 6px rgba(255,120,0,.75)) hue-rotate(360deg)}}
+@keyframes ggWave{0%,100%{transform:translateY(0)}25%{transform:translateY(-5px) scale(1.08)}50%{transform:translateY(0)}}
+@keyframes ggTwinkle{0%,100%{opacity:.15;transform:scale(.6) rotate(0deg)}50%{opacity:1;transform:scale(1.2) rotate(90deg)}}
+@media (prefers-reduced-motion:reduce){.credit .gg,.credit .gg i,.credit .gg::before,.credit .gg::after{animation:none}}
 .credit .line{font-weight:700;color:#06c755}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",sans-serif}
 header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line)}
@@ -104,7 +143,7 @@ header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px 
 .fbar.count{background:#ea580c;border-left-color:#7c2d12;color:#fff;animation:fbPulse .8s ease-in-out infinite}
 .fbar.count .fbadge{background:#7c2d12}.fbar.count .sub{color:#ffedd5}.fbar.count .ft b{font-size:24px}
 .fbar.fly{background:#16a34a;border-left-color:#14532d;color:#fff}.fbar.fly .fbadge{background:#14532d}.fbar.fly .sub{color:#dcfce7}
-.fbar.land{background:#2563eb;border-left-color:#1e3a8a;color:#fff}.fbar.land .fbadge{background:#1e3a8a}.fbar.land .sub{color:#dbeafe}
+.fbar.land{background:#8a5a2b;border-left-color:#4e3116;color:#fff}.fbar.land .fbadge{background:#4e3116}.fbar.land .sub{color:#f5e6d3}
 .fbar.crash{background:#dc2626;border-left-color:#7f1d1d;color:#fff}.fbar.crash .fbadge{background:#7f1d1d}.fbar.crash .sub{color:#fee2e2}
 .fbar.done{border-left-color:var(--mute)}.fbar.done .fbadge{background:var(--mute)}
 .fbar.reject{background:#fee2e2;border-left-color:#dc2626}.fbar.reject .fbadge{background:#dc2626}
@@ -124,11 +163,38 @@ button.b.start{background:var(--ok);border-color:var(--ok);color:#fff;font-weigh
 button.b.start.arm{background:#c2410c;border-color:#c2410c}
 button.b.estop{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:700;padding:8px 14px}
 /* 分頁列:八個分頁在手機寬度一排放得下,不用橫捲才看得到「電變」「系統」;更窄的螢幕才橫捲 */
-nav{display:flex;gap:0;padding:0 4px;overflow-x:auto;scrollbar-width:none}
-nav::-webkit-scrollbar{display:none}
-nav button{flex:1 0 auto;border:0;background:none;color:var(--mute);font:inherit;font-size:14px;padding:7px 6px 6px;border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
+/* 分頁列兩行堆疊(GG 2026-09-15:九個分頁橫捲要找很久):一行 5 個,不橫捲 */
+nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;padding:0 4px}
+nav button{min-width:0;border:0;background:none;color:var(--mute);font:inherit;font-size:14px;padding:6px 2px 5px;border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 nav button.on{color:var(--ink);border-color:var(--accent);font-weight:700}
-@media (min-width:900px){nav{justify-content:center}nav button{flex:0 0 auto;padding:8px 18px 7px}}
+@media (min-width:900px){nav{max-width:760px;margin:0 auto}nav button{padding:7px 6px 6px}}
+/* 備份分頁:勾選項目 */
+.bkhd{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:10px 0 4px;font-size:15px}
+.bkq{display:flex;gap:12px;font-size:14px}
+.bkgt{font-size:14px;font-weight:700;margin:8px 0 1px}
+.bkd{font-size:13px;color:var(--mute);line-height:1.45}
+/* 計時器風格:醒目的主色粗框(GG);說明收進 ⓘ */
+.bkprof{border:2px solid var(--accent);border-radius:12px;background:var(--accentBg);padding:8px 10px 2px;margin:6px 0 10px}
+.bkpt{font-size:16px;font-weight:700;color:var(--ink)}
+.bkhint{display:none;color:var(--mute);font-size:12.5px;margin:3px 0 4px;padding:5px 8px;border-radius:6px;background:var(--bg);line-height:1.45}
+.showhint>.bkhint{display:block}
+/* 其他設定:小方塊一行兩個,名稱 + ⓘ(GG:縮小,說明用 ⓘ) */
+.bksecs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:4px 0 6px}
+.bks{display:flex;flex-wrap:wrap;align-items:center;min-width:0;border:1.5px solid var(--line);border-radius:8px;background:var(--bg)}
+.bks.showhint{grid-column:1/-1}
+.bkst{flex:1 1 0;min-width:0;border:0;background:none;color:var(--ink);font:inherit;font-size:14px;text-align:left;padding:6px 2px 6px 8px;cursor:pointer}
+.bks .ib{padding:6px 8px}
+.bks>.bkhint{flex:1 1 100%;margin:0 6px 6px}
+.bks .mk::before{content:'☐ '}
+.bks.on{border-color:var(--accent);background:var(--accentBg)}.bks.on .bkst{font-weight:700}.bks.on .mk::before{content:'☑ '}
+.bkwm{color:var(--bad);margin-left:3px}
+/* 套用時取消的項目:變灰,打 ✕,刪除線 */
+.bkpick button:not(.on){opacity:.55;color:var(--mute)}
+.bkpick button:not(.on)::before{content:'✕ ';color:var(--bad)}
+.bks.pick .mk::before{content:'✓ '}
+.bks.pick:not(.on){opacity:.55}
+.bks.pick:not(.on) .bkst{color:var(--mute)}
+.bks.pick:not(.on) .mk::before{content:'✕ ';color:var(--bad)}
 main{max-width:860px;margin:0 auto;padding:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
 @media (max-width:600px){main{padding:8px}.card{padding:8px 10px}}
@@ -156,6 +222,9 @@ button.b.sm{padding:3px 10px;font-size:13px}
 .row{display:flex;gap:6px 8px;align-items:center;flex-wrap:wrap;margin:6px 0}
 .row label{flex:0 0 96px;color:var(--mute);font-size:14px}
 .row label.chk{flex:0 0 auto;color:var(--ink)}
+.row label .lsub{display:block;font-size:12px;line-height:1.2}
+.wgrp{border:1px solid var(--line);border-radius:10px;padding:5px 9px 3px;margin:8px 0}
+.wgt{font-size:13px;font-weight:700;color:var(--ink);margin:1px 0 0}
 .apfix{font-weight:700;font-size:14px;white-space:nowrap}.sub.bad{color:var(--bad)}
 input[type=text],input[type=password],input[type=number],select{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;min-width:0}
 .row input[type=text],.row input[type=password],.row input[type=number]{flex:1 1 160px}
@@ -173,6 +242,14 @@ button.b:disabled{opacity:.45;cursor:default}
 .seg button{border:0;border-right:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;padding:6px 12px;cursor:pointer;white-space:nowrap}
 .seg button:last-child{border-right:0}
 .seg button.on{background:var(--accent);color:#fff}
+.bksel{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 8px}
+.bksel button{border:2px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);font:inherit;font-size:16px;font-weight:600;padding:7px 16px;cursor:pointer}
+.bksel button.on{border-color:var(--accent);background:var(--accent);color:#fff;font-weight:700;box-shadow:0 2px 0 rgba(0,0,0,.15)}
+.bksel button.on::before{content:'✓ '}
+.seg.phseg{display:flex;width:100%;margin:8px 0 6px;border:2px solid var(--accent);border-radius:10px}
+.seg.phseg button{flex:1 1 0;padding:9px 12px;font-size:15px;font-weight:700;color:var(--accent);background:var(--card);border-right:2px solid var(--accent)}
+.seg.phseg button:last-child{border-right:0}
+.seg.phseg button.on{background:var(--accent);color:#fff;box-shadow:inset 0 -3px 0 rgba(0,0,0,.18)}
 .prm{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;padding:4px 0;border-top:1px solid var(--line)}
 .prm:first-of-type,h2+.prm,.cnote+.prm,h3+.prm,h3.grp+.prm{border-top:0}
 .prm .lab{flex:1 1 100px;min-width:0;font-size:14px;line-height:1.25}
@@ -208,7 +285,7 @@ button.b:disabled{opacity:.45;cursor:default}
 .cvpanel .wl{display:grid;grid-template-columns:76px 1fr;gap:6px;align-items:baseline;font-size:14px;margin:2px 0}
 /* 朝上/朝下點數:各自一個框,標籤和選單看得出是同一組(GG:兩者離得遠,中間是說明展開的位置) */
 .cnt2{display:flex;gap:6px 10px;flex-wrap:wrap;margin-top:6px}.cnt2 .prm{flex:1 1 150px;border:1px solid var(--line);border-radius:8px;padding:4px 8px;background:var(--bg)}.cnt2 .prm select{background:var(--card)}
-.cv-limit{fill:var(--mute);opacity:.18}.cv-dead{fill:#3b82f6;opacity:.09}
+.cv-limit{fill:var(--mute);opacity:.18}.cv-dead{fill:var(--accent);opacity:.09}
 .cv-grid{stroke:var(--line);stroke-width:1}.cv-zero{stroke:var(--mute);stroke-width:1;stroke-dasharray:4 4}
 .cv-lab{fill:var(--mute);font-size:13px;font-family:system-ui,sans-serif}.cv-sm{font-size:10.5px}
 .cv-frame{fill:none;stroke:var(--mute);stroke-width:1.2}
@@ -225,6 +302,11 @@ button.b:disabled{opacity:.45;cursor:default}
 .cv-now{stroke:#ef4444;stroke-width:2}.cv-nowt{fill:#ef4444;font-size:12.5px;font-weight:700;font-family:system-ui,sans-serif;paint-order:stroke;stroke:var(--card);stroke-width:4px;stroke-linejoin:round}
 .cv-plane{fill:var(--plane);opacity:.8}
 .tl-lab{fill:var(--mute);font-size:13px;font-family:system-ui,sans-serif}
+.tl-seg{fill:var(--ink);font-size:12px;font-weight:600;font-family:system-ui,sans-serif;paint-order:stroke;stroke:var(--card);stroke-width:3.5px;stroke-linejoin:round}
+.tl-leg{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mute);margin:0 0 8px}
+.tl-leg i{display:inline-block;width:16px;height:11px;border-radius:2px;margin-right:6px;vertical-align:middle;opacity:.75}
+.tl-leg i.hatch{background:repeating-linear-gradient(45deg,var(--mute) 0 2px,transparent 2px 5px);opacity:.6}
+.tl-leg i.lim{height:0;border-top:2px dashed var(--ink);border-radius:0;opacity:1}
 .tl-t{fill:var(--ink);font-size:13px;font-weight:700;font-family:system-ui,sans-serif}
 .tl-v{fill:var(--accent);font-size:15px;font-weight:800;font-family:system-ui,sans-serif;paint-order:stroke;stroke:var(--card);stroke-width:4px;stroke-linejoin:round}
 .side h3{font-size:14px;margin:4px 0}
@@ -245,7 +327,7 @@ button.b:disabled{opacity:.45;cursor:default}
 .axrow label{display:flex;align-items:center;gap:6px}.axrow select{padding:4px 6px}
 .inst-views svg{width:100%;height:auto;display:block}
 .ins-body{fill:var(--plane);opacity:.28}.ins-hz{stroke:var(--mute);stroke-dasharray:6 5;opacity:.6}
-.ins-chip{fill:#1f2937;stroke:#fff;stroke-width:1.2}
+.ins-chip{fill:#2b221c;stroke:#fff;stroke-width:1.2}
 .ins-t{font-size:14px;font-weight:700;font-family:system-ui,sans-serif;paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
 .ins-s{fill:var(--mute);font-size:12px;font-family:system-ui,sans-serif}
 .ins-v{fill:var(--ink);font-size:15px;font-weight:700;font-family:system-ui,sans-serif}
@@ -290,7 +372,7 @@ progress{width:100%;height:10px}
  <div class="asoff" id="asOffBar" hidden><b>⚠ 安全開關已停用</b><span id="asOffText"></span></div>
  <div class="wtrial" id="wifiTrial" hidden><span id="wifiTrialText"></span><button class="b pri" id="btnWifiKeep">保持</button></div>
  <div class="wtrial" id="fwBar" hidden><span id="fwBarText"></span></div>
- <nav><button data-pane="mon" class="on">監看</button><button data-pane="prof">計時器</button><button data-pane="comp">角度補償</button><button data-pane="set">設定</button><button data-pane="log">紀錄</button><button data-pane="inst">安裝</button><button data-pane="esc">電變</button><button data-pane="sys">系統</button></nav>
+ <nav><button data-pane="mon" class="on">監看</button><button data-pane="prof">計時器</button><button data-pane="comp">角度補償</button><button data-pane="set">設定</button><button data-pane="log">紀錄</button><button data-pane="inst">安裝</button><button data-pane="esc">電變</button><button data-pane="sys">系統</button><button data-pane="bak">備份</button></nav>
 </header>
 <main>
 
@@ -365,7 +447,8 @@ progress{width:100%;height:10px}
   </div>
  </div>
  <div id="profCards"></div>
- <svg id="tlSvg" viewBox="0 0 440 214" role="img" aria-label="飛行時間軸圖" style="width:100%;height:auto;display:block;margin:2px 0 4px"></svg>
+ <svg id="tlSvg" viewBox="0 0 440 194" role="img" aria-label="飛行時間軸圖" style="width:100%;height:auto;display:block;margin:2px 0 4px"></svg>
+ <div id="tlLegend" class="tl-leg"></div>
 </section>
 
 <section id="comp" hidden>
@@ -374,8 +457,7 @@ progress{width:100%;height:10px}
   <div class="cnote">直軸是機頭角度,橫軸是實際輸出油門. 補償值加在當段的基本油門上,兩段飛行共用同一條曲線;「第二段」只換基本油門,看加力後哪裡會撞到上限.
    點選或拖曳曲線上的點;邊框上的三角形也可以拖:左邊是補速/減速起點,下方是油門下限 / 基本油門 / 上限. 改完記得按上方的儲存.</div>
   <div class="seg profseg" id="profSeg2"></div>
-  <div class="row"><span class="seg" id="cvPhase"><button data-ph="1" class="on">第一段</button><button data-ph="2">第二段</button></span>
-   <span class="sub" id="compNow" style="flex:1 1 120px"></span></div>
+  <div class="seg phseg" id="cvPhase"><button data-ph="1" class="on">第一段</button><button data-ph="2">第二段</button></div>
   <div class="cvwrap">
    <div class="cvchart"><svg id="cvSvg" viewBox="0 0 440 366" role="img" aria-label="角度補償曲線"></svg></div>
    <div class="cvside">
@@ -408,20 +490,6 @@ progress{width:100%;height:10px}
 <section id="set" hidden>
  <div id="setCards"></div>
  <div class="card"><div class="row" style="margin:0"><button class="b danger sm" id="btnSharedDef">共用設定回預設</button><span class="sub" style="flex:1 1 150px">含安裝,電變頁的設定;按儲存才寫入. 不影響 WiFi.</span></div></div>
- <div class="card" id="bkCard">
-  <h2>設定備份碼</h2>
-  <div class="cnote">把這台飛機的全部設定變成一串 LP 開頭的文字:共用設定(含安裝,電變頁),六組風格與名稱,飛行使用哪一組. 不含 WiFi 設定.
-   複製起來存在 LINE 或記事本,到另一台飛機貼上,按「套用」,再按上方的儲存,設定就全部過去.
-   <br><b>套用後請逐頁檢查</b>,尤其感測器方位,角度修正,電變脈寬與收輪行程:每台飛機的安裝不一樣.
-   <br>較舊的備份碼也能用,之後新增的功能維持出廠值. 有未儲存的變更時不能使用,請先儲存或放棄.</div>
-  <div class="live" id="bkDirty" hidden><span class="pill bad">有未儲存的變更</span><span class="sub">請先按上方的儲存或放棄,才能複製或套用備份碼.</span></div>
-  <div class="row" style="margin-bottom:0"><button class="b pri" id="btnBkMake">產生並複製</button><span class="sub" id="bkMakeText" style="flex:1 1 150px"></span></div>
-  <textarea class="bktext" id="bkOut" rows="4" readonly hidden></textarea>
-  <div class="sub" style="margin-top:8px">貼上備份碼</div>
-  <textarea class="bktext" id="bkIn" rows="4" placeholder="LP 開頭的備份碼(長按貼上)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
-  <div class="row" style="margin-bottom:0"><button class="b pri" id="btnBkApply" disabled>套用</button><button class="b" id="btnBkClear">清空</button></div>
-  <div class="msg" id="bkMsg"></div>
- </div>
 </section>
 
 <section id="inst" hidden>
@@ -497,15 +565,22 @@ progress{width:100%;height:10px}
  </div>
  <div class="card">
   <h2>WiFi 設定</h2>
-  <div class="cnote">開機先連家用 WiFi;連不上或名稱留空,就開自身熱點 <b id="apName"></b>(密碼固定 12345678,網址 192.168.4.1). 儲存後重新開機生效.
-   <br><b>熱點名稱</b>:開頭固定,後面可空白,也可以接字分辨同場的飛機(例如 3 → HappySuperGG_Plane3),最多 14 個英數字(中文一字算 3 個). 熱點密碼固定,不能改.
+  <div class="cnote">開機先連家用 WiFi;連不上或名稱留空,就開自身熱點 <b id="apName"></b>(網址 192.168.4.1). 儲存後重新開機生效.
+   <br><b>熱點名稱</b>:開頭固定,後面可空白,也可以接字分辨同場的飛機(例如 3 → HappySuperGG_Plane3),最多 14 個英數字(中文一字算 3 個).
+   <br><b>熱點密碼</b>:出廠 12345678. 建議改掉,別人就不能連進來亂改設定. 8~63 個英文,數字或半形符號,區分大小寫. 忘記密碼用下方的「完全連不上時救援」回出廠.
    <br><b>發射功率</b>:拖動立即生效,方便比較連線品質;開太大反而壓垮自己的接收,常用 5 dBm. 拖動後 15 秒內要按上方「保持」,沒按會自動退回.
    <br><b>設定保護</b>:儲存並重新開機後,連上網頁要按上方「保持」;WiFi 就緒後 3 分鐘內沒按,自動改回上一次的設定.
-   <br><b>完全連不上時救援</b>:電池接上後 5 秒內拔掉,連續 3 次,WiFi 設定回出廠(自身熱點 HappySuperGG_Plane,密碼 12345678). 飛行設定不受影響.</div>
-  <div class="row"><label for="fApSfx">熱點名稱</label><span class="apfix" id="apPrefix">HappySuperGG_Plane</span><input type="text" id="fApSfx" autocomplete="off" placeholder="(可空白)" style="flex:1 1 70px;min-width:0"></div>
-  <div class="sub" id="apHint" style="margin:-2px 0 2px 104px"></div>
-  <div class="row"><label for="fSsid">家用 WiFi</label><input type="text" id="fSsid" maxlength="32" autocomplete="off" placeholder="名稱"></div>
-  <div class="row"><label for="fPw">WiFi 密碼</label><input type="password" id="fPw" maxlength="63" autocomplete="off"><button class="b sm" id="btnPwShow">顯示</button></div>
+   <br><b>完全連不上時救援</b>:電池接上後 5 秒內拔掉,連續 3 次,WiFi 設定回出廠(自身熱點 HappySuperGG_Plane,密碼回 12345678). 飛行設定不受影響.</div>
+  <div class="wgrp"><div class="wgt">自身熱點(AP):手機直接連飛機</div>
+   <div class="row"><label for="fApSfx">熱點名稱</label><span class="apfix" id="apPrefix">HappySuperGG_Plane</span><input type="text" id="fApSfx" autocomplete="off" placeholder="(可空白)" style="flex:1 1 70px;min-width:0"></div>
+   <div class="sub" id="apHint" style="margin:-2px 0 2px 104px"></div>
+   <div class="row"><label for="fApPw">熱點密碼</label><input type="password" id="fApPw" maxlength="63" autocomplete="off"><button class="b sm" id="btnApPwShow">顯示</button></div>
+  </div>
+  <div class="wgrp"><div class="wgt">家用 WiFi:飛機連到家裡的路由器</div>
+   <div class="row"><label for="fSsid">家用 WiFi<span class="lsub">名稱(SSID)</span></label><input type="text" id="fSsid" maxlength="32" autocomplete="off" placeholder="手機 WiFi 清單上的名稱,留空 = 只用熱點"></div>
+   <div class="sub" style="margin:-2px 0 4px 104px">SSID 就是 WiFi 的名稱,大小寫,空白,符號都要和手機 WiFi 清單上看到的完全一樣. 只能連 2.4GHz 的 WiFi(不支援 5GHz),也不支援隱藏名稱的 WiFi.</div>
+   <div class="row"><label for="fPw">家用 WiFi<span class="lsub">密碼</span></label><input type="password" id="fPw" maxlength="63" autocomplete="off"><button class="b sm" id="btnPwShow">顯示</button></div>
+  </div>
   <div class="row"><label for="fHost">裝置名稱</label><input type="text" id="fHost" maxlength="31" autocomplete="off"><span class="sub">.local</span></div>
   <div class="row" title="連不上家用 WiFi 幾秒後改開自身熱點"><label for="fTmo">等待秒數</label><input type="number" id="fTmo" min="10" max="120" style="flex:0 0 64px"><span class="sub">秒後開熱點</span>
    <label class="chk" style="margin:0 0 0 auto"><input type="checkbox" id="fForce"> 一律用熱點</label></div>
@@ -543,14 +618,57 @@ progress{width:100%;height:10px}
   </details>
  </div>
 </section>
+
+<section id="bak" hidden>
+ <div class="live" id="bkDirty" hidden style="margin:0 0 8px"><span class="pill bad">有未儲存的變更</span><span class="sub">請先按上方的儲存或放棄,才能產生或套用備份碼.</span></div>
+ <div class="card" id="bkCard">
+  <h2>產生備份碼</h2>
+  <div class="cnote">勾選要複製的內容,按「產生並複製」,得到一串 LP 開頭的文字,存在 LINE 或記事本,或傳給朋友.
+   <br><b>碼裡只有你勾的東西</b>:朋友套用時,沒勾的部分完全不會被改到. 例如只想分享飛法,就只勾那一組風格,不會蓋掉朋友的安裝與電變設定.
+   <br>六組風格全部勾選的碼,套用時才會一併切換「飛行使用哪一組」. 勾得越少,碼越短.</div>
+  <div class="bkhd"><b>① 勾選要複製的內容</b><span class="bkq"><a href="#" id="bkSelAll">全選</a><a href="#" id="bkSelTest">只選測試</a><a href="#" id="bkSelNone">全部取消</a></span></div>
+  <div class="bkprof" id="bkProfBox">
+   <div class="bkpt">計時器風格<button class="ib" type="button" title="說明">ⓘ</button></div>
+   <div class="bkhint">每一組都包含:計時器頁(油門,時間,起飛油門,換段,降落)與角度補償頁(補償曲線,油門上下限). 點一下亮起來就是要複製.</div>
+   <div class="bksel" id="bkSel"></div>
+  </div>
+  <div class="bkgt">其他設定</div>
+  <div class="bksecs" id="bkSecs"></div>
+  <div class="bkhd"><b>② 產生</b></div>
+  <div class="row" style="margin-bottom:0"><button class="b pri" id="btnBkMake">產生並複製</button><span class="sub" id="bkMakeText" style="flex:1 1 150px"></span></div>
+  <textarea class="bktext" id="bkOut" rows="4" readonly hidden></textarea>
+  <div class="msg" id="bkMakeMsg"></div>
+ </div>
+ <div class="card">
+  <h2>套用備份碼</h2>
+  <div class="cnote">貼上 LP 開頭的備份碼,板子會先檢查,並告訴你碼裡有哪些內容.
+   <br>按「套用」後,碼裡有的部分蓋掉目前的設定,碼裡沒有的部分不動. 套用完還沒存,確認後按上方的儲存,不要就按放棄.
+   <br><b>WiFi 例外</b>:碼裡有 WiFi 時,套用當下就直接存起來(按放棄也不會退回),重新開機才生效;重開後 3 分鐘內要按上方「保持」,沒按會自動改回原本的 WiFi.
+   <br><b>套用後請逐頁檢查</b>,尤其感測器方位,角度修正,電變脈寬與收輪行程:每台飛機的安裝不一樣. 較舊的備份碼也能用.</div>
+  <textarea class="bktext" id="bkIn" rows="4" placeholder="LP 開頭的備份碼(長按貼上)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+  <div id="bkPick" hidden>
+   <div class="bkhd"><b>要套用的內容</b><span class="sub">點一下取消;灰色打 ✕ 的不會套用,保持你原本的設定</span></div>
+   <div class="bkprof" id="bkPickProfBox">
+    <div class="bkpt">計時器風格<button class="ib" type="button" title="說明">ⓘ</button></div>
+    <div class="bkhint">每一組都包含:計時器頁(油門,時間,起飛油門,換段,降落)與角度補償頁(補償曲線,油門上下限). 會套用到同一個位置(碼裡的 A 蓋掉你的 A).</div>
+    <div class="bksel bkpick" id="bkPickSel"></div>
+   </div>
+   <div class="bkgt" id="bkPickST">其他設定</div>
+   <div class="bksecs" id="bkPickSecs"></div>
+   <div class="bkd" id="bkPickNote" style="margin:2px 0 4px"></div>
+  </div>
+  <div class="row" style="margin-bottom:0"><button class="b pri" id="btnBkApply" disabled>套用</button><button class="b" id="btnBkClear">清空</button></div>
+  <div class="msg" id="bkMsg"></div>
+ </div>
+</section>
 </main>
-<footer class="credit"><span><span class="ck">設計開發者：</span><span class="gg">SuperGG</span></span><span><span class="ck">Line社群：</span><span class="line">RotorFlightTW</span></span></footer>
+<footer class="credit"><span><span class="ck">設計開發者：</span><span class="gg" aria-label="SuperGG"><i style="--i:0">S</i><i style="--i:1">u</i><i style="--i:2">p</i><i style="--i:3">e</i><i style="--i:4">r</i><i style="--i:5">G</i><i style="--i:6">G</i></span></span><span><span class="ck">Line社群：</span><span class="line">RotorFlightTW</span></span></footer>
 <div class="toast" id="toast" hidden></div>
 <script>
 const $=id=>document.getElementById(id);
 let pane='mon',META=null,VALS=null,editP=0,STATUS=null;
 const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔掉電池再接上(每次通電倒數一次).',startstate:'只有待機或飛行結束時可以開始.',
- startblock:'剛扭轉機尾取消起飛,稍等幾秒再開始.',start:'已開始.',saved:'已儲存.',pwshort:'密碼至少 8 碼(開放網路請留空).',apsfxlong:'熱點名稱後面接的字太長:最多 14 個英數字(中文一字算 3 個).',
+ startblock:'剛取消起飛或剛停止馬達,稍等幾秒再開始.',startbusy:'手動輸出或電變校正進行中,先上鎖或等校正完成再開始.',cancelstate:'只有等待放穩或倒數中可以取消;馬達運轉中請用緊急停止.',start:'已開始.',saved:'已儲存.',pwshort:'密碼至少 8 碼(開放網路請留空).',apsfxlong:'熱點名稱後面接的字太長:最多 14 個英數字(中文一字算 3 個).',
  apsfxspace:'熱點名稱後面接的字,頭尾不能是空白(手機上看不出來,容易連錯).',apsfxbad:'熱點名稱後面接的字含有不能用的字元.',ssidlong:'WiFi 名稱太長.',
  pwlong:'密碼太長.',hostbad:'裝置名稱只能用英文,數字與連字號,且不可頭尾為連字號.',tmo:'等待秒數要在 10~120.',
  txp:'發射功率超出範圍.',savefail:'寫入失敗,請再試一次.',badform:'欄位不齊.',busy:'飛行中不能執行.',
@@ -564,7 +682,8 @@ const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔�
  flashbegin:'無法開始寫入,請重新開機後再試.',flashwrite:'寫入失敗,目前韌體沒有改變.',flashend:'寫入檢查失敗,目前韌體沒有改變.',
  short:'下載中斷,目前韌體沒有改變,請再試一次.',timeout:'下載逾時,目前韌體沒有改變,請再試一次.',sha:'下載的檔案檢查碼不對,已放棄,目前韌體沒有改變.',
  locked:'起飛流程進行中,設定已鎖定.',range:'超出可調範圍.',order:'曲線的角度必須由水平往外依序排列,不可越過相鄰的點或死區.',
- minmax:'油門下限必須小於上限.',phasetime:'第一段時間必須比總飛行時間短.',axis:'朝機頭與朝機背不能是同一軸.',
+ minmax:'油門下限必須小於上限.',phasetime:'第一段時間必須比總飛行時間短.',takeofftime:'緩啟動加力秒數 + 起飛油門持續時間 + 1 秒過渡,要在第一段持續時間內結束.',
+ appwshort:'熱點密碼至少 8 個字.',appwlong:'熱點密碼最多 63 個字.',appwspace:'熱點密碼頭尾不能是空白(看不出來,容易打錯).',appwbad:'熱點密碼只能用英文,數字與鍵盤上的半形符號(不能有中文或全形字).',axis:'朝機頭與朝機背不能是同一軸.',
  escrange:'100% 的脈寬至少要比 0% 大 100 µs.',pwmhz:'PWM 週期要比 100% 脈寬多 300 µs:頻率調低一點,或把 100% 脈寬調小.',twistdeg:'扭轉取消角度設 0(關閉)或至少 15 度.',gearrange:'舵機行程上限至少要比下限大 100 µs.',geartest:'已送出.',name:'名稱不能空白,也不能有換行等特殊字元.',key:'未知的參數.',value:'數值格式不對.',scope:'風格編號不對.',
  selected:'已設為飛行使用.',copied:'已複製,記得儲存.',defaults:'已回預設,按儲存才會寫入;按放棄變更可以救回.',reverted:'已放棄變更.',
  manualstate:'只有待機或飛行結束時可以手動輸出(倒數中請先取消倒數).',manuallow:'手動輸出要從最低油門開始.',
@@ -572,7 +691,8 @@ const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔�
  calibon:'已設定:10 秒內拔掉電池再接上就開始校正,沒拔會自動取消.',caliboff:'已取消電變校正.',
  bkdirty:'有未儲存的變更,請先按上方的儲存或放棄.',bkprefix:'這不是備份碼(要 LP 開頭),已清空,請重新貼上.',
  bkcrc:'備份碼不完整或有錯字(可能少複製了一段),已清空,請重新複製整串再貼上.',bkver:'這個備份碼的格式比這台飛機的韌體新,請先到系統頁更新韌體.',
- bkfail:'產生備份碼失敗,請再試一次.'};
+ bkfail:'產生備份碼失敗,請再試一次.',bksel:'要包含的內容至少選一項.',bknone:'全部都取消了,沒有東西可以套用.',namelocked:'「測試」這組名稱固定,不能改.'};
+const PROFILE_TEST_INDEX=5;   // 「測試」組(與韌體 settings.h PROFILE_TEST_INDEX 一致):名稱鎖定,備份碼預設只選這組
 const AXES=['晶片 +X','晶片 −X','晶片 +Y','晶片 −Y','晶片 +Z','晶片 −Z'];
 const UNIT={pct:'%',cpct:'%',sec:'秒',min:'分鐘',deg:'°',g:'g',us:'µs',m:'公尺',num:'',hz:'Hz'};
 // 參數標籤:[名稱, 單位種類, 說明]
@@ -581,7 +701,9 @@ const L={
  phase1Sec:['第一段持續時間','sec','從馬達開始轉算起,到這個時間換成第二段. 要比總飛行時間短.'],
  phase2Pct:['第二段基本油門','pct','飛到後段電池電壓下降,用較高的油門補回推力.'],
  flightSec:['總飛行時間','sec','從馬達開始轉算起,到這個時間開始降落.'],
- takeoffRamp:['緩啟動加力秒數','sec','馬達從停止加到第一段油門花的秒數,起飛不會猛衝.'],
+ takeoffRamp:['緩啟動加力秒數','sec','馬達從停止加到起飛油門花的秒數,起飛不會猛衝. 起飛油門持續時間設 0(不使用)時,是加到第一段油門.'],
+ takeoffPct:['起飛油門','pct','緩啟動加到這個油門,維持「起飛油門持續時間」後,用 1 秒平順換到第一段油門. 持續時間設 0 時不使用.'],
+ takeoffHold:['起飛油門持續時間','sec','緩啟動走完後,維持起飛油門的秒數. 0 = 不使用(緩啟動直接加到第一段油門). 緩啟動 + 持續時間 + 1 秒過渡要在第一段持續時間內.'],
  phaseRamp:['換段加力秒數','sec','換段方式選「有過渡」時,從第一段油門加到第二段油門花的秒數.'],
  noCompSec:['起飛後不補償','sec','後三點飛機停在地上本來就機頭朝上,起飛滑跑這段時間不做角度補償,免得一起飛就被當成爬升而加油門.'],
  minPct:['飛行中油門下限','pct','角度補償再怎麼減,油門也不會低於這個值. 兩段共用. 最低 10%,避免補償太多變成沒動力.'],
@@ -618,12 +740,12 @@ const L={
  gearTravelSec:['舵機速度','sec','輪子從放下到收起花的秒數,慢一點比較不會衝擊收腳機構. 0 = 舵機自己的最快速度.'],
  gearMinUs:['舵機行程下限','us','舵機一端的位置. 出廠 1400(小行程):先按「試收輪」確認方向,再慢慢加大到剛好收到底,不要頂死.'],
  gearMaxUs:['舵機行程上限','us','舵機另一端的位置. 出廠 1600(小行程). 至少要比下限大 100 µs.'],
- escMinUs:['油門 0% 脈寬','us','油門 0% 時送出的脈寬. 標準電變 1000.'],
+ escMinUs:['油門 0% 脈寬','us','油門 0% 時送出的脈寬. 標準電變 1000. ⚠ 待機時就是輸出這個值:調高的當下馬達會立刻轉,所以要先勾「螺旋槳已拆除」才能調.'],
  escMaxUs:['油門 100% 脈寬','us','油門 100% 時送出的脈寬. 標準電變 2000. 改過建議重新校正電變.']
 };
 // 計時器頁三組參數放同一張卡,用小標題分組(r46:原本三張卡,卡片邊框與標題佔版面)
 const PROF_LAYOUT=[
- {t:'起飛',k:['takeoffRamp','noCompSec']},
+ {t:'起飛',k:['takeoffRamp','takeoffPct','takeoffHold','noCompSec']},
  {t:'飛行時間軸(從馬達開始轉算起)',k:['phase1Pct','phase1Sec','phaseMode','phaseRamp','phase2Pct','flightSec']},
  {t:'降落',k:['landingRamp','landingPct']}
 ];
@@ -802,6 +924,8 @@ function renderWidgets(){
 }
 let chain=Promise.resolve();
 function setParam(scope,key,v){
+ // 油門 0% 脈寬待機時立即輸出(安全審查 2-A):PWM 電變已解鎖的話馬達會直接照新脈寬轉. 要先勾「螺旋槳已拆除」才讓改.
+ if(scope==='s'&&key==='escMinUs'&&!$('manProp').checked){toast('改「油門 0% 脈寬」時待機中的馬達會立刻照新脈寬轉動. 請先在下方手動輸出卡勾「螺旋槳已拆除」再調.',true);loadVals();return chain}
  chain=chain.then(async()=>{
   try{const r=await post('/api/set',{p:scope==='s'?'s':editP,k:key,v:v});if(!r.ok)toast(CODES[r.code]||r.code,true)}
   catch(e){toast('連線失敗,請再試一次.',true)}
@@ -822,7 +946,7 @@ function wireNotes(root){
 function buildProfile(){
  const box=$('profCards');box.innerHTML='';
  const c=card('時間軸',`<div id="timeline" style="color:var(--ink);margin-bottom:4px"></div>${PROF_NOTE}`,'profParams');
- c.appendChild($('tlSvg'));   // 時間軸圖放在參數上方,同一張卡
+ c.appendChild($('tlSvg'));c.appendChild($('tlLegend'));   // 時間軸圖與顏色說明放在參數上方,同一張卡
  for(const g of PROF_LAYOUT){c.insertAdjacentHTML('beforeend',`<h3 class="grp">${g.t}</h3>`);
   g.k.forEach(k=>c.appendChild(k==='phaseMode'?makeSelect('p',k,'換段方式',PHASE_NAMES,'直接跳:時間到立刻變成第二段油門. 有過渡:時間到後用「換段加力秒數」加上去. 平均分攤:起飛後就把兩段的油門差平均加在第一段時間內,第一段結束剛好到第二段油門.'):makeParam('p',k)))}
  box.appendChild(c);
@@ -838,9 +962,14 @@ function drawTimeline(p,sh){
  const WAIT=Math.max(3,Math.min(sh.landingTimeout,10));   // 等觸地段只示意
  // 分段:[開始秒,結束秒,名稱]
  // 短段的長度直接寫在名稱裡,刻度只標主要時間點,手機上才不會擠成一團
- const segs=[[0,tr,`緩啟動 ${tr}s`],[tr,T1,'第一段']];
- if(pm===1&&rampEnd>T1)segs.push([T1,rampEnd,`換段 ${p.phaseRamp}s`]);
- segs.push([rampEnd,F,'第二段'],[F,F+p.landingRamp,`減力 ${p.landingRamp}s`],[F+p.landingRamp,F+p.landingRamp+WAIT,'等觸地']);
+ // 起飛油門(持續時間 > 0 才有):緩啟動走完維持 hold 秒,再 1 秒過渡到第一段(與韌體 TAKEOFF_BLEND_S 相同)
+ const hold=p.takeoffHold>0?p.takeoffHold:0,toEnd=hold?Math.min(T1,tr+hold+1):tr;
+ // 第 4 格是底色種類(TL_KIND),圖下方的顏色說明也用同一張表
+ const segs=[[0,tr,`緩啟動 ${tr}s`,'ramp']];
+ if(hold)segs.push([tr,toEnd,`起飛 ${hold}s`,'takeoff']);
+ segs.push([toEnd,T1,'第一段','p1']);
+ if(pm===1&&rampEnd>T1)segs.push([T1,rampEnd,`換段 ${p.phaseRamp}s`,'change']);
+ segs.push([rampEnd,F,'第二段','p2'],[F,F+p.landingRamp,`減力 ${p.landingRamp}s`,'land'],[F+p.landingRamp,F+p.landingRamp+WAIT,'等觸地','land']);
  const MINW=62,dur=segs.map(s=>Math.max(0,s[1]-s[0]));
  const total=dur.reduce((a,b)=>a+b,0)||1;
  let widths=dur.map(d=>Math.max(MINW,pw*d/total));
@@ -850,23 +979,21 @@ function drawTimeline(p,sh){
  const yOf=v=>B-(B-T)*Math.min(100,Math.max(0,v))/100;
  const base=t=>{   // 與韌體 baseThrottle 同一套(緩啟動期間乘上爬升比例)
   let b=t<T1?(pm===2?p1+(p2-p1)*t/T1:p1):(pm===1&&p.phaseRamp>0?p1+(p2-p1)*Math.min(1,(t-T1)/p.phaseRamp):p2);
+  if(hold&&t<tr+hold+1){const he=tr+hold;b=t<he?p.takeoffPct:p.takeoffPct+(b-p.takeoffPct)*(t-he)}
   return t<tr&&tr>0?b*t/tr:b};
- let h='';
- // 上下限之間淡綠 = 飛行中角度補償的活動範圍;起飛後不補償的時段另外標
+ let h=`<defs><pattern id="tlHatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="var(--mute)" stroke-width="2.2" opacity=".45"/></pattern></defs>`;
+ // 每一段一種淡底色(GG 2026-09-15):一眼看出緩啟動,起飛油門,第一段,換段,第二段,降落各佔哪裡
+ segs.forEach((s,i)=>{h+=`<rect x="${x0s[i]}" y="${T}" width="${widths[i]}" height="${B-T}" fill="${TL_KIND[s[3]].c}" opacity=".18"/>`});
+ // 不補償:從馬達起轉(0 秒)算起 noCompSec 秒,用斜線疊在底色上(和階段無關,可能跨過緩啟動,起飛油門,第一段)
  const xFlyA=xOf(Math.min(p.noCompSec,F)),xFlyB=xOf(F);
- h+=`<rect x="${xFlyA}" y="${yOf(p.maxPct)}" width="${Math.max(0,xFlyB-xFlyA)}" height="${yOf(p.minPct)-yOf(p.maxPct)}" fill="#22c55e" opacity=".12"/>`;
- if(p.noCompSec>0)h+=`<rect x="${L}" y="${T}" width="${Math.max(0,xFlyA-L)}" height="${B-T}" fill="var(--mute)" opacity=".10"/><text x="${(L+xFlyA)/2}" y="${B-6}" text-anchor="middle" class="tl-lab">不補償</text>`;
+ if(p.noCompSec>0)h+=`<rect x="${L}" y="${T}" width="${Math.max(0,xFlyA-L)}" height="${B-T}" fill="url(#tlHatch)"/>`;
  for(const v of [0,50,100]){const y=yOf(v);h+=`<line x1="${L}" y1="${y}" x2="${W-R}" y2="${y}" class="cv-grid"/><text x="${L-6}" y="${y+4}" text-anchor="end" class="tl-lab">${v}%</text>`}
+ // 上下限數值寫在圖下方說明(r65:原本下限標籤在線下 16px,下限低時掉到 X 軸文字上)
  h+=`<line x1="${L}" y1="${yOf(p.maxPct)}" x2="${xFlyB}" y2="${yOf(p.maxPct)}" class="cv-lim"/><line x1="${L}" y1="${yOf(p.minPct)}" x2="${xFlyB}" y2="${yOf(p.minPct)}" class="cv-lim"/>`;
- // 上下限標籤放在補償範圍左端,避開右端第二段油門數值
- h+=`<text x="${xFlyA+4}" y="${yOf(p.maxPct)-5}" class="tl-lab">上限 ${p.maxPct}%</text><text x="${xFlyA+4}" y="${yOf(p.minPct)+16}" class="tl-lab">下限 ${p.minPct}%</text>`;
- // 分段分隔線與名稱
- segs.forEach((s,i)=>{const xa=x0s[i],xb=xa+widths[i];
-  if(i)h+=`<line x1="${xa}" y1="${T}" x2="${xa}" y2="${B}" stroke="var(--line)" stroke-dasharray="3 3"/>`;
-  h+=`<text x="${(xa+xb)/2}" y="${B+17}" text-anchor="middle" class="tl-lab">${s[2]}</text>`;
- });
- // 刻度只標起飛,換段,降落三個主要時間點
- for(const [tt,anchor] of [[0,'start'],[T1,'middle'],[F,'middle']])h+=`<text x="${xOf(tt)}" y="${B+35}" text-anchor="${anchor}" class="tl-t">${mmss(Math.round(tt))}</text>`;
+ // 分段分隔線
+ segs.forEach((s,i)=>{if(i)h+=`<line x1="${x0s[i]}" y1="${T}" x2="${x0s[i]}" y2="${B}" stroke="var(--line)" stroke-dasharray="3 3"/>`});
+ // X 軸下方只標起飛,換段,降落三個主要時間點(分段名稱改放圖內,見下方)
+ for(const [tt,anchor] of [[0,'start'],[T1,'middle'],[F,'middle']])h+=`<text x="${xOf(tt)}" y="${B+17}" text-anchor="${anchor}" class="tl-t">${mmss(Math.round(tt))}</text>`;
  // 基本油門線:依分段逐秒取樣(短段也有足夠點數)
  let pts='';
  segs.forEach(([a,b],i)=>{if(i>=segs.length-2)return;const n=Math.max(2,Math.ceil(widths[i]/4));for(let j=0;j<=n;j++){const t=a+(b-a)*j/n;pts+=`${xOf(t).toFixed(1)},${yOf(base(t)).toFixed(1)} `}});
@@ -878,10 +1005,34 @@ function drawTimeline(p,sh){
  h+=`<line x1="${xL1}" y1="${yOf(p.landingPct)}" x2="${xW1}" y2="${yOf(p.landingPct)}" stroke="var(--accent)" stroke-width="3" stroke-dasharray="6 5"/>`;
  // 關鍵油門值
  const tag=(x,v,anchor,dy)=>`<text x="${x}" y="${yOf(v)+(dy||-8)}" text-anchor="${anchor||'middle'}" class="tl-v">${Math.round(v)}%</text>`;
- h+=tag(x0s[1]+4,base(tr),'start')+tag(xOf(T1)-4,base(Math.max(tr,T1-0.01)),'end')+tag(xL0-4,p2,'end')+tag(xL1+4,p.landingPct,'start');
- h+=`<text x="${L}" y="${B+57}" class="cv-lab cv-sm">※ 寬度不按比例(短的階段放大),刻度是實際時間. 淡綠 = 角度補償範圍</text>`;
+ h+=tag(x0s[1]+4,base(tr),'start')+tag(xOf(T1)-4,base(Math.max(toEnd,T1-0.01)),'end')+tag(xL0-4,p2,'end')+tag(xL1+4,p.landingPct,'start');
+ if(hold)h+=tag(x0s[2]+4,base(toEnd),'start');   // 起飛油門之後的第一段油門
+ // 分段名稱放在圖內下方,上下兩排交錯(GG 2026-09-15:短段名稱在 X 軸下方擠在一起重疊);相鄰兩段一定不同排.
+ // 大略估字寬(中文 12px,英數 6.5px),頭尾的名稱往內推,不超出圖框. 最後畫,文字外框蓋在油門線上仍看得清楚.
+ const txtW=s=>[...s].reduce((a,ch)=>a+(ch.charCodeAt(0)>255?12:6.5),0);
+ segs.forEach((s,i)=>{const hw=txtW(s[2])/2,cx=Math.min(W-R-hw,Math.max(L+hw,x0s[i]+widths[i]/2));
+  h+=`<text x="${cx.toFixed(1)}" y="${i%2?B-24:B-7}" text-anchor="middle" class="tl-seg">${s[2]}</text>`});
+ // 不補償標籤放在第三排(斜線區塊中間)
+ if(p.noCompSec>0){const s=`不補償 ${p.noCompSec}s`,hw=txtW(s)/2;
+  h+=`<text x="${Math.max(L+hw,(L+xFlyA)/2).toFixed(1)}" y="${B-41}" text-anchor="middle" class="tl-seg">${s}</text>`}
+ h+=`<text x="${L}" y="${B+37}" class="cv-lab cv-sm">※ 寬度不按比例(短的階段放大),刻度是實際時間(從馬達起轉算起)</text>`;
  svg.innerHTML=h;
+ // 顏色說明:只列這組設定圖上有出現的
+ const kinds=[...new Set(segs.map(s=>s[3]))];
+ let lg=kinds.map(k=>`<span><i style="background:${TL_KIND[k].c}"></i>${TL_KIND[k].t}</span>`).join('');
+ if(p.noCompSec>0)lg+=`<span><i class="hatch"></i>斜線:不補償,馬達起轉後 ${p.noCompSec} 秒內不做角度補償</span>`;
+ lg+=`<span><i class="lim"></i>虛線:飛行中油門上限 ${p.maxPct}% / 下限 ${p.minPct}%,角度補償加減後不會超出</span><span><i style="background:var(--accent);height:3px"></i>橘線:基本油門(未含角度補償)</span>`;
+ $('tlLegend').innerHTML=lg;
 }
+// 時間軸圖各階段的底色與說明
+const TL_KIND={
+ ramp:{c:'#f59e0b',t:'緩啟動:馬達從停止慢慢加油門'},
+ takeoff:{c:'#ef4444',t:'起飛油門:維持起飛油門,最後 1 秒換到第一段'},
+ p1:{c:'#65a30d',t:'第一段'},
+ change:{c:'#db2777',t:'換段:從第一段油門加到第二段'},
+ p2:{c:'#b45309',t:'第二段'},
+ land:{c:'#a8a29e',t:'降落:減力後維持降落油門,等觸地關馬達'}
+};
 
 // --- 角度補償:只有一條曲線,兩段飛行共用. 「第二段」頁籤只換基本油門顯示,讓人看出加力後哪裡會撞到上限 ---
 // (曾經做過第二段獨立曲線,GG 認為不好設定且易混淆,已刪除.)
@@ -930,6 +1081,7 @@ function buildCurve(){
 // 座標:直軸機頭角度 +90(上)~-90(下),橫軸實際輸出油門 0~100% 等距. 繪圖區以外是把手與刻度.
 // 高度 548 → 366(GG 2026-09-14):整張圖禁止捲頁後太高,手機上能按著捲頁的區域被壓縮. 角度區 442 → 260 單位,
 // 15° 格線間距約 22 單位,點的觸控範圍(半徑 20)仍夠用. 改高度要同時改下面 cvSvg 的 viewBox.
+// 圖框上方那一排放基本油門標籤(r67 從框中間搬出來)與直軸上方的「機頭朝上」;r68 拿掉角落段別文字,高度回到 366
 const CV={W:440,H:366,L:62,R:26,T:22,B:84};
 const CV_X0=CV.L,CV_X1=CV.W-CV.R,CV_Y0=CV.T,CV_Y1=CV.H-CV.B;
 let cvSel={t:'pt',side:'up',i:1},cvDrag=null,cvPanelSig='',cvLimOpen=false;
@@ -952,15 +1104,15 @@ function drawCurve(){
  const upDb=p[ck('upDb')],dnDb=p[ck('dnDb')];
  const X0=CV_X0,X1=CV_X1,Y0=CV_Y0,Y1=CV_Y1;
  let h='<defs><filter id="cvGlow" x="-2" y="-2" width="5" height="5"><feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
- // 油門上下限以外塗灰,死區淡藍
+ // 油門上下限以外塗灰,死區淡主色
  h+=`<rect x="${X0}" y="${Y0}" width="${cvX(mn)-X0}" height="${Y1-Y0}" class="cv-limit"/><rect x="${cvX(mx)}" y="${Y0}" width="${X1-cvX(mx)}" height="${Y1-Y0}" class="cv-limit"/>`;
  h+=`<rect x="${X0}" y="${cvY(upDb)}" width="${X1-X0}" height="${Math.max(0,cvY(dnDb)-cvY(upDb))}" class="cv-dead"/>`;
  for(let d=-90;d<=90;d+=15){const y=cvY(d);h+=`<line x1="${X0}" y1="${y}" x2="${X1}" y2="${y}" class="${d?'cv-grid':'cv-zero'}"/>`;
   if(d%30===0)h+=`<text x="${X0-9}" y="${y+4.5}" text-anchor="end" class="cv-lab">${d>0?'+':''}${d}°</text>`}
  for(let v=0;v<=100;v+=10){const x=cvX(v);h+=`<line x1="${x}" y1="${Y0}" x2="${x}" y2="${Y1}" class="cv-grid"/>`;
   if(v%20===0)h+=`<text x="${x}" y="${Y1+50}" text-anchor="middle" class="cv-lab">${v}%</text><text x="${x}" y="${Y1+64}" text-anchor="middle" class="cv-lab cv-sm">${cvUs(v)}µs</text>`}
- h+=`<text x="${X0}" y="${Y0-7}" class="cv-lab cv-sm">機頭朝上</text><text x="${X0}" y="${Y1+80}" class="cv-lab cv-sm">橫軸:實際輸出油門(灰色 = 超出上下限,不會輸出)</text>`;
- h+=`<text x="${X1}" y="${Y0-7}" text-anchor="end" class="cv-lab cv-sm">${cvPhase===1?'第一段(可調整)':'第二段(曲線只顯示,基本油門可拖)'}</text>`;
+ // 「機頭朝上」放在直軸 +90° 刻度上方(框外左上角);段別文字已拿掉,看上方第一段/第二段按鈕(GG 2026-09-15)
+ h+=`<text x="${X0-9}" y="${Y0-8}" text-anchor="end" class="cv-lab cv-sm">機頭朝上</text><text x="${X0}" y="${Y1+80}" class="cv-lab cv-sm">橫軸:實際輸出油門(灰色 = 超出上下限,不會輸出)</text>`;
  h+=`<rect x="${X0}" y="${Y0}" width="${X1-X0}" height="${Y1-Y0}" class="cv-frame"/>`;
  h+=`<line x1="${cvX(mn)}" y1="${Y0}" x2="${cvX(mn)}" y2="${Y1}" class="cv-lim"/><line x1="${cvX(mx)}" y1="${Y0}" x2="${cvX(mx)}" y2="${Y1}" class="cv-lim"/>`;
  h+=`<line x1="${cvX(base)}" y1="${Y0}" x2="${cvX(base)}" y2="${Y1}" class="cv-base"/>`;
@@ -976,9 +1128,9 @@ function drawCurve(){
  }
  // 目前角度紅線的群組放在標籤與點的底下,紅線才不會穿過文字(每次狀態輪詢只更新這個群組)
  h+='<g id="cvNow"></g>';
- // 基本油門標籤放在畫面中間
- const bx=cvX(base),by=cvY(0),bt=`基本油門 ${base}%(${cvUs(base)}µs)`,bw=bt.length*9.5+14,tx=clamp(bx,X0+bw/2+2,X1-bw/2-2);
- h+=`<rect x="${tx-bw/2}" y="${by-13}" width="${bw}" height="26" rx="6" class="cv-tag"/><text x="${tx}" y="${by+5}" text-anchor="middle" class="cv-tagt">${bt}</text>`;
+ // 基本油門標籤放在圖框外上方(GG 2026-09-15:原本在框中間 0° 的位置,遮住曲線與死區),短線接到框頂的基本油門線
+ const bx=cvX(base),bt=`基本油門 ${base}%(${cvUs(base)}µs)`,bw=bt.length*9.5+14,tx=clamp(bx,X0+bw/2+2,X1-bw/2-2);
+ h+=`<rect x="${tx-bw/2}" y="${Y0-21}" width="${bw}" height="19" rx="5" class="cv-tag"/><text x="${tx}" y="${Y0-7}" text-anchor="middle" class="cv-tagt" style="font-size:12.5px">${bt}</text>`;
  // 飛機圖示(左上角,跟著目前角度轉)
  h+=`<g transform="translate(${X0+44},${Y0+36})"><g id="cvPlane"><g id="cvPlaneFlip" transform="scale(${right?-1:1},1)" class="cv-plane"><g transform="scale(.36)">`+
   `<path d="M-92,0 Q-90,-9 -72,-10 L58,-5 L96,-3 L96,3 L58,5 L-72,10 Q-90,9 -92,0 Z"/><path d="M68,-4 L90,-30 L100,-30 L97,-3 Z"/><rect x="-97" y="-28" width="4" height="56"/><circle cx="-54" cy="30" r="7"/></g></g></g></g>`;
@@ -1012,9 +1164,14 @@ let cvInverted=false;
 function updateCurveNow(s){
  const g=$('cvNow');if(!g||!VALS)return;
  const p=VALS.profile,base=p[cvBaseKey()],d=clamp(s.p,-90,90),y=cvY(d),out=clamp(base+cvComp(p,d),p.minPct,p.maxPct);
- g.innerHTML=`<line x1="${CV_X0}" y1="${y}" x2="${CV_X1}" y2="${y}" class="cv-now"/><circle cx="${cvX(out)}" cy="${y}" r="5" fill="#ef4444"/>`+
-  // 文字放左側(飛機圖示下方的灰區通常沒東西);接近 0° 時放到線的下方,避開畫面中間的基本油門標籤
-  `<text x="${CV_X0+6}" y="${Math.abs(d)<12?y+18:y-7}" class="cv-nowt">目前 ${d>0?'+':''}${d.toFixed(0)}° → ${out.toFixed(0)}%</text>`;
+ // 「目前」文字跟著紅線與曲線的交點走(GG 2026-09-15). 曲線越往上(朝上角度大或朝下角度小)油門越大,
+ // 交點的左上方與右下方不會壓到曲線:優先放左上;左邊放不下或太靠頂端放右下;右下超出底部再回左上.
+ const px=cvX(out),nt=`目前 ${d>0?'+':''}${d.toFixed(0)}° → ${out.toFixed(0)}%`,nw=[...nt].reduce((a,ch)=>a+(ch.charCodeAt(0)>255?12.5:7.2),0);
+ let ul=px-10-nw>=CV_X0+2&&y-8>=CV_Y0+12;
+ if(!ul&&y+18>CV_Y1-4)ul=true;
+ const tx=ul?Math.max(CV_X0+2+nw,px-10):Math.min(CV_X1-2-nw,px+10);
+ g.innerHTML=`<line x1="${CV_X0}" y1="${y}" x2="${CV_X1}" y2="${y}" class="cv-now"/><circle cx="${px}" cy="${y}" r="5" fill="#ef4444"/>`+
+  `<text x="${tx.toFixed(1)}" y="${(ul?Math.max(CV_Y0+12,y-8):y+18).toFixed(1)}" text-anchor="${ul?'end':'start'}" class="cv-nowt">${nt}</text>`;
  // 飛機圖示:與監看頁同一套倒飛判斷(倒飛時機頭換邊且上下顛倒)
  if(Math.abs(s.p)<70){if(Math.abs(s.r)>100)cvInverted=true;else if(Math.abs(s.r)<80)cvInverted=false}
  const nr=(VALS.shared.noseRight===1)!==cvInverted,pl=$('cvPlane'),pf=$('cvPlaneFlip');
@@ -1216,14 +1373,19 @@ function render(){
   $(id).innerHTML=VALS.names.map((n,i)=>`<button data-i="${i}" class="${i===editP?'on':''}">${i===VALS.active?'<span class="star">★</span>':''}${esc(n)}${VALS.dirtyProfiles[i]?'<span class="dot"></span>':''}</button>`).join('');
   $(id).querySelectorAll('button').forEach(b=>b.onclick=()=>{editP=Number(b.dataset.i);loadVals()});
  }
- $('compNow').textContent=`編輯「${VALS.names[editP]}」`+(editP===VALS.active?' · 飛行使用中':' · 不是飛行使用的風格(到計時器頁設定)');
  $('btnSelect').disabled=editP===VALS.active;
  $('btnSelect').textContent=editP===VALS.active?'★ 飛行使用中':'設為飛行使用';
  if(document.activeElement!==$('fName'))$('fName').value=VALS.names[editP];
+ // 「測試」組名稱固定(GG 2026-09-15):改名欄與按鈕停用
+ const nameLocked=editP===PROFILE_TEST_INDEX;
+ $('fName').disabled=nameLocked;$('btnName').disabled=nameLocked;
+ $('fName').title=nameLocked?'「測試」這組名稱固定,不能改.':'';
  $('copyTo').innerHTML=VALS.names.map((n,i)=>i===editP?'':`<option value="${i}">${esc(n)}</option>`).join('');
  const pm=p.phaseMode,phaseText=pm===0?`直接跳到 ${p.phase2Pct}%`:pm===1?`${p.phaseRamp} 秒加到 ${p.phase2Pct}%`:`已平均加到 ${p.phase2Pct}%`;
  drawTimeline(p,VALS.shared);
- $('timeline').textContent=`時間軸:0:00 緩啟動(${p.takeoffRamp} 秒加到 ${p.phase1Pct}%)`+(pm===2?` → 第一段期間平均加油門`:'')+
+ const toClamp=p.takeoffHold>0?(p.takeoffPct>p.maxPct?`⚠ 起飛油門 ${p.takeoffPct}% 超過上限,實際 ${p.maxPct}%. `:p.takeoffPct<p.minPct?`⚠ 起飛油門 ${p.takeoffPct}% 低於下限,實際 ${p.minPct}%. `:''):'';
+ $('timeline').textContent=toClamp+(p.takeoffHold>0?`時間軸:0:00 緩啟動(${p.takeoffRamp} 秒加到起飛油門 ${p.takeoffPct}%) → 維持 ${p.takeoffHold} 秒 → 1 秒換到第一段 ${p.phase1Pct}%`
+  :`時間軸:0:00 緩啟動(${p.takeoffRamp} 秒加到 ${p.phase1Pct}%)`)+(pm===2?` → 第一段期間平均加油門`:'')+
   ` → ${mmss(p.phase1Sec)} 換段(${phaseText}) → ${mmss(p.flightSec)} 降落(${p.landingRamp} 秒減到 ${p.landingPct}%)`+
   (VALS.shared.gearEnable?(VALS.shared.earlyLand?'. 收輪:觸地提早降落開啟中,輪子不收':`. 收輪:${mmss(VALS.shared.gearRetractSec)} 收起,降落開始時放下`):'');
  for(const w of WIDGETS)if(w.key==='phaseRamp')w.el.hidden=pm!==1;   // 只有「有過渡」用得到加力秒數
@@ -1282,8 +1444,8 @@ function drawMonitorCurve(s){
  const X=v=>-160+3.2*clamp(v,0,100),Y=d=>-clamp(d,-90,90)*100/90;
  const curve=base=>{let pts='';for(let d=-90;d<=90;d+=2)pts+=`${X(clamp(base+cvComp(p,d),p.minPct,p.maxPct)).toFixed(1)},${Y(d).toFixed(1)} `;return pts};
  const baseNow=ph===1?p.phase1Pct:p.phase2Pct,baseOther=ph===1?p.phase2Pct:p.phase1Pct;
- // 顏色跟著段別固定:第一段藍,第二段黃;目前這段實線,另一段虛線
- const colOf=n=>n===1?'var(--accent)':'#eab308',other=ph===1?2:1;
+ // 顏色跟著段別固定:第一段主色(橘),第二段綠;目前這段實線,另一段虛線
+ const colOf=n=>n===1?'var(--accent)':'#65a30d',other=ph===1?2:1;
  let h=`<line x1="${X(p.minPct)}" y1="-100" x2="${X(p.minPct)}" y2="100" stroke="var(--mute)" stroke-dasharray="4 4" opacity=".6"/>`+
   `<line x1="${X(p.maxPct)}" y1="-100" x2="${X(p.maxPct)}" y2="100" stroke="var(--mute)" stroke-dasharray="4 4" opacity=".6"/>`+
   `<polyline points="${curve(baseOther)}" fill="none" stroke="${colOf(other)}" stroke-width="2" stroke-dasharray="5 4" opacity=".8"/>`+
@@ -1425,7 +1587,7 @@ function renderStatus(s){
  if(pane==='comp')updateCurveNow(s);
  // 別的裝置或序列埠存檔後,這裡的未儲存提示要跟著消失
  if(VALS){if(valsDirty()!==!!s.dirty)loadVals()}
- if(pane==='set')bkRender();   // 起飛程序鎖定時不能套用
+ if(pane==='bak')bkRender();   // 起飛程序鎖定時不能套用
 }
 
 let busy=false;
@@ -1445,7 +1607,7 @@ const BOOT_TEXT={1:['上電開機',''],3:['軟體重新開機','網頁重新開�
  9:['電壓不足重新開機','板子供電掉太低:檢查 BEC 或降壓板,電池接頭,馬達加速時電壓是否被拉低. 如果這行出現在飛行中,馬達停轉就是這個原因.'],
  11:['USB 重置','燒錄或序列埠連線造成.'],14:['電源干擾重新開機','檢查供電與接地.']};
 const REJ_TEXT=['','有未儲存的變更,請先按儲存','感測器異常','機身角度超過起飛前水平限制','上電自動倒數暫停:機身角度超過起飛前水平限制','韌體更新中','新韌體還沒確認(網頁連上會自動確認)',
- '安全開關沒有按下','上電自動倒數暫停:等安全開關按下','撞擊斷電後推飛機不會啟動'];
+ '安全開關沒有按下','上電自動倒數暫停:等安全開關按下','撞擊斷電後推飛機不會啟動','電變輸出腳位沒有訊號(開機掛載失敗,請重新開機或回報)'];
 function evText(e){
  const [seq,ms,ty,arg,a,b]=e,s1=v=>v.toFixed(1),s2=v=>v.toFixed(2),fl=()=>evMotorMs>=0?`(飛行 ${mmss(Math.max(0,Math.round((ms-evMotorMs)/1000)))})`:'';
  switch(ty){
@@ -1463,7 +1625,7 @@ function evText(e){
   case 5:{const mx=b>0?`(剛才外力最大 ${s2(b)} g)`:'';return {c:'',m:arg===1?`放穩,延長後繼續倒數,剩 ${s1(a)} 秒${mx}`:arg===2?`放穩,重新倒數 ${s1(a)} 秒${mx}`:`開始倒數 ${s1(a)} 秒`,h:''}}
   case 6:return {c:'',m:`倒數中外力超過門檻 ${s2(b)} g,等飛機放穩`,h:''};
   case 7:return {c:'',m:'網頁取消倒數',h:''};
-  case 8:{evMotorMs=ms;const n=VALS&&VALS.names[arg]?`「${VALS.names[arg]}」`:`#${arg}`;return {c:'good',m:`馬達啟動(風格${n},第一段 ${Math.round(a)}%)`,h:''}}
+  case 8:{evMotorMs=ms;const n=VALS&&VALS.names[arg]?`「${VALS.names[arg]}」`:`#${arg}`;return {c:'good',m:`馬達啟動(風格${n},`+(b>0?`起飛油門 ${Math.round(b)}%,`:'')+`第一段 ${Math.round(a)}%)`,h:''}}
   case 9:return {c:'',m:`換到第二段${fl()}`,h:''};
   case 10:return arg===2?{c:'land',m:`觸地提早降落觸發:正飛水平且 Z 軸抖動持續 ${s1(b)} 秒${fl()}`,h:'如果當時沒有碰地:到紀錄頁看 Z 軸抖動數值,調高「Z 軸抖動門檻」或「抖動持續秒數」,或在設定頁關閉觸地提早降落.'}
    :{c:'land',m:`總飛行時間到,開始降落${fl()}`,h:''};
@@ -1487,7 +1649,7 @@ function evText(e){
   case 21:return {c:'land',m:`起飛程序中角度超過水平限制,取消(機頭 ${s1(a)}°,滾轉 ${s1(b)}°,限制 ±${arg}°)`,h:'倒數或等待放穩時飛機被拿起或傾斜. 如果飛機其實停在地上沒動:停放角度可能太大,到設定頁把「起飛前水平限制」調大.'};
   case 24:return arg===1?{c:'bad',m:'連續開關電 3 次:WiFi 設定已回出廠(自身熱點 HappySuperGG_Plane)',h:'手機連熱點 HappySuperGG_Plane(密碼 12345678),開 192.168.4.1 重新設定家用 WiFi.'}
    :arg===2?{c:'bad',m:'WiFi 設定沒有在 3 分鐘內按「保持」,已改回上一次的設定',h:'如果新設定其實連得上:重新儲存後記得按保持.'}
-   :arg===4?{c:'bad',m:`家用 WiFi 斷線超過 ${Math.round(a)} 秒連不回來,已改開自身熱點`,h:'手機連熱點 HappySuperGG_Plane(密碼 12345678),開 192.168.4.1. 家用 WiFi 恢復後重新開機就會再連回去.'}
+   :arg===4?{c:'bad',m:`家用 WiFi 斷線超過 ${Math.round(a)} 秒連不回來,已改開自身熱點`,h:'手機連自身熱點(密碼是系統頁設定的熱點密碼,出廠 12345678),開 192.168.4.1. 家用 WiFi 恢復後重新開機就會再連回去.'}
    :{c:'bad',m:`發射功率沒有在 15 秒內按「保持」,已退回 ${Math.round(a)} dBm`,h:''};
   case 26:return arg===2?{c:'land',m:'電變校正已取消:這次開機不是拔電再接電',h:'校正只給「按下後馬上拔電再接電」用. 網頁重新開機,韌體更新,當機重開都會取消,要校正請重新設定.'}
    :{c:'land',m:'電變校正已自動取消:設定後 10 秒內沒有拔電',h:'免得忘記後哪天裝著螺旋槳接電池就是全速. 要校正請手先放在電池接頭旁,重新按下後 10 秒內拔電再接上.'};
@@ -1505,6 +1667,7 @@ function evText(e){
    if(arg===3)return {c:'land',m:`等安全開關超過 ${dur},自動取消起飛程序`,h:'要飛再推一下飛機或按「開始起飛程序」. 等待時間在設定頁「安全開關等待上限」調整.'};
    if(arg===4)return {c:'land',m:`上電自動倒數:等安全開關超過 ${dur},這次通電不再自動倒數`,h:'要飛請拔掉電池再接上. 等待時間在設定頁「安全開關等待上限」調整.'};
    if(arg===5)return {c:'bad',m:'安全開關已停用:這趟起飛程序不等開關',h:'設定頁「啟動與倒數」停用了安全開關. 要恢復,按「恢復使用安全開關」再儲存.'};
+   if(arg===6)return {c:'land',m:'上電自動倒數等待中改成手勢啟動,這次通電不再自動倒數',h:'改回「上電後直接倒數」也要拔電再接電才會自動倒數.'};
    return arg===2?{c:'good',m:'安全開關按下',h:''}
    :{c:'',m:arg===1?'上電自動倒數:等安全開關按下':'飛機已放穩,等安全開關按下才開始倒數',h:arg===1?'按下安全開關(飛機放平)就開始倒數.':'按下安全開關就開始倒數.'}}
   case 22:return {c:'bad',m:arg?'測試用感測器模擬開啟(USB 序列指令)':'測試用感測器模擬關閉',h:arg?'只有開發測試會出現. 模擬中角度與 G 力都是假的,重新開機即清除.':''};
@@ -1560,7 +1723,7 @@ function renderFlight(f){
  if((f.s===2||f.s===3)&&f.ge&&VALS&&VALS.shared.twistCancel>0)detail+=`,扭轉機尾 ${Math.abs(f.tw).toFixed(0)}° / ${VALS.shared.twistCancel}° 取消`;
  switch(f.s){
   case 4:cls='fly';badge='馬達運轉';title=`緩啟動 ${f.out.toFixed(0)}%`;detail=`${tm(f.t)},${us(f.out)}`;break;
-  case 5:cls='fly';badge='馬達運轉';title=`飛行中 第${f.ph===1?'一':'二'}段 ${tm(f.t)}`;
+  case 5:cls='fly';badge='馬達運轉';title=f.tb?`飛行中 起飛油門 ${tm(f.t)}`:`飛行中 第${f.ph===1?'一':'二'}段 ${tm(f.t)}`;
    detail=`油門 ${f.out.toFixed(0)}%(基本 ${f.base.toFixed(0)} ${f.comp>=0?'+':''}${f.comp.toFixed(0)}),${us(f.out)}`;break;
   case 6:cls='land';badge='馬達運轉';title=`降落中(${f.lc===2?'觸地提早降落':'時間到'})`;detail=`油門 ${f.out.toFixed(0)}%,${tm(f.t)}`;break;
   case 7:cls=f.er===5?'crash':'done';badge='已結束';title=`已結束:${END_TEXT[f.er]||''}`;
@@ -1855,7 +2018,7 @@ function drawLog(){
  const gMax=Math.max(4,Math.ceil(Math.max(range(LOG.acc),range(LOG.spike),sh.gestureG,sh.touchdownG)+0.5));
  const vMax=Math.max(1.5,Math.ceil(Math.max(range(LOG.vib),sh.earlyLandVib*1.3)*2)/2);
  const top0=4,axisH=18,gap=10,ph=(H-top0-axisH-gap*2)/3;
- const panels=[{y:top0,t:'機頭角度(藍,°)/ 油門(橘,%)'},{y:top0+ph+gap,t:`G 力:總 G(灰)/ 短尖峰(紅)/ 手勢推力(綠),0~${gMax} g`},{y:top0+2*(ph+gap),t:`Z 軸抖動(紫),0~${vMax} g;綠底=正飛水平,橘條=抖動持續達標`}];
+ const panels=[{y:top0,t:'機頭角度(紅,°)/ 油門(橘,%)'},{y:top0+ph+gap,t:`G 力:總 G(灰)/ 短尖峰(紅)/ 手勢推力(綠),0~${gMax} g`},{y:top0+2*(ph+gap),t:`Z 軸抖動(棕),0~${vMax} g;綠底=正飛水平,橘條=抖動持續達標`}];
  g.font='11px system-ui,sans-serif';g.lineJoin='round';
  for(const p of panels){g.strokeStyle=LINE;g.lineWidth=1;g.strokeRect(Lm+.5,p.y+.5,plotW,ph);g.fillStyle=MUTE;g.fillText(p.t,Lm+4,p.y+12)}
  const yOf=(p,v,lo,hi)=>p.y+ph-(Math.min(hi,Math.max(lo,v))-lo)/(hi-lo)*ph;
@@ -1867,7 +2030,7 @@ function drawLog(){
  const p1=panels[0];
  for(const d of [-90,-45,0,45,90]){const y=yOf(p1,d,-90,90);g.strokeStyle=LINE;g.beginPath();g.moveTo(Lm,y);g.lineTo(Lm+plotW,y);g.stroke();g.fillStyle=MUTE;g.textAlign='right';g.fillText(d,Lm-3,y+4);g.textAlign='left'}
  for(const v of [0,50,100]){g.fillStyle='#d97706';g.fillText(v+'%',Lm+plotW+3,yOf(p1,v,0,100)+4)}
- series(p1,LOG.thr,0,100,'#f59e0b',1.5);series(p1,LOG.pitch,-90,90,'#3b82f6',1.8);
+ series(p1,LOG.thr,0,100,'#f59e0b',1.5);series(p1,LOG.pitch,-90,90,'#dc2626',1.8);
  // 面板 2:G 力
  const p2=panels[1];
  for(let v=0;v<=gMax;v+=gMax>8?4:2){g.fillStyle=MUTE;g.textAlign='right';g.fillText(v,Lm-3,yOf(p2,v,0,gMax)+4);g.textAlign='left'}
@@ -1884,7 +2047,7 @@ function drawLog(){
    if(on&&s<0)s=i;else if(!on&&s>=0){const x0=xOf(s),x1=xOf(i-1)+plotW/winN;g.fillRect(x0,y,Math.max(1,x1-x0),h);s=-1}}};
  band(1,'rgba(34,197,94,.14)',p3.y,ph);band(2,'rgba(245,158,11,.9)',p3.y+1,5);
  for(let v=0;v<=vMax;v+=vMax>3?1:0.5){g.fillStyle=MUTE;g.textAlign='right';g.fillText(v,Lm-3,yOf(p3,v,0,vMax)+4);g.textAlign='left'}
- series(p3,LOG.vib,0,vMax,'#a855f7',1.6);
+ series(p3,LOG.vib,0,vMax,'#b45309',1.6);
  hline(p3,sh.earlyLandVib,0,vMax,'#d97706','門檻',true);
  // 時間軸
  const step=logWinS<=60?10:(logWinS<=180?30:60),yAxis=H-axisH+12;
@@ -1944,14 +2107,72 @@ function bkLabel(item){
  const name=(L[key]||[])[0]||BK_NAMES[key]||(m?`${m[1]==='up'?'補速':'減速'}曲線第 ${m[2]} 點${m[3]==='a'?'角度':'補償'}`:key);
  return sc==='s'?name:`第 ${Number(sc)+1} 組風格的${name}`;
 }
-function bkShow(ok,text){const e=$('bkMsg');e.className='msg '+(ok?'ok':'bad');e.textContent=text}
+function bkShow(ok,text,id){const e=$(id||'bkMsg');e.className='msg '+(ok?'ok':'bad');e.textContent=text}
+// 選擇(GG 2026-09-15:備份獨立分頁,全部可選):風格 bit i = 第 i 組;分區 bit 與韌體 BACKUP_SEC_* 相同.
+// 預設只選「測試」組;只記在這個網頁,重新整理回預設
+const BK_ALL=63,BK_SEC_SHARED=7;
+const BK_SECS=[
+ {bit:1,t:'起飛降落與安全',pg:'設定頁',d:'啟動手勢,安全開關,倒數秒數,外力介入,觸地提早降落,降落觸地判斷,撞擊斷電.'},
+ {bit:2,t:'安裝',pg:'安裝頁',d:'感測器方位,角度修正,線長與單圈秒數,機輪收腳,蜂鳴器.',ad:'每台飛機裝法不同,分享給別人通常不要勾.',ap:'每台飛機裝法不同,別人的安裝設定通常不要套用.'},
+ {bit:4,t:'電變',pg:'電變頁',d:'輸出協定,PWM 頻率,油門 0% / 100% 脈寬,校正保持秒數,轉速回傳,馬達極數.',ad:'電變不同通常不要勾.',ap:'電變不同通常不要套用.'},
+ {bit:8,t:'WiFi',pg:'系統頁',d:'家用 WiFi 名稱與密碼,熱點名稱與密碼,裝置名稱,等待秒數,一律用熱點,發射功率.',w:'⚠ 含密碼,不要傳給別人. 套用後要重新開機才生效.',
+  wp:'⚠ 會換成碼裡的 WiFi 與密碼,通常不要套用. 套用當下就存起來,重新開機才生效.'}
+];
+let bkSelMask=1<<PROFILE_TEST_INDEX,bkSecMask=0;
+// 套用前的取消勾選(GG 2026-09-15:對方多複製了不要的項目):檢查通過後列出碼裡有的,預設全部套用
+let bkPick=null;   // {text,mask,sec,names,selMask,selSec}
+function bkMaskNames(mask,names){const out=[];for(let i=0;i<6;i++)if(mask>>i&1)out.push(names&&names[i]?names[i]:i===PROFILE_TEST_INDEX?'測試':(VALS?VALS.names[i]:`第 ${i+1} 組`));return out.join(',')}
+// 內容說明:「風格 測試,A;安裝,WiFi」
+function bkDescribe(mask,sec,names){
+ const parts=[];
+ if(mask)parts.push(mask===BK_ALL?'六組風格':'風格 '+bkMaskNames(mask,names));
+ for(const s of BK_SECS)if(sec&s.bit)parts.push(s.t);
+ return parts.join(',')||'(沒有內容)';
+}
+// 其他設定的小方塊:名稱(點一下勾選/取消)+ ⓘ(點一下展開說明,不影響勾選). pick = 套用時的取消勾選
+function bkSecHtml(s,on,pick){
+ const hint=`在${s.pg}. 包含:${s.d}`+(pick?(s.ap?' '+s.ap:'')+(s.wp?' '+s.wp:''):(s.ad?' '+s.ad:'')+(s.w?' '+s.w:''));
+ return `<div class="bks${pick?' pick':''}${on?' on':''}" data-b="${s.bit}"><button class="bkst" type="button"><span class="mk"></span>${s.t}${s.w?'<span class="bkwm">⚠</span>':''}</button>`+
+  `<button class="ib" type="button" title="說明">ⓘ</button><div class="bkhint">${hint}</div></div>`;
+}
+function bkWireSecs(box,onToggle){
+ box.querySelectorAll('.bks').forEach(el=>{el.querySelector('.bkst').onclick=()=>onToggle(Number(el.dataset.b));el.querySelector('.ib').onclick=()=>el.classList.toggle('showhint')});
+}
+for(const id of ['bkProfBox','bkPickProfBox']){const b=$(id);b.querySelector('.ib').onclick=()=>b.classList.toggle('showhint')}
+function bkSelChanged(){$('bkOut').hidden=true;$('bkMakeText').textContent='';$('bkMakeMsg').textContent='';bkRender()}
 function bkRender(){
  const dirty=!VALS||valsDirty(),lock=!!(STATUS&&STATUS.lock);
  $('bkDirty').hidden=!VALS||!dirty;
- $('btnBkMake').disabled=dirty;
+ if(VALS){
+  const sig=VALS.names.join('|')+'#'+bkSelMask;
+  if($('bkSel').dataset.sig!==sig){$('bkSel').dataset.sig=sig;
+   $('bkSel').innerHTML=VALS.names.map((n,i)=>`<button data-i="${i}" class="${bkSelMask>>i&1?'on':''}">${esc(n)}</button>`).join('');
+   $('bkSel').querySelectorAll('button').forEach(b=>b.onclick=()=>{bkSelMask^=1<<Number(b.dataset.i);bkSelChanged()})}
+ }
+ const box=$('bkSecs'),ssig='#'+bkSecMask;
+ if(box.dataset.sig!==ssig){box.dataset.sig=ssig;
+  box.innerHTML=BK_SECS.map(s=>bkSecHtml(s,bkSecMask&s.bit,false)).join('');
+  bkWireSecs(box,bit=>{bkSecMask^=bit;bkSelChanged()})}
+ const none=!bkSelMask&&!bkSecMask;
+ $('btnBkMake').disabled=dirty||none;
+ if(none)$('bkMakeText').textContent='請至少勾選一項';
  $('bkIn').disabled=dirty;
- $('btnBkApply').disabled=dirty||lock||!$('bkIn').value.trim();
+ $('btnBkApply').disabled=dirty||lock||!$('bkIn').value.trim()||!!(bkPick&&!bkPick.selMask&&!bkPick.selSec);
  if(dirty)$('bkOut').hidden=true;   // 之前產生的碼已經不是目前的設定
+}
+// 列出碼裡有的項目,點一下取消/恢復. 只在檢查結果回來或點選時重畫(不跟著狀態輪詢,點擊才不會被吃掉)
+function bkPickRender(){
+ const P=bkPick;$('bkPick').hidden=!P;if(!P)return;
+ const idx=[0,1,2,3,4,5].filter(i=>P.mask>>i&1);
+ $('bkPickProfBox').hidden=!idx.length;
+ $('bkPickSel').innerHTML=idx.map(i=>`<button data-i="${i}" class="${P.selMask>>i&1?'on':''}">${esc(P.names[i]||(i===PROFILE_TEST_INDEX?'測試':`第 ${i+1} 組`))}</button>`).join('');
+ $('bkPickSel').querySelectorAll('button').forEach(b=>b.onclick=()=>{P.selMask^=1<<Number(b.dataset.i);bkPickRender();bkRender()});
+ const secs=BK_SECS.filter(s=>P.sec&s.bit);
+ $('bkPickST').hidden=$('bkPickSecs').hidden=!secs.length;
+ $('bkPickSecs').innerHTML=secs.map(s=>bkSecHtml(s,P.selSec&s.bit,true)).join('');
+ bkWireSecs($('bkPickSecs'),bit=>{P.selSec^=bit;bkPickRender();bkRender()});
+ $('bkPickNote').textContent=!P.selMask&&!P.selSec?'全部都取消了,沒有東西可以套用.':
+  P.selMask===BK_ALL?'六組風格全部套用:會一併切換「飛行使用哪一組」.':P.mask?'沒有六組風格全部套用:不切換「飛行使用哪一組」.':'';
 }
 // http 網頁(不是 https)瀏覽器會擋剪貼簿 API,改用選取文字後 execCommand('copy')
 async function bkCopy(el){
@@ -1962,7 +2183,20 @@ async function bkCopy(el){
 }
 function bkResult(r,applied){
  if(r.ok){
-  let t=applied?'已套用. 請逐頁檢查設定,尤其感測器方位,角度修正,電變脈寬與收輪行程,確認後按上方的儲存;不要就按放棄.':'備份碼完整,可以按「套用」.';
+  const mask=r.mask===undefined?BK_ALL:r.mask,sec=r.sec===undefined?BK_SEC_SHARED:r.sec,names=r.names||[];
+  let t;
+  if(applied){
+   const am=r.amask===undefined?mask:r.amask,as=r.asec===undefined?sec:r.asec;
+   const skip=bkDescribe(mask&~am,sec&~as,names);
+   t=`已套用:${bkDescribe(am,as,names)}.`+((mask&~am)||(sec&~as)?` 取消沒套用:${skip}.`:'')+
+    ` 沒套用的部分保持原樣,${am===BK_ALL?'已一併切換飛行使用哪一組':'沒有切換飛行使用的風格'}.`;
+   if(r.wifisaved)t+=' WiFi 設定已經存起來,重新開機後生效;重開後 3 分鐘內要按上方「保持」,沒按會自動改回原本的 WiFi.';
+   if(am||as&BK_SEC_SHARED)t+=' 請逐頁檢查設定,尤其感測器方位,角度修正,電變脈寬與收輪行程,確認後按上方的儲存;不要就按放棄.';
+  }else{
+   t=`備份碼完整,裡面有:${bkDescribe(mask,sec,names)}. 下面點一下可以取消不要的項目,再按「套用」.`;
+   bkPick={text:$('bkIn').value,mask,sec,names,selMask:mask,selSec:sec};
+   bkPickRender();bkRender();
+  }
   if(r.newer)t+=' 這個備份碼來自較新的韌體,這版沒有的功能已略過.';
   if(r.clamp&&r.clamp.length)t+=' 以下超出這版的可調範圍,已調到範圍內:'+r.clamp.map(bkLabel).join(',')+'.';
   bkShow(true,t);
@@ -1971,31 +2205,39 @@ function bkResult(r,applied){
  }
  const clear=r.code==='bkprefix'||r.code==='bkcrc';
  let t=CODES[r.code]||r.code;
- if(r.scope>=0)t=`第 ${r.scope+1} 組風格:`+t;else if(BK_SHARED_ERR.includes(r.code))t='共用設定:'+t;
+ if(r.scope>=0)t=`第 ${r.scope+1} 組風格:`+t;else if(r.scope===-2)t='WiFi 設定:'+t;else if(BK_SHARED_ERR.includes(r.code))t='共用設定:'+t;
  if(clear){$('bkIn').value='';bkLastLen=0}
+ if(!applied){bkPick=null;bkPickRender()}
  bkShow(false,t);bkRender();
 }
 let bkLastLen=0;
 $('btnBkMake').onclick=async()=>{
- try{const r=await poll('/api/backup');
-  if(!r.ok){bkShow(false,CODES[r.code]||r.code);return}
+ try{const r=await poll(`/api/backup?sel=${bkSelMask}&sec=${bkSecMask}`);
+  if(!r.ok){bkShow(false,CODES[r.code]||r.code,'bkMakeMsg');return}
   const o=$('bkOut');o.value=r.text;o.hidden=false;
   const ok=await bkCopy(o);
   $('bkMakeText').textContent=`${r.text.length} 字`;
-  bkShow(ok,ok?'已複製,可以貼到 LINE 或記事本保存.':'這支手機不能自動複製:請長按下面的備份碼,全選後複製.');
- }catch(e){bkShow(false,'連線失敗,請再試一次.')}
+  bkShow(ok,(ok?'已複製,可以貼到 LINE 或記事本保存.':'這支手機不能自動複製:請長按下面的備份碼,全選後複製.')+` 內容:${bkDescribe(bkSelMask,bkSecMask)}.`+
+   (bkSecMask&8?' ⚠ 這個碼含 WiFi 密碼,不要傳給別人.':''),'bkMakeMsg');
+ }catch(e){bkShow(false,'連線失敗,請再試一次.','bkMakeMsg')}
 };
 $('bkIn').addEventListener('input',()=>{
  const v=$('bkIn').value,jump=v.length-bkLastLen;bkLastLen=v.length;
+ if(bkPick&&bkPick.text!==v){bkPick=null;bkPickRender()}   // 內容改了,之前的勾選不算數
  bkRender();
  if(!v.trim()){$('bkMsg').textContent='';return}
  // 一次多出很多字 = 貼上(含輸入法的剪貼簿建議),馬上檢查;手打的等按套用時由板子檢查
  if(jump>=10)post('/api/backup/check',{text:v}).then(r=>{if($('bkIn').value===v)bkResult(r,false)}).catch(()=>bkShow(false,'連線失敗,請再試一次.'));
 });
 $('btnBkApply').onclick=async()=>{
- try{const r=await post('/api/backup/apply',{text:$('bkIn').value});bkResult(r,true)}catch(e){bkShow(false,'連線失敗,請再試一次.')}
+ const v=$('bkIn').value,d={text:v};
+ if(bkPick&&bkPick.text===v){d.sel=bkPick.selMask;d.sec=bkPick.selSec}   // 使用者取消的項目不套用
+ try{const r=await post('/api/backup/apply',d);bkResult(r,true)}catch(e){bkShow(false,'連線失敗,請再試一次.')}
 };
-$('btnBkClear').onclick=()=>{$('bkIn').value='';bkLastLen=0;$('bkMsg').textContent='';bkRender()};
+$('btnBkClear').onclick=()=>{$('bkIn').value='';bkLastLen=0;$('bkMsg').textContent='';bkPick=null;bkPickRender();bkRender()};
+$('bkSelAll').onclick=e=>{e.preventDefault();bkSelMask=BK_ALL;bkSecMask=15;bkSelChanged()};
+$('bkSelTest').onclick=e=>{e.preventDefault();bkSelMask=1<<PROFILE_TEST_INDEX;bkSecMask=0;bkSelChanged()};
+$('bkSelNone').onclick=e=>{e.preventDefault();bkSelMask=0;bkSecMask=0;bkSelChanged()};
 
 // --- 系統頁 ---
 async function loadWifi(){
@@ -2005,6 +2247,7 @@ async function loadWifi(){
   $('fTxp').min=w.txmin;$('fTxp').max=w.txmax;$('fTxp').value=w.txp;$('txpVal').textContent=w.txp+' dBm';
   $('apName').textContent=w.apnow;$('netHost').textContent=w.host+'.local';$('build').textContent=w.build;
   $('apPrefix').textContent=w.apprefix;$('fApSfx').value=w.apsfx;AP_SFX_MAX=w.apsfxmax;apPreview();
+  $('fApPw').value=w.appw||'';WIFI_APPW=w.appw||'';
  }catch(e){}
 }
 let AP_SFX_MAX=14;
@@ -2013,12 +2256,16 @@ function apPreview(){const v=$('fApSfx').value,n=new TextEncoder().encode(v).len
  $('apHint').textContent=`→ ${$('apPrefix').textContent}${v}(後面 ${n}/${AP_SFX_MAX}${over?',太長':''})`}
 $('fApSfx').oninput=apPreview;
 $('btnPwShow').onclick=()=>{const f=$('fPw');f.type=f.type==='password'?'text':'password';$('btnPwShow').textContent=f.type==='password'?'顯示':'隱藏'};
+$('btnApPwShow').onclick=()=>{const f=$('fApPw');f.type=f.type==='password'?'text':'password';$('btnApPwShow').textContent=f.type==='password'?'顯示':'隱藏'};
+let WIFI_APPW='';   // 板上目前存的熱點密碼(儲存時比對有沒有改)
 $('fTxp').oninput=()=>{$('txpVal').textContent=$('fTxp').value+' dBm'};
 $('fTxp').onchange=()=>post('/api/txpower',{txp:$('fTxp').value}).then(r=>{if(!r.ok){toast(CODES[r.code]||r.code,true);loadWifi()}}).catch(()=>{});
 $('btnWifiSave').onclick=async()=>{
  try{const r=await post('/api/wifi',{ssid:$('fSsid').value,pw:$('fPw').value,host:$('fHost').value.trim(),
-  tmo:$('fTmo').value,forceap:$('fForce').checked?1:0,txp:$('fTxp').value,apsfx:$('fApSfx').value});
-  msg('wifiMsg',r.ok,r.ok?'WiFi 設定已儲存,重新開機後生效. 重開後連上網頁要按上方的「保持」,3 分鐘內沒按會自動改回上一次的設定. 熱點名稱改了的話,手機要重新連新的名稱.':r.code);if(r.ok)loadWifi()}
+  tmo:$('fTmo').value,forceap:$('fForce').checked?1:0,txp:$('fTxp').value,apsfx:$('fApSfx').value,appw:$('fApPw').value});
+  const pwChanged=$('fApPw').value!==WIFI_APPW;
+  msg('wifiMsg',r.ok,r.ok?'WiFi 設定已儲存,重新開機後生效. 重開後連上網頁要按上方的「保持」,3 分鐘內沒按會自動改回上一次的設定. 熱點名稱改了的話,手機要重新連新的名稱.'+
+   (pwChanged?` 熱點密碼改成「${$('fApPw').value}」,請記下來;手機要先刪除(忘記)舊的熱點再用新密碼連.`:''):r.code);if(r.ok)loadWifi()}
  catch(e){msg('wifiMsg',false,'savefail')}
 };
 $('btnReboot').onclick=async()=>{try{const r=await post('/api/reboot');msg('wifiMsg',r.ok,r.code)}catch(e){}};
@@ -2065,7 +2312,7 @@ function showPane(p){if(!$(p))p='mon';pane=p;
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.pane===p));
  if(p==='sys'){loadWifi();fwLoad()}
  if(p!=='esc')manLock(false);   // 離開電變頁自動上鎖手動輸出
- if(p==='prof'||p==='set'||p==='comp'||p==='inst'||p==='esc')loadVals();
+ if(p==='prof'||p==='set'||p==='comp'||p==='inst'||p==='esc'||p==='bak')loadVals();
  if(p==='log')logFetch(true);
  tick();
 }

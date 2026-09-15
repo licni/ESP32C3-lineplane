@@ -1,4 +1,5 @@
-// 版本流水號: r20 (2026-09-14) 蜂鳴器每拍依飛行狀態與設定的電位更新(buzzerUpdate)
+// 版本流水號: r21 (2026-09-15) 控制工作加入任務看門狗(5 秒沒餵 panic 重開);飛行輸入加電變輸出掛載失敗
+// 舊: r20 (2026-09-14) 蜂鳴器每拍依飛行狀態與設定的電位更新(buzzerUpdate)
 // 舊: r19 (2026-09-14) 飛行輸入加安全開關等待上限的測試覆寫秒數(序列指令 armwait)
 // 舊: r18 (2026-09-14) 安全開關 GPIO21 讀取與去抖(50ms),測試指令可覆寫
 // 舊: r17 (2026-09-14) 飛行輸入加韌體更新擋起飛原因;韌體寫入中拒絕手動輸出
@@ -30,6 +31,10 @@
 #include "pins_config.h"
 #include "settings.h"
 #include "test_hooks.h"
+#include "esp_task_wdt.h"
+
+// 看門狗逾時:寫快閃(存設定,OTA)時控制工作會停幾十 ms,遠小於 5 秒
+static const uint32_t CONTROL_WDT_TIMEOUT_MS = 5000;
 
 static const uint32_t CONTROL_PERIOD_MS = 5;         // 200Hz,與 MPU6050 取樣率一致
 // 優先權取系統最高(24),高過 WiFi 驅動(23)與網路堆疊(18). 2026-09-13 實測(tools/web_load_test.py):
@@ -97,9 +102,27 @@ static void controlTask(void *) {
   bool imuRecoverLogged = false;
   uint8_t armLowTicks = 0;
 
+  // 任務看門狗(安全審查 2-B):控制工作若卡死(驅動層死鎖),三種協定的訊號都由硬體維持最後值,馬達停在最後油門,
+  // 而且它優先權最高 loop 也餓死,網頁緊急停止連不上. 加入看門狗 5 秒沒餵就 panic 重開,重開期間腳位沒訊號,電變失訊停機.
+  // 核心已初始化任務看門狗(CONFIG_ESP_TASK_WDT_INIT)但沒有監看任何工作;萬一沒初始化就自己初始化.
+  if (esp_task_wdt_add(NULL) != ESP_OK) {
+    esp_task_wdt_config_t wdtCfg = {};
+    wdtCfg.timeout_ms = CONTROL_WDT_TIMEOUT_MS;
+    wdtCfg.idle_core_mask = 0;
+    wdtCfg.trigger_panic = true;
+    esp_task_wdt_init(&wdtCfg);
+    esp_task_wdt_add(NULL);
+  } else {
+    esp_task_wdt_config_t wdtCfg = {};
+    wdtCfg.timeout_ms = CONTROL_WDT_TIMEOUT_MS;
+    wdtCfg.idle_core_mask = 0;
+    wdtCfg.trigger_panic = true;
+    esp_task_wdt_reconfigure(&wdtCfg);
+  }
   for (;;) {
     // lastWake 被更新成「這一輪原本該醒來的時刻」,實際醒來時刻與它的差就是延遲.
     xTaskDelayUntil(&lastWake, pdMS_TO_TICKS(CONTROL_PERIOD_MS));
+    esp_task_wdt_reset();
     if (timingResetRequest) {
       timingResetRequest = false;
       maxExecUs = 0;
@@ -227,6 +250,7 @@ static void controlTask(void *) {
     fin.rollHoldS = imuOk ? groundRoll.holdSeconds() : 0;
     fin.escService = escService;
     fin.fwBlock = fwUpdateBlockReason();   // 韌體更新中或新韌體待確認:拒絕起飛
+    fin.escFail = !escOutputOk();          // 電變輸出掛載失敗:拒絕起飛
     // 安全開關 GPIO21:低電位連續 10 拍(50ms)才算按下,放開立即算沒按(去抖只做一邊). 測試指令 armsw 可覆寫.
     {
       const int8_t ov = testArmOverride();

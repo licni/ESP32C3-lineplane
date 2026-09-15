@@ -1,4 +1,6 @@
-// 版本流水號: r3 (2026-09-14) 設定保護:試用確認與退回,連續開關電救援
+// 版本流水號: r5 (2026-09-15) wifiValidateConfig(設定備份碼含 WiFi 用)
+// 舊: r4 (2026-09-15) 熱點密碼可改(GG:已有連續開關電救援,改密碼可避免別人連進來亂改設定);出廠 12345678
+// 舊: r3 (2026-09-14) 設定保護:試用確認與退回,連續開關電救援
 // 舊: r2 (2026-09-13) 熱點名稱固定開頭 HappySuperGG_Plane + 可改後綴(最多 14 位元組);熱點密碼固定
 // 舊: r1 (2026-09-13) 初版:STA 掃描挑最強節點,逾時退 AP,mDNS,ArduinoOTA,設定存 NVS
 #pragma once
@@ -12,12 +14,13 @@
 // --- 自身熱點(AP) -----------------------------------------------------------
 // 開機時連不上家用 WiFi(或使用者選擇一律用熱點)就開這個熱點,手機直接連進來調整.
 // 名稱開頭是 GG 的個人署名,固定;使用者只能在後面接字(GG 2026-09-13:例如 HappySuperGG_Plane3,同場多架飛機分得出來).
-// 密碼一律固定不能改(GG:避免使用者輸入錯誤或忘記,連不上就救不回來). 密碼依 WPA2 規定至少 8 碼.
+// 密碼可改(GG 2026-09-15,原本固定):改了別人就連不進來亂改設定;忘記密碼用連續開關電 3 次救援回出廠,
+// 打錯字重開後連不上,也會在 3 分鐘試用到期時自動退回舊密碼. 依 WPA2 規定 8~63 個英數符號.
 const char *const WIFI_AP_SSID = "HappySuperGG_Plane";     // 固定開頭
 const uint8_t WIFI_AP_PREFIX_LEN = 18;
 const uint8_t WIFI_AP_SUFFIX_MAX_BYTES = 32 - WIFI_AP_PREFIX_LEN;   // SSID 上限 32 位元組,後綴最多 14
-const char *const WIFI_AP_PASSWORD = "12345678";
-// ArduinoOTA 密碼(PlatformIO 無線燒錄用),與熱點密碼相同,好記.
+const char *const WIFI_AP_PASSWORD_DEFAULT = "12345678";
+// ArduinoOTA 密碼(PlatformIO 無線燒錄用),固定,和熱點出廠密碼相同. 不跟著熱點密碼改(platformio.ini 寫死).
 const char *const OTA_PASSWORD = "12345678";
 const char *const DEFAULT_MDNS_HOST = "lineplane";
 
@@ -41,6 +44,7 @@ struct WifiConfig {
   bool forceAp;
   uint8_t txPowerDbm;
   char apSuffix[WIFI_AP_SUFFIX_MAX_BYTES + 1];   // 熱點名稱接在固定開頭後面的字(可空白)
+  char apPassword[WIFI_PASS_BUFFER];             // 自身熱點密碼(8~63 字元)
 };
 
 enum WifiState : uint8_t { WIFI_STATE_CONNECTING = 0, WIFI_STATE_STA, WIFI_STATE_AP };
@@ -52,6 +56,8 @@ const WifiConfig &wifiConfig();
 // trial = true(網頁):存檔並標記試用,重開機後 WiFi 就緒 3 分鐘內沒有 wifiKeep() 就退回上一次的設定.
 // trial = false(USB 序列指令):直接生效,清掉試用.
 const char *wifiSaveConfig(const WifiConfig &cfg, bool trial = false);
+// 只驗證不存檔. 回傳 nullptr 表示可用,否則是與 wifiSaveConfig 相同的錯誤代碼.
+const char *wifiValidateConfig(const WifiConfig &cfg);
 // 發射功率即時生效(不存檔,取消試用). 開機與 USB 指令用.
 void wifiApplyTxPower(uint8_t dbm);
 // 網頁拉桿:試用發射功率,15 秒內沒有 wifiKeep() 就退回試用前的值. 超出範圍回 false.
@@ -72,5 +78,7 @@ uint16_t wifiStaCountdownSeconds();
 bool wifiHostIsValid(const char *name);
 // 熱點名稱後綴:最多 14 位元組,不可有控制字元,頭尾不可是空白,UTF-8 不可截在半個字. 回傳 nullptr 表示可用.
 const char *wifiApSuffixError(const char *suffix);
+// 熱點密碼:8~63 個可見 ASCII 字元(WPA2 規定),頭尾不可是空白. 回傳 nullptr 表示可用.
+const char *wifiApPasswordError(const char *pw);
 // 完整熱點名稱(固定開頭 + 後綴). saved = true 取存檔值(下次開機用),false 取目前正在廣播的名稱.
 String wifiApSsid(bool saved);

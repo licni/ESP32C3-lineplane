@@ -1,4 +1,9 @@
-// 版本流水號: r24 (2026-09-14) 狀態加 asoff(設定忽略安全開關,網頁置頂警告用;含還沒儲存的值)
+// 版本流水號: r29 (2026-09-15) 安全審查:/api/start 手動輸出/校正中回 startbusy;/api/cancel 不在等待放穩/倒數回 cancelstate
+// 舊: r28 (2026-09-15) 套用備份碼可帶 sel/sec 取消不要的項目;檢查/套用回 amask,asec(實際套用),names(碼裡各組名稱)
+// 舊: r27 (2026-09-15) 備份分區:GET /api/backup 加 sec(起飛降落與安全/安裝/電變/WiFi),sel 可為 0;檢查/套用回 sec,wifisaved
+// 舊: r26 (2026-09-15) 選組備份:GET /api/backup?sel=N(預設只有「測試」組),檢查/套用回 mask(碼裡包含哪幾組)
+// 舊: r25 (2026-09-15) /api/wifi 熱點密碼 appw(GET 回傳,POST 可省略沿用);狀態 f 加 tb(起飛油門階段)
+// 舊: r24 (2026-09-14) 狀態加 asoff(設定忽略安全開關,網頁置頂警告用;含還沒儲存的值)
 // 舊: r23 (2026-09-14) 網頁上傳韌體檢查身分標記:找不到就不切換(fwnotours);完成時回傳檔案版本與是否比目前舊
 // 舊: r22 (2026-09-14) 設定備份碼:GET /api/backup(產生),POST /api/backup/check(貼上檢查),/api/backup/apply(套用,要按儲存)
 // 舊: r21 (2026-09-14) 狀態 f 加 awl(等安全開關剩餘秒數);/api/fw 加 newer(網站版本比目前新 1 / 相同 0 / 較舊 -1)
@@ -105,7 +110,7 @@ static void handleStatus() {
            "\"heap\":%lu,\"ws\":%u,\"ip\":\"%s\",\"rssi\":%d,\"cd\":%u,\"ota\":%d,"
            "\"act\":%u,\"dirty\":%d,\"lock\":%d,\"cmp\":%.1f,\"imp\":[%.2f,%u,%ld],"
            "\"vib\":%.2f,\"lvl\":%d,\"hold\":%.1f,\"push\":%.2f,\"glamp\":%d,\"gpeak\":%.2f,\"push3\":%.2f,\"dist\":[%.3f,%.3f,%ld],"
-           "\"f\":{\"s\":%u,\"ss\":%.1f,\"cd\":%.1f,\"t\":%.1f,\"base\":%.1f,\"comp\":%.1f,\"out\":%.1f,\"ph\":%u,"
+           "\"f\":{\"s\":%u,\"ss\":%.1f,\"cd\":%.1f,\"t\":%.1f,\"base\":%.1f,\"comp\":%.1f,\"out\":%.1f,\"ph\":%u,\"tb\":%d,"
            "\"lc\":%u,\"er\":%u,\"rj\":%u,\"rja\":%ld,\"da\":%u,\"dg\":%.2f,\"dga\":%ld,\"ge\":%d,\"au\":%d,\"fp\":%u,\"set\":%.1f,\"tw\":%.0f,\"gb\":%.1f,\"aw\":%d,\"arm\":%d,\"al\":%d,\"awl\":%ld},"
            "\"man\":%d,\"cal\":[%u,%.1f,%d,%d,%.0f],\"dsh\":%ld,\"proto\":%u,\"hz\":%u,\"evn\":%lu,\"rpm\":[%d,%lu,%lu,%lu,%lu,%lu,%lu,%ld],"
            "\"sim\":%d,\"cap\":[%d,%lu,%lu,%lu,%lu,%lu,%ld],\"gear\":[%.0f,%u,%d],\"wt\":[%.0f,%d,%.0f,%u],\"fw\":[%d,%d,%.0f,%u,%u,%d],\"asoff\":%d}",
@@ -118,7 +123,7 @@ static void handleStatus() {
            t.impactAgeMs == UINT32_MAX ? -1L : (long)(t.impactAgeMs / 1000), t.vibG, t.levelOk ? 1 : 0, t.rollHoldS,
            t.pushG, t.gestureLamp ? 1 : 0, t.gesturePeakG, t.pushPeak3sG, f.distG, f.distPeakG,
            f.distOverAgeMs == UINT32_MAX ? -1L : (long)(f.distOverAgeMs / 100), (unsigned)f.state, f.stateSeconds, f.countdownRemainS,
-           f.flightSeconds, f.basePct, f.compPct, f.outPct, (unsigned)f.phase, (unsigned)f.landingCause,
+           f.flightSeconds, f.basePct, f.compPct, f.outPct, (unsigned)f.phase, f.takeoffBoost ? 1 : 0, (unsigned)f.landingCause,
            (unsigned)f.endReason, (unsigned)f.rejectReason, f.rejectAgeMs == UINT32_MAX ? -1L : (long)(f.rejectAgeMs / 100),
            (unsigned)f.disturbAction, f.disturbG, f.disturbAgeMs == UINT32_MAX ? -1L : (long)(f.disturbAgeMs / 100),
            f.gestureEnabled ? 1 : 0, f.autoStartUsed ? 1 : 0, (unsigned)f.flightProfile, f.settleSeconds, f.twistDeg, f.gestureBlockS, f.autoWaitLevel ? 1 : 0, f.armSwitch ? 1 : 0, f.armLatched ? 1 : 0,
@@ -281,10 +286,16 @@ static void handleSave() {
 
 // --- 設定備份碼 -------------------------------------------------------------------
 // 有未儲存變更時產生,檢查,套用一律拒絕(GG:先儲存或放棄):備份碼才一定等於飛機實際飛的設定,套用也不會蓋掉還沒存的修改.
+// GET /api/backup?sel=N&sec=M:N = 風格(bit i = 第 i 組,0~63),沒給 = 只有「測試」組;
+// M = 分區(1 起飛降落與安全,2 安裝,4 電變,8 WiFi,0~15),沒給 = 0. 兩個不可都是 0.
 static void handleBackupGet() {
   if (settingsAnyDirty()) return sendResult(false, "bkdirty");
+  long sel = 1L << PROFILE_TEST_INDEX, sec = 0;
+  if (server.hasArg("sel") && !argLong("sel", sel)) return sendResult(false, "bksel");
+  if (server.hasArg("sec") && !argLong("sec", sec)) return sendResult(false, "bksel");
+  if (sel < 0 || sel > BACKUP_ALL_PROFILES || sec < 0 || sec > BACKUP_SEC_ALL || (sel == 0 && sec == 0)) return sendResult(false, "bksel");
   String code;
-  if (const char *err = backupEncode(code)) return sendResult(false, err);
+  if (const char *err = backupEncode(code, (uint8_t)sel, (uint8_t)sec)) return sendResult(false, err);
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json", "{\"ok\":true,\"code\":\"bkmade\",\"text\":\"" + code + "\"}");
 }
@@ -295,14 +306,21 @@ static void backupCheckOrApply(bool apply) {
   if (!server.hasArg("text")) return sendResult(false, "badform");
   const String text = server.arg("text");
   if (text.length() > 4000) return sendResult(false, "bkcrc");
+  // 套用時可帶 sel/sec:使用者取消碼裡不要的項目(沒帶 = 碼裡有的全部套用)
+  long sel = BACKUP_ALL_PROFILES, sec = BACKUP_SEC_ALL;
+  if (server.hasArg("sel") && !argLong("sel", sel)) return sendResult(false, "bksel");
+  if (server.hasArg("sec") && !argLong("sec", sec)) return sendResult(false, "bksel");
+  if (sel < 0 || sel > BACKUP_ALL_PROFILES || sec < 0 || sec > BACKUP_SEC_ALL) return sendResult(false, "bksel");
   BackupInfo info;
-  const char *err = backupDecode(text.c_str(), apply, info);
+  const char *err = backupDecode(text.c_str(), apply, info, (uint8_t)sel, (uint8_t)sec);
   String json = "{\"ok\":";
   json += err ? "false" : "true";
   json += ",\"code\":\"";
   json += err ? err : (apply ? "bkapplied" : "bkok");
   json += "\",\"scope\":" + String(info.badScope) + ",\"gen\":" + String(info.generation) +
-          ",\"newer\":" + (info.newer ? "1" : "0") + ",\"clamp\":[" + info.clamped + "]}";
+          ",\"newer\":" + (info.newer ? "1" : "0") + ",\"mask\":" + String(info.profileMask) + ",\"sec\":" + String(info.sectionMask) +
+          ",\"amask\":" + String(info.applyProfileMask) + ",\"asec\":" + String(info.applySectionMask) +
+          ",\"names\":[" + info.names + "],\"wifisaved\":" + (info.wifiSaved ? "1" : "0") + ",\"clamp\":[" + info.clamped + "]}";
   server.send(err ? 400 : 200, "application/json", json);
 }
 
@@ -319,11 +337,15 @@ static void handleStart() {
   if (!flightShared().gestureEnable) return sendResult(false, "startauto");   // 上電自動倒數模式:每次上電只飛一次
   if (f.state != FS_STANDBY && f.state != FS_DONE) return sendResult(false, "startstate");
   if (f.gestureBlockS > 0) return sendResult(false, "startblock");
+  if (!controlOtaAllowed()) return sendResult(false, "startbusy");   // 手動輸出/校正中狀態機會靜默丟掉請求,先在這裡回原因
   flightRequestGesture(GESTURE_SRC_WEB);
   sendResult(true, "start");
 }
 
 static void handleCancel() {
+  FlightStatus f;
+  flightGetStatus(f);
+  if (f.state != FS_WAIT_STILL && f.state != FS_COUNTDOWN) return sendResult(false, "cancelstate");   // 飛行中要用緊急停止
   flightRequestCancel();
   sendResult(true, "cancel");
 }
@@ -386,7 +408,7 @@ static void handleWifiGet() {
                 ",\"tmomin\":" + String(WIFI_STA_TIMEOUT_MIN_S) + ",\"tmomax\":" + String(WIFI_STA_TIMEOUT_MAX_S) +
                 ",\"apssid\":\"" + jsonEscape(wifiApSsid(true).c_str()) + "\",\"apnow\":\"" + jsonEscape(wifiApSsid(false).c_str()) +
                 "\",\"apprefix\":\"" + jsonEscape(WIFI_AP_SSID) + "\",\"apsfx\":\"" + jsonEscape(c.apSuffix) +
-                "\",\"apsfxmax\":" + String(WIFI_AP_SUFFIX_MAX_BYTES) + ",\"build\":\"" + BUILD_TEXT + "\"}";
+                "\",\"appw\":\"" + jsonEscape(c.apPassword) + "\",\"apsfxmax\":" + String(WIFI_AP_SUFFIX_MAX_BYTES) + ",\"build\":\"" + BUILD_TEXT + "\"}";
   server.send(200, "application/json", json);
 }
 
@@ -420,13 +442,20 @@ static void handleWifiSet() {
   c.staTimeoutSec = (uint8_t)constrain(tmo, 0, 255);
   c.forceAp = server.arg("forceap") == "1";
   c.txPowerDbm = (uint8_t)constrain(txp, 0, 255);
-  // 熱點名稱後綴(可省略:沒送就沿用目前的). 熱點密碼固定,API 不接受修改.
+  // 熱點名稱後綴與熱點密碼(可省略:沒送就沿用目前的,舊的測試腳本照樣能用)
   if (server.hasArg("apsfx")) {
     const String sfx = server.arg("apsfx");
     if (sfx.length() > WIFI_AP_SUFFIX_MAX_BYTES) return sendResult(false, "apsfxlong");
     strncpy(c.apSuffix, sfx.c_str(), sizeof(c.apSuffix) - 1);
   } else {
     strncpy(c.apSuffix, wifiConfig().apSuffix, sizeof(c.apSuffix) - 1);
+  }
+  if (server.hasArg("appw")) {
+    const String appw = server.arg("appw");
+    if (appw.length() >= WIFI_PASS_BUFFER) return sendResult(false, "appwlong");
+    strncpy(c.apPassword, appw.c_str(), sizeof(c.apPassword) - 1);
+  } else {
+    strncpy(c.apPassword, wifiConfig().apPassword, sizeof(c.apPassword) - 1);
   }
   // 網頁存的 WiFi 設定一律「試用」:重開後 WiFi 就緒 3 分鐘內沒在網頁按保持就退回上一次的設定(GG 2026-09-14)
   const char *err = wifiSaveConfig(c, true);

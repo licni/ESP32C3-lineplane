@@ -1,4 +1,6 @@
-// 版本流水號: r12 (2026-09-14) 安全開關等待上限(GG):超過設定分鐘數沒按就取消(END_ARM_TIMEOUT);輸入加測試覆寫秒數,狀態加剩餘秒數
+// 版本流水號: r14 (2026-09-15) 輸入加 escFail(電變輸出掛載失敗),拒絕原因 10 REJECT_ESC_OUTPUT
+// 舊: r13 (2026-09-15) 狀態加 takeoffBoost(起飛油門階段)
+// 舊: r12 (2026-09-14) 安全開關等待上限(GG):超過設定分鐘數沒按就取消(END_ARM_TIMEOUT);輸入加測試覆寫秒數,狀態加剩餘秒數
 // 舊: r11 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG);狀態加 armLatched
 // 舊: r10 (2026-09-14) 拒絕原因 9:撞擊斷電後推飛機不算手勢
 // 舊: r9 (2026-09-14) 安全開關輸入 armSwitch,拒絕原因 7/8,狀態回報開關
@@ -62,7 +64,8 @@ enum LandingCause : uint8_t { LAND_NONE = 0, LAND_TIME, LAND_EARLY_ROLL };
 // REJECT_ARM_SWITCH / REJECT_ARM_WAIT:r10 以前安全開關沒按下就拒絕開始. r11 起改成等開關按下才倒數,不再產生(保留編號)
 // REJECT_CRASH_LOCK:撞擊斷電後推飛機不算手勢(撿飛機,扶正時容易推到),要網頁開始起飛程序或重新上電
 enum RejectReason : uint8_t { REJECT_NONE = 0, REJECT_UNSAVED, REJECT_IMU, REJECT_TILT, REJECT_TILT_WAIT, REJECT_FW_UPDATING, REJECT_FW_UNCONFIRMED,
-                              REJECT_ARM_SWITCH, REJECT_ARM_WAIT, REJECT_CRASH_LOCK };
+                              REJECT_ARM_SWITCH, REJECT_ARM_WAIT, REJECT_CRASH_LOCK,
+                              REJECT_ESC_OUTPUT };   // 10:電變輸出掛載失敗(開機 LEDC/RMT 建立失敗,腳位沒訊號)
 enum DisturbAction : uint8_t { DISTURB_ACT_NONE = 0, DISTURB_ACT_EXTEND, DISTURB_ACT_RESET };
 
 struct FlightInputs {
@@ -78,6 +81,7 @@ struct FlightInputs {
   float rollHoldS;       // 地面滑行抖動已持續秒數
   bool escService;       // 電變校正或網頁手動輸出進行中:不接受啟動,並用掉「上電自動倒數」
   uint8_t fwBlock;       // 0 = 可起飛,1 = 韌體更新中,2 = 新韌體待確認(見 fw_update.h)
+  bool escFail;          // 電變輸出掛載失敗(escOutputOk() == false):拒絕起飛
   bool armSwitch;        // 安全開關已按下(GPIO21 低電位持續 50ms,控制迴圈去抖)
   uint16_t armWaitTestS; // 測試用:安全開關等待上限改成這麼多秒(序列指令 armwait;0 = 用設定的分鐘數)
   uint32_t nowMs;
@@ -100,6 +104,7 @@ struct FlightStatus {
   float compPct;
   float outPct;
   uint8_t phase;             // 1 = 第一段,2 = 第二段(換段過渡中也算 2)
+  bool takeoffBoost;         // 在起飛油門階段(維持中或換回第一段的過渡中)
   LandingCause landingCause;
   FlightEndReason endReason;
   RejectReason rejectReason;

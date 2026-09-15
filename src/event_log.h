@@ -23,7 +23,7 @@ enum EventType : uint8_t {
   EV_COUNTDOWN,         // 開始倒數. a = 倒數秒數, arg = 1 延長後繼續 / 2 重新倒數 / 0 首次
   EV_DISTURB,           // 倒數中外力介入. a = 外力 g, b = 門檻, arg = DisturbAction
   EV_CANCEL,            // 取消倒數(網頁)
-  EV_MOTOR_START,       // 馬達啟動. arg = 風格編號, a = 第一段油門 %
+  EV_MOTOR_START,       // 馬達啟動. arg = 風格編號, a = 第一段油門 %, b = 起飛油門 %(0 = 不使用)
   EV_PHASE2,            // 換到第二段. a = 飛行秒數
   EV_LAND_START,        // 開始降落. arg = LandingCause, a = 飛行秒數, b = 觸地提早降落時抖動持續秒數
   EV_MOTOR_STOP,        // 馬達停止. arg = FlightEndReason, a = 主要數值(見網頁), b = 門檻或飛行秒數
@@ -45,7 +45,7 @@ enum EventType : uint8_t {
   EV_WIFI_DEFER,        // 起飛程序或飛行中,WiFi 試用退回延後到落地. arg = 1 功率試用 / 2 設定試用
   EV_ARM_SWITCH,        // 安全開關(等按下才倒數). arg = 0 起飛程序已放穩,等開關 / 1 上電自動倒數等開關 / 2 開關按下 /
                         //   3 等開關超過上限,取消起飛程序 / 4 上電自動倒數等開關超過上限,不再自動倒數. a = 上限秒數 /
-                        //   5 安全開關已停用(設定忽略),起飛程序不等開關
+                        //   5 安全開關已停用(設定忽略),起飛程序不等開關 / 6 上電自動倒數等待中改成手勢啟動,自動倒數作廢
 
 };
 

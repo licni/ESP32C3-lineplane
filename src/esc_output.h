@@ -35,6 +35,8 @@ void escPinLow();
 // rpmTelemetry:雙向 DShot 轉速回傳(只在 DShot300 生效).
 bool escBegin(uint8_t protocol, uint16_t initialUs = ESC_US_SAFE_IDLE, uint16_t pwmHz = ESC_PWM_FREQ_HZ,
               bool rpmTelemetry = false);
+// escBegin 成功(腳位真的有訊號). 失敗時飛行狀態機拒絕起飛(安全審查 2-C:原本照飛,網頁顯示油門正常但腳位沒訊號).
+bool escOutputOk();
 // 控制工作每拍呼叫. us = PWM 脈寬;pct = 油門百分比(DShot 用);stop = 馬達停止(DShot 送 0).
 void escWrite(uint16_t us, float pct, bool stop);
 // 目前輸出:PWM 的脈寬(µs);DShot 時是換算回等效脈寬,顯示用.

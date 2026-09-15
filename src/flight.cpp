@@ -1,4 +1,8 @@
-// 版本流水號: r22 (2026-09-14) 設定忽略安全開關(armSwitchOff)時開關一律算按下:上電自動倒數與手勢起飛都不等開關;起飛程序開始記事件 28/5
+// 版本流水號: r24 (2026-09-15) 安全審查第二次:非待機狀態一律清掉手勢請求(飛行中收到的不會在停止後被受理);馬達停止後 2 秒不接受手勢;
+//   撞擊鎖改獨立旗標(拒絕一次不解除,成功開始或重新上電才清);等待放穩/倒數中韌體開始寫入就取消;網頁開始不受 1.5 秒重臂限制;
+//   外力設不理會時清掉測試 disturb 旗標;自動倒數等待中改成手勢啟動記事件 28/6 並標自動倒數已用;電變輸出掛載失敗拒絕起飛(原因 10)
+// 舊: r23 (2026-09-15) 起飛油門(GG):緩啟動加到起飛油門,維持持續時間後 1 秒平順換到時間軸油門;狀態 takeoffBoost;馬達啟動事件 a 記起飛油門
+// 舊: r22 (2026-09-14) 設定忽略安全開關(armSwitchOff)時開關一律算按下:上電自動倒數與手勢起飛都不等開關;起飛程序開始記事件 28/5
 // 舊: r21 (2026-09-14) 降落保險時間改從減力走完才開始算(降落最長 = 減力秒數 + 保險時間;GG:減力 20 + 保險 20 時減力一完就關馬達)
 // 舊: r20 (2026-09-14) 安全開關等待上限(GG:3 分鐘可調):起飛程序開始後超過上限沒按開關 → 取消回待機(事件 28/3);
 //   上電自動倒數等開關逾時 → 這次通電不再自動倒數(事件 28/4). 桌上碰到飛機誤觸發時不會一直鎖著設定
@@ -37,6 +41,12 @@ static const float LAND_STILL_ACC_G = 0.10f;
 static const float SPEED_RAMP_MIN_S = 3.0f;         // 起飛時向心力補償的速度爬升時間(模擬用 3 秒)
 static const uint32_t REJECT_FLASH_MS = 1000;       // 拒絕啟動時燈急閃多久
 static const uint32_t GESTURE_REARM_MS = 1500;      // 一次手勢之後多久才接受下一次
+// 馬達停止(緊急停止,降落結束,撞擊)後這麼久不接受手勢(2026-09-15 安全審查 1-2):停止瞬間飛機可能正有機頭方向的加速度
+// (拉平俯衝,滑行撞到反彈),同一拍就成立手勢會直接進等待放穩 → 倒數. 用扭轉取消同一套封鎖機制.
+static const uint32_t MOTOR_STOP_REARM_MS = 2000;
+// 撞擊斷電鎖(安全審查 1-1):原本只看「狀態 = 已結束且原因撞擊」,按網頁開始被拒一次狀態就變待機,鎖跟著解除.
+// 改成獨立旗標:撞擊時設,成功開始起飛程序(一定是網頁/序列的刻意操作)或重新上電才清.
+static bool crashLocked = false;
 // 外力介入延長的上限:倒數最多到「倒數秒數 + 10 秒」. 沒有上限時,飛機拿在手上一直晃,每次放穩就再加,
 // 倒數會累加到非常大(GG 2026-09-13 指出).
 static const float COUNTDOWN_EXTEND_LIMIT_S = 10.0f;
@@ -136,6 +146,8 @@ static void captureSettleRef() {
 static void finish(FlightEndReason reason, float value, float limit) {
   endReason = reason;
   motorStopMs = nowMsCache;
+  if (reason == END_CRASH) crashLocked = true;
+  gestureBlockUntilMs = (nowMsCache + MOTOR_STOP_REARM_MS) | 1;   // 停止後 2 秒不接受手勢
   enter(FS_DONE);
   eventLog(EV_MOTOR_STOP, reason, value, limit);
 }
@@ -221,6 +233,12 @@ static void tryStart(bool autoStart, const FlightInputs &in) {
     enter(FS_STANDBY);
     return;
   }
+  if (in.escFail) {   // 電變輸出掛載失敗(LEDC/RMT):腳位沒訊號,飛了也不會轉,別讓使用者誤判成電變壞了
+    reject(REJECT_ESC_OUTPUT);
+    enter(FS_STANDBY);
+    return;
+  }
+  crashLocked = false;
   rejectReason = REJECT_NONE;
   endReason = END_NONE;
   landingCause = LAND_NONE;
@@ -244,9 +262,8 @@ static void tryStart(bool autoStart, const FlightInputs &in) {
   }
 }
 
-static float baseThrottle(float t, uint8_t &phaseOut) {
+static float timelineThrottle(float t) {
   const float p1 = fp.phase1Pct, p2 = fp.phase2Pct, t1 = fp.phase1Sec;
-  phaseOut = t < t1 ? 1 : 2;
   switch (fp.phaseMode) {
     case PHASE_STEP:
       return t < t1 ? p1 : p2;
@@ -258,6 +275,21 @@ static float baseThrottle(float t, uint8_t &phaseOut) {
       return p1 + (p2 - p1) * r;
     }
   }
+}
+
+// 起飛油門(GG 2026-09-15):緩啟動走完後維持起飛油門 takeoffHoldSec 秒,再用 TAKEOFF_BLEND_S 秒換到時間軸油門.
+// 持續時間 0 = 不使用. 設定驗證保證整段在第一段時間內結束.
+static bool inTakeoffBoost(float t) {
+  return fp.takeoffHoldSec > 0 && t < fp.takeoffRampSec + fp.takeoffHoldSec + TAKEOFF_BLEND_S;
+}
+
+static float baseThrottle(float t, uint8_t &phaseOut) {
+  phaseOut = t < fp.phase1Sec ? 1 : 2;
+  const float b = timelineThrottle(t);
+  if (!inTakeoffBoost(t)) return b;
+  const float holdEnd = fp.takeoffRampSec + fp.takeoffHoldSec;
+  if (t < holdEnd) return fp.takeoffPct;
+  return fp.takeoffPct + (b - fp.takeoffPct) * (t - holdEnd) / TAKEOFF_BLEND_S;
 }
 
 void flightBegin() {
@@ -307,6 +339,19 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
   if (state == FS_WAIT_STILL && resumeCountdown && distMag > lastDisturbG) lastDisturbG = distMag;
 
   // --- 請求 ---
+  // 手勢請求只在待機/結束有意義(安全審查 4-B1,板上重現):飛行中收到的若留著,緊急停止那一拍狀態變已結束,
+  // 同拍就被受理 → 等待放穩 → 倒數. 非待機狀態一律丟掉.
+  if (state != FS_STANDBY && state != FS_DONE) reqGesture = false;
+  // 測試 disturb 旗標只在倒數中且外力有作用時才有意義,否則丟掉(不然留到下一趟)
+  if (reqDisturb && (state != FS_COUNTDOWN || fs.disturbMode == DISTURB_OFF)) reqDisturb = false;
+  // 韌體開始寫入時已在起飛程序(安全審查 4-B2,<5ms 視窗):tryStart 之後不再看 fwBlock,倒數完會在寫快閃中啟動馬達. 取消回待機.
+  if ((state == FS_WAIT_STILL || state == FS_COUNTDOWN) && in.fwBlock) {
+    reject(in.fwBlock == 1 ? REJECT_FW_UPDATING : REJECT_FW_UNCONFIRMED);
+    endReason = END_CANCELED;
+    resumeCountdown = false;
+    pendingAction = DISTURB_ACT_NONE;
+    enter(FS_STANDBY);
+  }
   if (reqEstop) {
     reqEstop = false;
     if (motorState(state)) finish(END_ESTOP, (now - motorStartMs) / 1000.0f, 0);
@@ -415,6 +460,10 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
       if (autoWaitLevel) {
         if (fs.gestureEnable || autoStartUsed) {
           autoWaitLevel = false;   // 改成手勢啟動,或手動輸出用掉了自動倒數
+          if (!autoStartUsed) {   // 改成手勢啟動:自動倒數這次通電作廢(改回關閉也不會再等),記下來免得狀態顯示不一致
+            autoStartUsed = true;
+            eventLog(EV_ARM_SWITCH, 6);
+          }
         } else {
           // 安全開關按過就記住;飛機放平維持 1 秒(開關按下前就放平也算)才倒數
           latchArm(in);
@@ -438,7 +487,7 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
       if (fs.gestureEnable) {
         // 撞擊斷電後推飛機不算手勢(GG 2026-09-14 安全審查 A3):撞機後撿飛機,拉線,扶正時很容易推到門檻.
         // 要再飛:網頁「開始起飛程序」(兩下確認,一定是人刻意操作)或重新上電. 推到時記拒絕原因 9(最多 5 秒一筆).
-        const bool crashLock = state == FS_DONE && endReason == END_CRASH;
+        const bool crashLock = crashLocked;
         const bool physPush = in.imuOk && in.pushG >= fs.gestureG;
         if (crashLock && physPush && !reqGesture && now - lastGestureMs >= GESTURE_REARM_MS) {
           lastGestureMs = now;
@@ -449,9 +498,10 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
             eventLog(EV_REJECT, REJECT_CRASH_LOCK, in.pushG);
           }
         }
-        // 推力夠就算有推(不管角度),角度超過就拒絕並記原因;序列埠模擬手勢與網頁開始按鈕也一樣檢查角度
+        // 推力夠就算有推(不管角度),角度超過就拒絕並記原因;序列埠模擬手勢與網頁開始按鈕也一樣檢查角度.
+        // 1.5 秒重臂只針對推飛機(去抖);網頁/序列的請求是刻意操作,不受限(安全審查 1-4:推到後 1.5 秒內按開始被靜默丟掉)
         const bool pushed = reqGesture || (physPush && !crashLock);
-        if (pushed && now - lastGestureMs >= GESTURE_REARM_MS) {
+        if (pushed && (reqGesture || now - lastGestureMs >= GESTURE_REARM_MS)) {
           lastGestureMs = now;
           if (in.imuOk && !withinStartLevel(in)) {
             rejectTilt(REJECT_TILT, in);
@@ -537,7 +587,7 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
         motorStartMs = now;
         phase = 1;
         enter(FS_TAKEOFF);
-        eventLog(EV_MOTOR_START, fpIndex, fp.phase1Pct);
+        eventLog(EV_MOTOR_START, fpIndex, fp.phase1Pct, fp.takeoffHoldSec > 0 ? fp.takeoffPct : 0);
       }
       break;
 
@@ -666,6 +716,7 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
   status.compPct = motorState(state) ? lastComp : 0;
   status.outPct = motorState(state) ? lastOut : 0;
   status.phase = phase;
+  status.takeoffBoost = (state == FS_TAKEOFF || state == FS_FLYING) && inTakeoffBoost((now - motorStartMs) / 1000.0f);
   status.landingCause = landingCause;
   status.endReason = endReason;
   status.rejectReason = rejectReason;

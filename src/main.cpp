@@ -398,8 +398,9 @@ void setup() {
   backupSelfCheck();
   buzzerBegin(sharedSettings.buzzerActiveLow != 0);   // 電位看設定,所以在載入設定之後
   const bool escCalibrate = calibFlag && sharedSettings.escProtocol == ESC_PROTO_PWM50;
-  escBegin(sharedSettings.escProtocol, escCalibrate ? sharedSettings.escMaxUs : ESC_US_SAFE_IDLE, sharedSettings.escPwmHz,
-           sharedSettings.escRpmTelemetry != 0);
+  const bool escOk = escBegin(sharedSettings.escProtocol, escCalibrate ? sharedSettings.escMaxUs : ESC_US_SAFE_IDLE,
+                              sharedSettings.escPwmHz, sharedSettings.escRpmTelemetry != 0);
+  if (!escOk) eventLog(EV_REJECT, REJECT_ESC_OUTPUT);   // 腳位沒訊號:記一筆,起飛時也會被拒
   const uint32_t escCalibStartMs = millis();
   gearBegin(sharedSettings);   // 機輪收腳舵機:開機一律輸出放下位置
 
@@ -430,12 +431,12 @@ void setup() {
   if (escCalibrate) Serial.printf("ESC calibration: output %uus for %.1fs\n", sharedSettings.escMaxUs, sharedSettings.calibHoldSec);
   else if (escCalibPending()) Serial.println(F("ESC calibration pending (waits for a power-on reset)"));
   testArmOverrideBoot();   // 測試用安全開關覆寫(軟體重開保留),要在控制工作開始讀之前
+  fwUpdateBegin();   // 新韌體待確認或上次更新被退回;要在控制工作讀 fwUpdateBlockReason 之前設好(安全審查 2-F:原本在控制工作之後)
   controlBegin(imuOk, escCalibrate, escCalibStartMs);
 
   Serial.printf("FW version %s I2C SDA=%u SCL=%u\n", FW_VERSION, PIN_I2C_SDA, PIN_I2C_SCL);
   if (testArmOverride() >= 0) Serial.printf("TEST armsw override %d (kept across soft reboot)\n", testArmOverride());
   if (testArmWaitOverride()) Serial.printf("TEST armwait override %us (kept across soft reboot)\n", (unsigned)testArmWaitOverride());
-  fwUpdateBegin();   // 新韌體待確認或上次更新被退回;要在控制工作讀 fwUpdateBlockReason 之前設好,所以放 WiFi 前
   wifiBegin();
   Serial.println(F("READY (type 'help')"));
 }

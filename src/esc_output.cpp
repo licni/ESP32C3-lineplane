@@ -242,12 +242,16 @@ static bool beginDshot(uint8_t proto, bool wantBidir) {
   return true;
 }
 
+static bool outputOk = false;
+bool escOutputOk() { return outputOk; }
+
 bool escBegin(uint8_t proto, uint16_t initialUs, uint16_t hz, bool rpmTelemetry) {
   escPinLow();
   protocol = proto;
   pwmHz = (hz >= 50 && hz <= 400) ? hz : ESC_PWM_FREQ_HZ;
   if (proto == ESC_PROTO_DSHOT150 || proto == ESC_PROTO_DSHOT300) {
-    if (beginDshot(proto, rpmTelemetry)) return true;
+    outputOk = beginDshot(proto, rpmTelemetry);
+    if (outputOk) return true;
     Serial.println(F("ERR ESC DShot RMT"));
     return false;   // 腳位維持低電位,不退回 PWM(電變會把 PWM 認成訊號種類)
   }
@@ -258,6 +262,7 @@ bool escBegin(uint8_t proto, uint16_t initialUs, uint16_t hz, bool rpmTelemetry)
     return false;
   }
   writePwmUs(initialUs);
+  outputOk = true;
   return true;
 }
 
