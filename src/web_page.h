@@ -86,6 +86,11 @@
 // 舊: r3 (2026-09-13) 數字放大,斜坡改稱加力/減力秒數,換段方式(線性/階梯),曲線點分框,觸地提早降落設定,監看頁最近觸地衝擊
 // 舊: r2 (2026-09-13) 加風格頁(六組,命名/選用/複製/回預設,時間軸,斜坡,上下限,補償曲線數值)與設定頁(方位,啟動,降落撞擊,速度,電變脈寬);參數一律 +/- 粗細調
 // 舊: r1 (2026-09-13) 初版:監看頁(飛機側視姿態圖,感測器與控制迴圈狀態),系統頁(WiFi,韌體更新)
+// r90 (2026-09-16) 全部 ⓘ 說明重寫得精簡(GG):44 條參數說明,卡片說明,下拉選單說明,備份頁說明;內容與數值不變,只去掉重複與贅字.
+// r89 (2026-09-16) 備份碼框字級 13 → 16px(點框時手機不再自動放大),套用框 inputmode=none 不彈鍵盤,提示改「長按這裡 → 貼上」.
+// r88 (2026-09-16) 參數名稱「倒數秒數」改「起飛倒數秒數」(GG),延長秒數說明與備份頁項目說明跟著改.
+// r87 (2026-09-16) 配色改灰藍銀(GG:琥珀/咖啡色看了討厭):主色鋼藍銀,底色冷灰藍,降落狀態列棕 → 藍,時間軸第二段/降落與紀錄頁抖動線換掉咖啡色;警告黃/紅不變.
+// r86 (2026-09-16) WiFi 設定:刪 SSID 說明;發射功率警告移到拉桿下,超過 7 dBm 變紅框紅字;加連續開關電 3 次回出廠的簡短說明.
 // r85 (2026-09-15) 三軸格標籤緊貼自己的數字(數字接在標籤後),欄間加細分隔線,避免前一個數字看起來屬於下一個標籤.
 // r84 (2026-09-15) 角速度/零點改獨占一整排的三等分固定欄(頭/翼/背各一欄單行靠右),拿掉這兩格的自動縮字與兩行排法,數值變動不再換行或改框高.
 // r83 (2026-09-15) 角速度/零點固定兩位小數與負號欄,三軸固定位置,不隨正負/位數自動換行.
@@ -107,7 +112,7 @@ const char WEB_PAGE_HTML[] PROGMEM = R"HTML(<!doctype html>
 *{box-sizing:border-box}
 a{color:var(--accent)}
 input,progress{accent-color:var(--accent)}
-::selection{background:rgba(240,179,91,.35);color:inherit}
+::selection{background:rgba(143,180,220,.35);color:inherit}
 /* 頁尾作者(GG):每個分頁最下方,SuperGG 要醒目 */
 .credit{display:flex;align-items:baseline;justify-content:center;flex-wrap:wrap;gap:4px 22px;padding:22px 16px 30px;margin-top:8px;border-top:1px solid var(--line);color:var(--mute);font-size:14px}
 /* 設計者署名 SuperGG(GG:浮誇一點,七彩霓虹 + 動畫):每個字母一段彩虹漸層接起來,整體色相輪轉(光暈跟著變色),字母波浪跳動,兩側星星閃爍 */
@@ -148,7 +153,7 @@ header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px 
 .fbar.count{background:#ea580c;border-left-color:#7c2d12;color:#fff;animation:fbPulse .8s ease-in-out infinite}
 .fbar.count .fbadge{background:#7c2d12}.fbar.count .sub{color:#ffedd5}.fbar.count .ft b{font-size:24px}
 .fbar.fly{background:#16a34a;border-left-color:#14532d;color:#fff}.fbar.fly .fbadge{background:#14532d}.fbar.fly .sub{color:#dcfce7}
-.fbar.land{background:#8a5a2b;border-left-color:#4e3116;color:#fff}.fbar.land .fbadge{background:#4e3116}.fbar.land .sub{color:#f5e6d3}
+.fbar.land{background:#3d6a99;border-left-color:#1f3a5c;color:#fff}.fbar.land .fbadge{background:#1f3a5c}.fbar.land .sub{color:#dbe7f5}
 .fbar.crash{background:#dc2626;border-left-color:#7f1d1d;color:#fff}.fbar.crash .fbadge{background:#7f1d1d}.fbar.crash .sub{color:#fee2e2}
 .fbar.done{border-left-color:var(--mute)}.fbar.done .fbadge{background:var(--mute)}
 .fbar.reject{background:#fee2e2;border-left-color:#dc2626}.fbar.reject .fbadge{background:#dc2626}
@@ -231,11 +236,13 @@ button.b.sm{padding:3px 10px;font-size:13px}
 .wgrp{border:1px solid var(--line);border-radius:10px;padding:5px 9px 3px;margin:8px 0}
 .wgt{font-size:13px;font-weight:700;color:var(--ink);margin:1px 0 0}
 .apfix{font-weight:700;font-size:14px;white-space:nowrap}.sub.bad{color:var(--bad)}
+.txphi{color:var(--bad)!important;font-weight:700}#txpWarn.txphi{padding:4px 8px;border:2px solid var(--bad);border-radius:6px;background:rgba(209,36,47,.1)}
 input[type=text],input[type=password],input[type=number],select{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;min-width:0}
 .row input[type=text],.row input[type=password],.row input[type=number]{flex:1 1 160px}
 .row input[type=range]{flex:1 1 160px;min-width:0}
-/* 設定備份碼:英數字長串要能在任何位置斷行 */
-.bktext{display:block;width:100%;box-sizing:border-box;margin:4px 0;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:13px/1.4 ui-monospace,Consolas,monospace;word-break:break-all;resize:vertical}
+/* 設定備份碼:英數字長串要能在任何位置斷行. 字級 16px:iPhone 點到小於 16px 的輸入框會自動放大畫面(GG 2026-09-16);
+   套用框加 inputmode=none 不叫出鍵盤,長按照樣有「貼上」. 網頁是 http,瀏覽器不准讀剪貼簿,做不出一按就貼上的按鈕. */
+.bktext{display:block;width:100%;box-sizing:border-box;margin:4px 0;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:16px/1.35 ui-monospace,Consolas,monospace;word-break:break-all;resize:vertical}
 .bktext:disabled{opacity:.5}
 button,select,input{touch-action:manipulation}   /* 連點按鈕不觸發雙擊放大,雙指縮放照常 */
 button.b{flex:0 0 auto;white-space:nowrap;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;padding:7px 14px;border-radius:8px;cursor:pointer}
@@ -332,7 +339,7 @@ button.b:disabled{opacity:.45;cursor:default}
 .axrow label{display:flex;align-items:center;gap:6px}.axrow select{padding:4px 6px}
 .inst-views svg{width:100%;height:auto;display:block}
 .ins-body{fill:var(--plane);opacity:.28}.ins-hz{stroke:var(--mute);stroke-dasharray:6 5;opacity:.6}
-.ins-chip{fill:#2b221c;stroke:#fff;stroke-width:1.2}
+.ins-chip{fill:#1f2937;stroke:#fff;stroke-width:1.2}
 .ins-t{font-size:14px;font-weight:700;font-family:system-ui,sans-serif;paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
 .ins-s{fill:var(--mute);font-size:12px;font-family:system-ui,sans-serif}
 .ins-v{fill:var(--ink);font-size:15px;font-weight:700;font-family:system-ui,sans-serif}
@@ -367,28 +374,28 @@ details.card>summary{cursor:pointer;padding:2px 0}
 .ev.bad .em>b{color:var(--bad)}.ev.good .em>b{color:var(--ok)}.ev.dim{color:var(--mute)}
 progress{width:100%;height:10px}
 [hidden]{display:none!important}
-/* 航電面板:低彩度石墨底,琥珀標記;離線可用,保留控制項排列與警示色. */
-:root{color-scheme:dark;--bg:#111315;--card:#1b1e21;--ink:#edece6;--mute:#a8aaa6;--line:#3b3f41;--accent:#f0b35b;--accentBg:rgba(240,179,91,.10);--ok:#38804c;--warn:#946014;--bad:#c93636;--plane:#e9e5d9;--sky:#20272a;--ground:#302a21;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
-body{background-image:linear-gradient(rgba(240,179,91,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(240,179,91,.025) 1px,transparent 1px);background-size:32px 32px}
+/* 航電面板:灰藍石墨底,鋼藍銀標記(GG 2026-09-16:琥珀色看了討厭,改回灰藍銀);離線可用,保留控制項排列與警示色. */
+:root{color-scheme:dark;--bg:#101419;--card:#1a1f26;--ink:#e8ecf1;--mute:#9aa4b1;--line:#353d48;--accent:#8fb4dc;--accentBg:rgba(143,180,220,.10);--ok:#38804c;--warn:#946014;--bad:#c93636;--plane:#dfe5ec;--sky:#1e2833;--ground:#262b31;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
+body{background-image:linear-gradient(rgba(143,180,220,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(143,180,220,.03) 1px,transparent 1px);background-size:32px 32px}
 header{box-shadow:0 6px 24px #0005;border-top:2px solid var(--accent)}
-.bar{background:#151719}.bar h1{letter-spacing:.04em}
+.bar{background:#141920}.bar h1{letter-spacing:.04em}
 .bar h1::before{content:'';display:inline-block;width:7px;height:14px;margin-right:8px;background:var(--accent);vertical-align:-2px;transform:skew(-15deg)}
 .pill{border-radius:4px;font-size:12px;font-weight:600}
-.fbar .fbadge{border-radius:3px;background:#584020;color:#ffe4b8}
+.fbar .fbadge{border-radius:3px;background:#2e4560;color:#dbe9f7}
 .fbar.reject,.fbar.reject .sub{color:#7f1d1d}.fbar.done .fbadge{color:#161819}
-nav{gap:5px;padding:6px;counter-reset:panel;background:#151719}
-nav button{counter-increment:panel;border:1px solid #666c70;border-radius:4px;background:#30363a;color:#e4e7e5;font-weight:600;padding:7px 2px}
+nav{gap:5px;padding:6px;counter-reset:panel;background:#141920}
+nav button{counter-increment:panel;border:1px solid #5f6b78;border-radius:4px;background:#2c343e;color:#e2e8ee;font-weight:600;padding:7px 2px}
 nav button::before{content:counter(panel,decimal-leading-zero);font:10px var(--mono);margin-right:5px;opacity:.8}
-nav button.on{color:#21190e;background:var(--accent);border-color:#ffda99;font-weight:800;box-shadow:inset 0 -3px #a66b21,0 0 0 1px #f0b35b33}
-.card{border-radius:6px;border-top-color:#50504a;box-shadow:0 3px 12px #0003;padding:12px 14px;margin-bottom:10px}
+nav button.on{color:#0f1720;background:var(--accent);border-color:#c9dcf0;font-weight:800;box-shadow:inset 0 -3px #5b7fa6,0 0 0 1px #8fb4dc33}
+.card{border-radius:6px;border-top-color:#4a5563;box-shadow:0 3px 12px #0003;padding:12px 14px;margin-bottom:10px}
 .card h2{letter-spacing:.035em;margin-bottom:8px}
 .card h2::before{content:'';width:3px;height:13px;background:var(--accent);flex:0 0 auto;margin-right:5px}
 .card h3.grp{color:var(--accent)}
-.stat{background:#15181a;border-radius:4px;padding:7px 9px;border-left:2px solid #665034}
+.stat{background:#141920;border-radius:4px;padding:7px 9px;border-left:2px solid #4f6a88}
 .stat .k{margin-bottom:4px}.stat .v{font-family:var(--mono);font-size:17px}
 /* 小型儀表格:單行標題 + 固定兩行數值,更新不改尺寸;極長資料仍可在格內捲動查看. */
 .sensor-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
-.sensor-grid .stat{padding:5px 7px;border:1px solid #383d40;border-radius:4px;background:#171a1c}
+.sensor-grid .stat{padding:5px 7px;border:1px solid #36404b;border-radius:4px;background:#161c23}
 .sensor-grid .stat .k{height:15px;line-height:15px;font-size:11.5px;margin-bottom:2px;white-space:nowrap;overflow:auto}
 .sensor-grid .stat .v{height:34px;line-height:17px;font-size:17px;font-weight:600;overflow:auto}
 /* 三軸格(角速度/零點):獨占一整排,固定三等分欄,每軸單行靠右;數值怎麼變都不換行,不縮字,框高固定 */
@@ -401,17 +408,17 @@ nav button.on{color:#21190e;background:var(--accent);border-color:#ffda99;font-w
 @media (min-width:600px){.sensor-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .big{font-family:var(--mono);color:var(--accent);font-size:46px;letter-spacing:-.04em}
 .att svg{border:1px solid var(--line);border-radius:4px}
-.att .read{padding:10px;background:#15181a;border:1px solid var(--line);border-radius:4px}
+.att .read{padding:10px;background:#141920;border:1px solid var(--line);border-radius:4px}
 .att .rd2 b,.man-read b,.prm .val{font-family:var(--mono)}
-.prm .val{background:#101214;border-color:#5a5b53;border-radius:4px;color:#ffe1ae}
-input[type=text],input[type=password],input[type=number],select,.bktext{border-radius:4px;background:#121517}
-button.b{border-radius:4px;background:#262a2d;font-weight:600;box-shadow:inset 0 1px #ffffff08}
-button.b.pri,.seg button.on,.bksel button.on,.seg.phseg button.on,.prm .ctl .b.st.on{color:#21190e;background:var(--accent);border-color:var(--accent)}
+.prm .val{background:#0f1318;border-color:#56616e;border-radius:4px;color:#dbe9f7}
+input[type=text],input[type=password],input[type=number],select,.bktext{border-radius:4px;background:#11161c}
+button.b{border-radius:4px;background:#252c35;font-weight:600;box-shadow:inset 0 1px #ffffff08}
+button.b.pri,.seg button.on,.bksel button.on,.seg.phseg button.on,.prm .ctl .b.st.on{color:#0f1720;background:var(--accent);border-color:var(--accent)}
 button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
 .seg,.seg.phseg,.bksel button,.bkprof,.bks,.pt,.wgrp,.cnt2 .prm,.gesture,.side,.evbox,.subd,.brand,.inst-views figure{border-radius:4px}
 .bkprof{border-width:1px;border-left-width:3px}
 .bksel button{font-size:15px}.bksel button.on{box-shadow:none}
-.evbox{background:#121517}.ev{padding-top:6px;padding-bottom:6px}
+.evbox{background:#11161c}.ev{padding-top:6px;padding-bottom:6px}
 .msg.ok,.ev.good .em>b{color:#88d39a}.msg.bad,.sub.bad,.ev.bad .em>b,.ev.stop .em>b,.aowarn .aoh{color:#ff9292}
 .ev.land .em>b{color:#f0b35b}
 .credit{border-top-style:dashed;font-size:12px}
@@ -468,12 +475,12 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
  </div>
  <div class="card">
   <h2>事件紀錄 <span class="sub">(這次通電)</span></h2>
-  <div class="cnote">觸發降落,馬達停止,感測器異常等事件與原因. 時間是通電後幾秒. 斷電或重新開機才清除;第一行是這次為什麼開機(飛行中板子重開也看得出來).</div>
+  <div class="cnote">降落,馬達停止,感測器異常等事件與原因,時間是通電後幾秒. 斷電或重新開機才清除;第一行是這次為什麼開機.</div>
   <div class="evbox" id="evBox"><div class="sub">讀取中…</div></div>
  </div>
  <div class="card">
   <h2>感測器與輸出<span class="h2r"><button class="b sm" id="btnTiming">清除迴圈紀錄</button></span></h2>
-  <div class="cnote">靜止時自動學習陀螺儀零點. 觸地衝擊只記錄 80 毫秒內結束的短衝擊,拿飛機輕敲地面看數值,用來決定觸地門檻. 「清除迴圈紀錄」把控制迴圈的最長執行與延遲歸零.</div>
+  <div class="cnote">靜止時自動學習陀螺儀零點. 觸地衝擊只記 80 毫秒內結束的短衝擊,拿飛機輕敲地面看數值,用來訂觸地門檻. 「清除迴圈紀錄」把最長執行與延遲歸零.</div>
   <div class="grid sensor-grid">
    <div class="stat"><div class="k">加速度大小</div><div class="v" id="acc">--</div></div>
    <div class="stat"><div class="k">靜止</div><div class="v" id="still">--</div></div>
@@ -491,7 +498,7 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
 <section id="prof" hidden>
  <div class="card">
   <h2>風格</h2>
-  <div class="cnote">★ = 飛行使用的風格,紅點 = 有未儲存的變更. 點選切換要編輯哪一組(計時器與角度補償都跟著換). 複製會把這一組的全部設定蓋到選的那一組.</div>
+  <div class="cnote">★ = 飛行使用的風格,紅點 = 有未儲存的變更. 點一下切換要編輯哪一組(計時器與角度補償一起換). 複製會把這一組全部蓋到選的那一組.</div>
   <div class="seg profseg" id="profSeg"></div>
   <div class="row">
    <input type="text" id="fName" maxlength="23" style="flex:1 1 90px" placeholder="風格名稱"><button class="b" id="btnName">改名</button>
@@ -510,8 +517,8 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
 <section id="comp" hidden>
  <div class="card">
   <h2>角度補償曲線</h2>
-  <div class="cnote">直軸是機頭角度,橫軸是實際輸出油門. 補償值加在當段的基本油門上,兩段飛行共用同一條曲線;「第二段」只換基本油門,看加力後哪裡會撞到上限.
-   點選或拖曳曲線上的點;邊框上的三角形也可以拖:左邊是補速/減速起點,下方是油門下限 / 基本油門 / 上限. 改完記得按上方的儲存.</div>
+  <div class="cnote">直軸是機頭角度,橫軸是實際輸出油門. 補償值加在當段的基本油門上,兩段共用同一條曲線;切到「第二段」只換基本油門,看加力後哪裡會撞到上限.
+   點選或拖曳曲線上的點;邊框的三角形也能拖:左邊是補速/減速起點,下方是油門下限 / 基本油門 / 上限. 改完按上方的儲存.</div>
   <div class="seg profseg" id="profSeg2"></div>
   <div class="seg phseg" id="cvPhase"><button data-ph="1" class="on">第一段</button><button data-ph="2">第二段</button></div>
   <div class="cvwrap">
@@ -532,7 +539,7 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
 <section id="log" hidden>
  <div class="card">
   <h2>G 力與姿態紀錄</h2>
-  <div class="cnote">板子一直記錄最近 10 分鐘(每 0.1 秒一筆,重新通電清除),飛完打開這頁看. 調觸地門檻的作法:先關閉提早降落,飛幾個特技看「總 G」與「Z 抖動」最高到多少,再看地面滑行時的抖動,門檻訂在兩者之間. 點或拖曳圖表可看該時刻的數值. 下面的最大值只算目前畫面範圍.</div>
+  <div class="cnote">板子一直記錄最近 10 分鐘(每 0.1 秒一筆,重新通電清除),飛完打開來看. 訂門檻的作法:先關閉提早降落,飛幾個特技看「總 G」與「Z 抖動」最高多少,再看地面滑行的抖動,門檻訂在兩者之間. 點或拖圖表看該時刻的數值;下方最大值只算目前畫面範圍.</div>
   <div class="row" style="margin-top:2px"><span class="seg" id="logWin"><button data-s="60">1 分</button><button data-s="180" class="on">3 分</button><button data-s="600">10 分</button></span>
    <button class="b" id="btnLogPause">暫停更新</button><span class="sub" id="logInfo"></span></div>
   <div class="grid g3" id="logStats"></div>
@@ -551,8 +558,8 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
 <section id="inst" hidden>
  <div class="card">
   <h2>感測器安裝方位<span class="h2r"><button class="b sm" id="btnOrientDef">方位回預設</button></span></h2>
-  <div class="cnote">裝機時設定一次. 選晶片上印的哪一軸朝機頭,哪一軸朝機背(座艙頂):模組板上印有 X,Y 箭頭;Z 軸垂直板面,朝元件那一面為 +Z. 朝左翼由兩軸自動決定(右手定則),繞圈的向心力在這個方向,姿態計算會用到.
-   裝好後把飛機擺成平飛姿勢,用「角度修正」讓控制使用的角度讀到 0°. 出廠預設:晶片 +X 朝機頭,+Z 朝機背(+Y 朝左翼),角度修正 0°. 改完要按上方的儲存.</div>
+  <div class="cnote">裝機時設定一次:選晶片的哪一軸朝機頭,哪一軸朝機背(座艙頂). 模組板上印有 X,Y 箭頭;Z 軸垂直板面,朝元件那面為 +Z. 朝左翼由兩軸自動決定(向心力在這個方向).
+   裝好後把飛機擺成平飛姿勢,用「角度修正」讓控制使用的角度讀到 0°. 出廠:+X 朝機頭,+Z 朝機背,修正 0°. 改完按上方的儲存.</div>
   <div class="inst-views">
    <figure><figcaption>側視 <span class="sub">站在圓心看,左翼朝你</span></figcaption><svg id="instSide" viewBox="-160 -100 320 200" role="img" aria-label="側視安裝方位圖"></svg></figure>
    <figure><figcaption>後視 <span class="sub">站在機尾往機頭看</span></figcaption><svg id="instRear" viewBox="-160 -100 320 200" role="img" aria-label="後視安裝方位圖"></svg></figure>
@@ -574,8 +581,8 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
  <div id="escCards"></div>
  <div class="card" id="manCard">
   <h2>手動輸出</h2>
-  <div class="cnote">直接用滑桿控制電變輸出:測馬達轉向,確認油門大小,也可以手動校正電變. 只在待機或飛行結束時可用.
-   安全機制:解鎖後一律從最低油門開始;離開這一頁,切到別的 App 或網路斷線,0.5 秒內自動回最低油門並上鎖;倒數或飛行中不能用.</div>
+  <div class="cnote">用滑桿直接控制電變:測馬達轉向,確認油門大小,也可以手動校正電變. 只在待機或飛行結束時可用.
+   安全機制:解鎖後一律從最低油門開始;離開這一頁,切到別的 App 或斷線,0.5 秒內自動回最低並上鎖.</div>
   <div class="man-read"><span class="pill" id="manPill">已上鎖</span><b id="manOut">-- µs</b><span class="sub" id="manPct"></span></div>
   <label class="chk"><input type="checkbox" id="manProp"> 螺旋槳已拆除,解鎖後馬達會照滑桿轉動</label>
   <div class="row"><button class="b pri" id="btnManUnlock" disabled>解鎖手動輸出</button><button class="b danger" id="btnManLock" hidden>上鎖(回最低油門)</button></div>
@@ -584,10 +591,10 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
  </div>
  <div class="card" id="calCard">
   <h2>電變校正精靈(自動)</h2>
-  <div class="cnote">讓電變學習油門行程:通電當下收到最高油門,保持一段時間再給最低油門,板子自動完成,不用手動拉桿.
-   只有「拔電再接電」才會進入校正;網頁重新開機,韌體更新,當機重開都不會,而且會直接取消校正(那時電變可能已解鎖,輸出最高油門等於全速).
-   按下後 <b>10 秒內</b>沒拔電也會自動取消,免得忘記後哪天裝著螺旋槳接電池就是全速.
-   板子用 USB 供電,電變另外接電池時,請改用上面的手動輸出校正:先解鎖推到最高,再接電變電池,聽到提示音後拉到最低.</div>
+  <div class="cnote">讓電變學習油門行程:通電當下輸出最高油門,保持一段時間再切最低,板子自動完成.
+   只有「拔電再接電」才會進入校正,軟體重開不算(那時電變可能已解鎖,最高油門等於全速),而且會直接取消校正.
+   按下後 <b>10 秒內</b>沒拔電也會自動取消,免得哪天裝著螺旋槳接電池就全速.
+   板子用 USB 供電而電變另外接電池時,改用上面的手動輸出:先解鎖推到最高,再接電變電池,聽到提示音拉到最低.</div>
   <details class="subd"><summary>操作步驟</summary>
   <ol class="steps">
    <li>確認「電變脈寬」是你要的範圍,並且已按儲存(校正用存檔裡的值).</li>
@@ -604,7 +611,7 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
  </div>
  <details class="card" id="brandCard">
   <summary><b>各廠牌校正說明</b> <span class="sub">(點開,19 款)</span></summary>
-  <div class="sub" style="margin-top:6px">依官方說明書整理(2026-09 查證),點開看步驟與出處. <b>很多電變「最高油門上電」停太久會進入程式設定模式</b>,聽到確認音就要拉到最低. 「自動精靈」的保持秒數是由說明書的提示音時間推算的建議值,從板子與電變同時通電起算;不確定時用手動輸出邊聽邊操作最保險. 型號不在清單或步驟不同時,以電變說明書為準.</div>
+  <div class="sub" style="margin-top:6px">依官方說明書整理(2026-09 查證),點開看步驟與出處. <b>很多電變「最高油門上電」停太久會進入設定模式</b>,聽到確認音就要拉到最低. 保持秒數是依說明書推算的建議值,從板子與電變同時通電起算;不確定時用手動輸出邊聽邊做最保險. 清單沒有的型號以電變說明書為準.</div>
   <div id="brandList"></div>
  </details>
 </section>
@@ -622,11 +629,11 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
  <div class="card">
   <h2>WiFi 設定</h2>
   <div class="cnote">開機先連家用 WiFi;連不上或名稱留空,就開自身熱點 <b id="apName"></b>(網址 192.168.4.1). 儲存後重新開機生效.
-   <br><b>熱點名稱</b>:開頭固定,後面可空白,也可以接字分辨同場的飛機(例如 3 → HappySuperGG_Plane3),最多 14 個英數字(中文一字算 3 個).
-   <br><b>熱點密碼</b>:出廠 12345678. 建議改掉,別人就不能連進來亂改設定. 8~63 個英文,數字或半形符號,區分大小寫. 忘記密碼用下方的「完全連不上時救援」回出廠.
-   <br><b>發射功率</b>:拖動立即生效,方便比較連線品質;開太大反而壓垮自己的接收,常用 5 dBm. 拖動後 15 秒內要按上方「保持」,沒按會自動退回.
-   <br><b>設定保護</b>:儲存並重新開機後,連上網頁要按上方「保持」;WiFi 就緒後 3 分鐘內沒按,自動改回上一次的設定.
-   <br><b>完全連不上時救援</b>:電池接上後 5 秒內拔掉,連續 3 次,WiFi 設定回出廠(自身熱點 HappySuperGG_Plane,密碼回 12345678). 飛行設定不受影響.</div>
+   <br><b>熱點名稱</b>:開頭固定,後面可空白,或接字分辨同場的飛機(例如 3 → HappySuperGG_Plane3),最多 14 個英數字(中文一字算 3 個).
+   <br><b>熱點密碼</b>:出廠 12345678,建議改掉,別人才不能連進來改設定. 8~63 個英數字或半形符號,分大小寫. 忘記就用下面的救援回出廠.
+   <br><b>發射功率</b>:拖動立即生效,方便比較連線品質;15 秒內要按上方「保持」,沒按會退回.
+   <br><b>設定保護</b>:儲存並重新開機後要按上方「保持」;WiFi 就緒後 3 分鐘沒按,自動改回上一次的設定.
+   <br><b>完全連不上時救援</b>:電池接上後 5 秒內拔掉,連續 3 次,WiFi 回出廠(熱點 HappySuperGG_Plane,密碼 12345678). 飛行設定不受影響.</div>
   <div class="wgrp"><div class="wgt">自身熱點(AP):手機直接連飛機</div>
    <div class="row"><label for="fApSfx">熱點名稱</label><span class="apfix" id="apPrefix">HappySuperGG_Plane</span><input type="text" id="fApSfx" autocomplete="off" placeholder="(可空白)" style="flex:1 1 70px;min-width:0"></div>
    <div class="sub" id="apHint" style="margin:-2px 0 2px 104px"></div>
@@ -634,25 +641,24 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
   </div>
   <div class="wgrp"><div class="wgt">家用 WiFi:飛機連到家裡的路由器</div>
    <div class="row"><label for="fSsid">家用 WiFi<span class="lsub">名稱(SSID)</span></label><input type="text" id="fSsid" maxlength="32" autocomplete="off" placeholder="手機 WiFi 清單上的名稱,留空 = 只用熱點"></div>
-   <div class="sub" style="margin:-2px 0 4px 104px">SSID 就是 WiFi 的名稱,大小寫,空白,符號都要和手機 WiFi 清單上看到的完全一樣. 只能連 2.4GHz 的 WiFi(不支援 5GHz),也不支援隱藏名稱的 WiFi.</div>
+   <div class="sub" style="margin:-2px 0 4px 104px">只能連 2.4GHz 的 WiFi(不支援 5GHz),也不支援隱藏名稱的 WiFi.</div>
    <div class="row"><label for="fPw">家用 WiFi<span class="lsub">密碼</span></label><input type="password" id="fPw" maxlength="63" autocomplete="off"><button class="b sm" id="btnPwShow">顯示</button></div>
   </div>
   <div class="row"><label for="fHost">裝置名稱</label><input type="text" id="fHost" maxlength="31" autocomplete="off"><span class="sub">.local</span></div>
   <div class="row" title="連不上家用 WiFi 幾秒後改開自身熱點"><label for="fTmo">等待秒數</label><input type="number" id="fTmo" min="10" max="120" style="flex:0 0 64px"><span class="sub">秒後開熱點</span>
    <label class="chk" style="margin:0 0 0 auto"><input type="checkbox" id="fForce"> 一律用熱點</label></div>
   <div class="row"><label for="fTxp">發射功率</label><input type="range" id="fTxp" min="2" max="20" step="1"><b id="txpVal">--</b></div>
+  <div class="sub" id="txpWarn" style="margin:-2px 0 6px 104px">⚠ 功率開太高反而會連不上 WiFi,常用 5 dBm.<br>連不上時:電池接上 5 秒內拔掉,連續 3 次,WiFi 設定回出廠.</div>
   <div class="row" style="margin-bottom:0"><button class="b pri" id="btnWifiSave">儲存 WiFi 設定</button><button class="b" id="btnReboot">重新開機</button></div>
   <div class="msg" id="wifiMsg"></div>
  </div>
  <div class="card" id="fwCard">
   <h2>韌體更新</h2>
-  <div class="cnote">板子連上家用 WiFi(要能上網)後,按「檢查更新」會到開發者的公開更新頁讀取最新版本,確認後板子自己下載安裝,完成自動重新開機.
-   <br><b>安全保護</b>:只有待機時能更新,更新中不能起飛;下載的檔案大小與檢查碼不對就放棄,目前韌體不變.
-   板子重開後,<b>開著的網頁會自動確認</b>(不用按按鈕);連上 WiFi 後 1 分鐘內沒有網頁連上(例如新韌體連不上 WiFi),會自動退回舊版. 確認前不能起飛,確認前斷電或重開也會退回舊版.
-   <b>為什麼要網頁確認</b>:板子自己只知道開機了,WiFi 連上了;由網頁確認,才能保證新韌體更新完之後你還控制得到板子.
-   <b>更新時請保持網頁開著</b>:手機螢幕關掉或切到別的 App 時網頁會暫停,超過 1 分鐘才回來會退回舊版(板子安全,再更新一次即可).
-   <br>更新會重新開機,沒儲存的設定會不見,請先儲存. 重新開機後不會自己倒數.
-   <br>也可以用下方「手動上傳韌體檔」上傳別人給你的 .bin 檔,保護方式相同.</div>
+  <div class="cnote">板子連上家用 WiFi(要能上網)後按「檢查更新」,確認後板子自己下載安裝,完成自動重新開機.
+   <br><b>安全保護</b>:只有待機時能更新,更新中不能起飛;檔案大小或檢查碼不對就放棄,目前韌體不變.
+   板子重開後,<b>開著的網頁會自動確認</b>(不用按按鈕);1 分鐘內沒有網頁連上(例如新韌體連不上 WiFi)就退回舊版. 確認前不能起飛,斷電或重開也會退回.
+   <b>為什麼要確認</b>:板子自己只知道開機了,由網頁確認才能保證更新完你還控制得到它. 所以<b>更新時請保持網頁開著</b>:螢幕關掉或切到別的 App 網頁會暫停,超過 1 分鐘才回來就退回舊版(再更新一次即可).
+   <br>更新會重新開機,沒儲存的設定會不見,請先儲存;重開後不會自己倒數. 下方「手動上傳韌體檔」可上傳別人給的 .bin,保護方式相同.</div>
   <div class="live" id="fwPendBox" hidden><span class="pill warn">新韌體待確認</span><span id="fwPendText" class="sub"></span></div>
   <div class="live" id="fwRbBox" hidden><span class="pill bad">已退回舊版</span><span id="fwRbText" class="sub"></span></div>
   <div class="grid g3">
@@ -679,13 +685,13 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
  <div class="live" id="bkDirty" hidden style="margin:0 0 8px"><span class="pill bad">有未儲存的變更</span><span class="sub">請先按上方的儲存或放棄,才能產生或套用備份碼.</span></div>
  <div class="card" id="bkCard">
   <h2>產生備份碼</h2>
-  <div class="cnote">勾選要複製的內容,按「產生並複製」,得到一串 LP 開頭的文字,存在 LINE 或記事本,或傳給朋友.
-   <br><b>碼裡只有你勾的東西</b>:朋友套用時,沒勾的部分完全不會被改到. 例如只想分享飛法,就只勾那一組風格,不會蓋掉朋友的安裝與電變設定.
-   <br>六組風格全部勾選的碼,套用時才會一併切換「飛行使用哪一組」. 勾得越少,碼越短.</div>
+  <div class="cnote">勾選要複製的內容,按「產生並複製」,得到一串 LP 開頭的文字,存在 LINE 或記事本,也可以傳給朋友.
+   <br><b>碼裡只有你勾的東西</b>,沒勾的部分對方不會被改到:只想分享飛法就只勾那一組風格,不會蓋掉他的安裝與電變設定.
+   <br>六組風格全勾的碼,套用時才會一併切換「飛行使用哪一組」. 勾越少,碼越短.</div>
   <div class="bkhd"><b>① 勾選要複製的內容</b><span class="bkq"><a href="#" id="bkSelAll">全選</a><a href="#" id="bkSelTest">只選測試</a><a href="#" id="bkSelNone">全部取消</a></span></div>
   <div class="bkprof" id="bkProfBox">
    <div class="bkpt">計時器風格<button class="ib" type="button" title="說明">ⓘ</button></div>
-   <div class="bkhint">每一組都包含:計時器頁(油門,時間,起飛油門,換段,降落)與角度補償頁(補償曲線,油門上下限). 點一下亮起來就是要複製.</div>
+   <div class="bkhint">每一組包含計時器頁(油門,時間,起飛油門,換段,降落)與角度補償頁(曲線,油門上下限). 點一下亮起來就是要複製.</div>
    <div class="bksel" id="bkSel"></div>
   </div>
   <div class="bkgt">其他設定</div>
@@ -698,15 +704,15 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
  <div class="card">
   <h2>套用備份碼</h2>
   <div class="cnote">貼上 LP 開頭的備份碼,板子會先檢查,並告訴你碼裡有哪些內容.
-   <br>按「套用」後,碼裡有的部分蓋掉目前的設定,碼裡沒有的部分不動. 套用完還沒存,確認後按上方的儲存,不要就按放棄.
-   <br><b>WiFi 例外</b>:碼裡有 WiFi 時,套用當下就直接存起來(按放棄也不會退回),重新開機才生效;重開後 3 分鐘內要按上方「保持」,沒按會自動改回原本的 WiFi.
-   <br><b>套用後請逐頁檢查</b>,尤其感測器方位,角度修正,電變脈寬與收輪行程:每台飛機的安裝不一樣. 較舊的備份碼也能用.</div>
-  <textarea class="bktext" id="bkIn" rows="4" placeholder="LP 開頭的備份碼(長按貼上)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+   <br>按「套用」後,碼裡有的部分蓋掉目前設定,沒有的不動. 套用完還沒存:確認後按上方的儲存,不要就按放棄.
+   <br><b>WiFi 例外</b>:碼裡有 WiFi 時,套用當下就存起來(按放棄也不會退回),重新開機才生效;重開後 3 分鐘內要按「保持」.
+   <br><b>套用後請逐頁檢查</b>,尤其感測器方位,角度修正,電變脈寬與收輪行程:每台飛機的安裝不一樣. 較舊的碼也能用.</div>
+  <textarea class="bktext" id="bkIn" rows="4" inputmode="none" placeholder="長按這裡 → 貼上 LP 開頭的備份碼" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
   <div id="bkPick" hidden>
    <div class="bkhd"><b>要套用的內容</b><span class="sub">點一下取消;灰色打 ✕ 的不會套用,保持你原本的設定</span></div>
    <div class="bkprof" id="bkPickProfBox">
     <div class="bkpt">計時器風格<button class="ib" type="button" title="說明">ⓘ</button></div>
-    <div class="bkhint">每一組都包含:計時器頁(油門,時間,起飛油門,換段,降落)與角度補償頁(補償曲線,油門上下限). 會套用到同一個位置(碼裡的 A 蓋掉你的 A).</div>
+    <div class="bkhint">每一組包含計時器頁(油門,時間,起飛油門,換段,降落)與角度補償頁(曲線,油門上下限). 套用到同一個位置(碼裡的 A 蓋掉你的 A).</div>
     <div class="bksel bkpick" id="bkPickSel"></div>
    </div>
    <div class="bkgt" id="bkPickST">其他設定</div>
@@ -753,51 +759,51 @@ const AXES=['晶片 +X','晶片 −X','晶片 +Y','晶片 −Y','晶片 +Z','晶
 const UNIT={pct:'%',cpct:'%',sec:'秒',min:'分鐘',deg:'°',g:'g',us:'µs',m:'公尺',num:'',hz:'Hz'};
 // 參數標籤:[名稱, 單位種類, 說明]
 const L={
- phase1Pct:['第一段基本油門','pct','馬達啟動後第一段的油門. 角度補償加在這個值上.'],
- phase1Sec:['第一段持續時間','sec','從馬達開始轉算起,到這個時間換成第二段. 要比總飛行時間短.'],
- phase2Pct:['第二段基本油門','pct','飛到後段電池電壓下降,用較高的油門補回推力.'],
- flightSec:['總飛行時間','sec','從馬達開始轉算起,到這個時間開始降落.'],
- takeoffRamp:['緩啟動加力秒數','sec','馬達從停止加到起飛油門花的秒數,起飛不會猛衝. 起飛油門持續時間設 0(不使用)時,是加到第一段油門.'],
- takeoffPct:['起飛油門','pct','緩啟動加到這個油門,維持「起飛油門持續時間」後,用 1 秒平順換到第一段油門. 持續時間設 0 時不使用.'],
- takeoffHold:['起飛油門持續時間','sec','緩啟動走完後,維持起飛油門的秒數. 0 = 不使用(緩啟動直接加到第一段油門). 緩啟動 + 持續時間 + 1 秒過渡要在第一段持續時間內.'],
- phaseRamp:['換段加力秒數','sec','換段方式選「有過渡」時,從第一段油門加到第二段油門花的秒數.'],
- noCompSec:['起飛後不補償','sec','後三點飛機停在地上本來就機頭朝上,起飛滑跑這段時間不做角度補償,免得一起飛就被當成爬升而加油門.'],
- minPct:['飛行中油門下限','pct','角度補償再怎麼減,油門也不會低於這個值. 兩段共用. 最低 10%,避免補償太多變成沒動力.'],
- maxPct:['飛行中油門上限','pct','角度補償再怎麼加,油門也不會超過這個值. 兩段共用.'],
- landingRamp:['降落減力秒數','sec','開始降落後,油門從目前的值減到降落油門花的秒數.'],
- landingPct:['降落油門','pct','降落時維持這個油門,直到判定觸地才關馬達.'],
- upDb:['補速開始角度','deg','機頭朝上超過這個角度才開始補速;在這之內不補償.'],
- dnDb:['減速開始角度','deg','機頭朝下超過這個角度才開始減速;在這之內不補償.'],
- pitchTrim:['角度修正','deg','加到量到的角度上. 飛機擺平飛姿勢時讀到 +2°,就設 −2. 出廠 0.'],
- gestureG:['啟動手勢力道','g','機身大致水平,往機頭方向推超過這個力道才算啟動. 推一下看下方試推燈有沒有亮來調整.'],
- armWait:['安全開關等待上限','min','起飛程序開始後(推飛機,按「開始起飛程序」,或上電後直接倒數的電變解鎖完),這麼久都沒按安全開關就自動取消,回到待機. 飛機在桌上被碰到誤觸發時,不會一直停在起飛程序鎖著設定. 上電後直接倒數模式取消後,要飛請拔電再接電.'],
- countdownSec:['倒數秒數','sec','倒數完馬達啟動,也就是你走到手柄的時間. 安全開關按過,而且飛機已放穩(上電倒數是放平)的那一刻開始算.'],
- disturbG:['外力門檻','g','倒數中晃動超過這個值,視為有人碰到飛機. 碰一下飛機看下方橘燈調整,戶外有風時調大.'],
- startLevel:['起飛前水平限制','deg','機頭或滾轉超過這個角度就不起飛:推手勢會被拒絕;上電倒數會暫停,放平 1 秒才開始;等待放穩或倒數中超過則取消起飛. 後三點飛機停放時機頭本來就朝上,要設得比停放角度大. 原因記在監看頁事件紀錄.'],
- twistCancel:['扭轉機尾取消起飛','deg','手勢起飛後(等待放穩或倒數中),抓著機尾把飛機轉超過這個角度就取消起飛. 0 = 關閉. 放飛機時容易誤觸就調大.'],
- twistBlock:['取消後暫停手勢','sec','扭轉取消後這段時間不接受手勢,放下飛機時的撞擊才不會又觸發起飛.'],
+ phase1Pct:['第一段基本油門','pct','第一段的油門,角度補償加在這上面.'],
+ phase1Sec:['第一段持續時間','sec','馬達啟動後多久換到第二段. 要比總飛行時間短.'],
+ phase2Pct:['第二段基本油門','pct','後段電池變弱,用較高的油門補回推力.'],
+ flightSec:['總飛行時間','sec','馬達啟動後多久開始降落.'],
+ takeoffRamp:['緩啟動加力秒數','sec','馬達從停止加到起飛油門的秒數,起飛不會猛衝. 起飛油門持續時間 0 時,是加到第一段油門.'],
+ takeoffPct:['起飛油門','pct','緩啟動加到這個油門,維持設定的秒數後用 1 秒換到第一段. 持續時間 0 = 不使用.'],
+ takeoffHold:['起飛油門持續時間','sec','維持起飛油門的秒數. 0 = 不使用(直接加到第一段油門). 緩啟動 + 這個秒數 + 1 秒要在第一段時間內.'],
+ phaseRamp:['換段加力秒數','sec','換段選「有過渡」時,第一段加到第二段的秒數.'],
+ noCompSec:['起飛後不補償','sec','起飛滑跑這段不補償. 後三點飛機停著就機頭朝上,免得被當成爬升而加油門.'],
+ minPct:['飛行中油門下限','pct','補償後的油門不會低於這個值,兩段共用. 最低 10%.'],
+ maxPct:['飛行中油門上限','pct','補償後的油門不會超過這個值,兩段共用.'],
+ landingRamp:['降落減力秒數','sec','開始降落後,油門減到降落油門的秒數.'],
+ landingPct:['降落油門','pct','降落時維持的油門,判定觸地才關馬達.'],
+ upDb:['補速開始角度','deg','機頭朝上超過這個角度才開始補速.'],
+ dnDb:['減速開始角度','deg','機頭朝下超過這個角度才開始減速.'],
+ pitchTrim:['角度修正','deg','加到量到的角度上. 平飛姿勢讀到 +2° 就設 −2. 出廠 0.'],
+ gestureG:['啟動手勢力道','g','機身水平時往機頭推超過這個力道才算啟動. 推一下看下方試推燈調整.'],
+ armWait:['安全開關等待上限','min','起飛程序開始後這麼久沒按安全開關就取消,回到待機(飛機被碰到誤觸發時不會一直鎖著設定). 上電直接倒數模式取消後,要飛請拔電再接電.'],
+ countdownSec:['起飛倒數秒數','sec','倒數完馬達啟動,也就是你走到手柄的時間. 從按過安全開關而且飛機放穩那一刻算起.'],
+ disturbG:['外力門檻','g','倒數中晃動超過這個值,算有人碰到飛機. 碰一下看下方橘燈調整,有風時調大.'],
+ startLevel:['起飛前水平限制','deg','機頭或滾轉超過這個角度就不起飛:手勢被拒絕,上電倒數暫停,等待放穩或倒數中則取消. 後三點飛機要設得比停放角度大. 原因看監看頁事件紀錄.'],
+ twistCancel:['扭轉機尾取消起飛','deg','手勢起飛後抓機尾把飛機轉超過這個角度就取消. 0 = 關閉;放飛機容易誤觸就調大.'],
+ twistBlock:['取消後暫停手勢','sec','扭轉取消後這段時間不接受手勢,放下飛機的撞擊才不會又觸發.'],
  disturbMode:['外力介入時','num',''],
- extendSec:['延長秒數','sec','外力介入後,飛機重新放穩時倒數加上這個秒數. 不管晃幾次,最多加到「倒數秒數 +10 秒」.'],
- touchdownG:['降落觸地衝擊門檻','g','降落中機輪觸地的衝擊超過這個值就關馬達. 在監看頁輕敲飛機,看「最近觸地衝擊」決定數值.'],
- touchdownStill:['觸地靜止判定','sec','降落中完全靜止這麼久,也算已觸地(輕輕滑行著陸時).'],
- earlyLandVib:['Z 軸抖動門檻','g','機背方向抖動超過這個值. 到紀錄頁看:要高於特技時的抖動,低於地面滑行時的抖動.'],
- earlyLandHold:['抖動持續秒數','sec','抖動要持續這麼久才觸發. 特技急轉的抖動很短,撐不過這個時間.'],
- earlyLandTilt:['正飛水平容許角度','deg','機頭與滾轉都在這個角度內才算正飛水平. 倒飛或爬升中不會觸發.'],
- earlyLandArm:['起飛後幾秒才啟用','sec','起飛後這段時間不偵測,避開滑跑時的顛簸.'],
- landingTimeout:['降落保險時間','sec','降落減力秒數走完後,再過這麼久都沒判定觸地,一樣關馬達. 降落最長 = 減力秒數 + 保險時間(例如減力 20 秒,保險 20 秒,開始降落 40 秒後關馬達).'],
+ extendSec:['延長秒數','sec','外力介入後重新放穩,倒數加上這個秒數. 最多加到「起飛倒數秒數 +10 秒」.'],
+ touchdownG:['降落觸地衝擊門檻','g','降落中觸地衝擊超過這個值就關馬達. 在監看頁輕敲飛機,看「最近觸地衝擊」決定.'],
+ touchdownStill:['觸地靜止判定','sec','降落中靜止這麼久也算觸地(輕輕著陸時).'],
+ earlyLandVib:['Z 軸抖動門檻','g','機背方向的抖動. 到紀錄頁看:要高於特技時,低於地面滑行時.'],
+ earlyLandHold:['抖動持續秒數','sec','抖動持續這麼久才觸發. 特技急轉的抖動很短,撐不過去.'],
+ earlyLandTilt:['正飛水平容許角度','deg','機頭與滾轉都在這個角度內才算正飛水平,倒飛或爬升不會觸發.'],
+ earlyLandArm:['起飛後幾秒才啟用','sec','起飛後這段時間不偵測,避開滑跑的顛簸.'],
+ landingTimeout:['降落保險時間','sec','減力走完後再過這麼久沒判定觸地,一樣關馬達. 降落最長 = 減力秒數 + 這個秒數.'],
  crashEnable:['撞擊斷電','num',''],
- crashG:['撞擊門檻','g','飛行中衝擊連續 10 毫秒超過這個值,立即關馬達(單筆感測器錯誤資料不會觸發). 特技直角彎可達 8~10g,不要設太低.'],
- lineLength:['線長','m','姿態計算扣除繞圈向心力用,填大概的值即可.'],
- lapSec:['單圈秒數','sec','飛一圈大約幾秒,和線長一起換算飛行速度.'],
- calibHold:['最高油門保持秒數','sec','通電後輸出最高油門多久才切到最低. 出廠 3 秒:控制器開機很快,電變自己開機要約 1 秒,太短會在電變記住最高點之前就切掉;太長有些電變會進入設定模式. 各廠牌建議秒數見下方說明. 電變還沒響「已記住最高點」的提示音就被切掉時調長一點,聽到進入設定模式的提示音時調短.'],
- motorPoles:['馬達極數','num','馬達的磁鐵數(不是線圈槽數),只用來換算轉速顯示. 常見外轉子馬達 14 極.'],
- escPwmHz:['PWM 頻率','hz','每秒送幾個油門脈衝. 出廠 100Hz;50Hz 所有電變都支援,電變抖動或不解鎖時改回 50Hz. 電變有標明支援更高頻率才調高,不支援的可能抖動或不解鎖(BLHeli_32 在 50Hz 不動時例外,可試調高). 頻率越高,100% 脈寬能設的上限越低.'],
- gearRetractSec:['起飛後幾秒收輪','sec','從馬達開始轉算起. 要比離地所需的時間長一點,確定輪子離地才收.'],
- gearTravelSec:['舵機速度','sec','輪子從放下到收起花的秒數,慢一點比較不會衝擊收腳機構. 0 = 舵機自己的最快速度.'],
- gearMinUs:['舵機行程下限','us','舵機一端的位置. 出廠 1400(小行程):先按「試收輪」確認方向,再慢慢加大到剛好收到底,不要頂死.'],
- gearMaxUs:['舵機行程上限','us','舵機另一端的位置. 出廠 1600(小行程). 至少要比下限大 100 µs.'],
- escMinUs:['油門 0% 脈寬','us','油門 0% 時送出的脈寬. 標準電變 1000. ⚠ 待機時就是輸出這個值:調高的當下馬達會立刻轉,所以要先勾「螺旋槳已拆除」才能調.'],
- escMaxUs:['油門 100% 脈寬','us','油門 100% 時送出的脈寬. 標準電變 2000. 改過建議重新校正電變.']
+ crashG:['撞擊門檻','g','飛行中衝擊連續 10 毫秒超過這個值就關馬達. 特技直角彎可達 8~10g,不要設太低.'],
+ lineLength:['線長','m','扣除繞圈向心力用,大概的值即可.'],
+ lapSec:['單圈秒數','sec','飛一圈大約幾秒,和線長換算飛行速度.'],
+ calibHold:['最高油門保持秒數','sec','通電後輸出最高油門多久才切到最低. 出廠 3 秒(電變自己開機要約 1 秒,太短來不及記住,太長有些會進入設定模式). 各廠牌建議見下方. 沒聽到「已記住」提示音就調長,聽到設定模式音就調短.'],
+ motorPoles:['馬達極數','num','馬達的磁鐵數(不是線圈槽數),只用來顯示轉速. 常見外轉子 14 極.'],
+ escPwmHz:['PWM 頻率','hz','每秒送幾個油門脈衝. 出廠 100Hz;電變抖動或不解鎖就改 50Hz(所有電變都支援). 電變有標明支援才調高. 頻率越高,100% 脈寬能設的上限越低.'],
+ gearRetractSec:['起飛後幾秒收輪','sec','馬達啟動後多久收輪. 要比離地時間長一點.'],
+ gearTravelSec:['舵機速度','sec','輪子放下到收起的秒數,慢一點比較不傷收腳機構. 0 = 舵機最快.'],
+ gearMinUs:['舵機行程下限','us','舵機一端的位置. 出廠 1400:先按「試收輪」確認方向,再慢慢加大到剛好收到底,不要頂死.'],
+ gearMaxUs:['舵機行程上限','us','舵機另一端的位置. 出廠 1600. 至少要比下限大 100 µs.'],
+ escMinUs:['油門 0% 脈寬','us','油門 0% 送出的脈寬,標準電變 1000. ⚠ 待機時就輸出這個值,調高馬達會立刻轉,要先勾「螺旋槳已拆除」.'],
+ escMaxUs:['油門 100% 脈寬','us','油門 100% 送出的脈寬,標準電變 2000. 改過建議重新校正電變.']
 };
 // 計時器頁三組參數放同一張卡,用小標題分組(r46:原本三張卡,卡片邊框與標題佔版面)
 const PROF_LAYOUT=[
@@ -805,23 +811,23 @@ const PROF_LAYOUT=[
  {t:'飛行時間軸(從馬達開始轉算起)',k:['phase1Pct','phase1Sec','phaseMode','phaseRamp','phase2Pct','flightSec']},
  {t:'降落',k:['landingRamp','landingPct']}
 ];
-const PROF_NOTE='時間都從馬達開始轉算起. 總飛行時間到了,或飛行中觸地提早降落(設定頁開啟),就開始降落;降落期間不做角度補償. 油門上下限在角度補償頁.';
+const PROF_NOTE='時間都從馬達開始轉算起. 總飛行時間到了,或觸地提早降落(設定頁),就開始降落;降落期間不補償. 油門上下限在角度補償頁.';
 const SET_LAYOUT=[
  {t:'啟動與倒數',k:['gestureEnable','startLevel','gestureG','twistCancel','twistBlock','armSwitchOff','armWait','countdownSec','disturbG','disturbMode','extendSec'],
-  n:'推一下飛機(啟動手勢)或按上方「開始起飛程序」→ 等飛機放穩 → 按下安全開關 → 倒數 → 馬達啟動. 安全開關放穩前或放穩後按都可以,超過「安全開關等待上限」沒按就自動取消. 倒數中可按「取消倒數」或扭轉機尾取消.'},
- {t:'觸地提早降落',k:['earlyLand','earlyLandVib','earlyLandHold','earlyLandTilt','earlyLandArm'],n:'飛行中想提早結束時,讓飛機正飛水平貼地滑行,機輪在地上彈跳的抖動持續一段時間,就開始降落. 門檻請參考「紀錄」頁的實際數值.',id:'earlyCard'},
- {t:'降落與撞擊',k:['touchdownG','touchdownStill','landingTimeout','crashEnable','crashG'],n:'降落中以下任一成立就關馬達:觸地衝擊超過門檻;完全靜止;地面滑行抖動持續達標(用提早降落的抖動設定,不管開關). 觸地判斷在減力秒數走完後才開始;都沒成立就再等保險時間到.'},
+  n:'推一下飛機或按上方「開始起飛程序」→ 飛機放穩 → 按安全開關 → 倒數 → 馬達啟動. 開關放穩前後按都可以,超過等待上限沒按就取消. 倒數中可按「取消倒數」或扭轉機尾取消.'},
+ {t:'觸地提早降落',k:['earlyLand','earlyLandVib','earlyLandHold','earlyLandTilt','earlyLandArm'],n:'想提早結束時,讓飛機正飛水平貼地滑行,機輪彈跳的抖動持續一段時間就開始降落. 門檻參考「紀錄」頁的實際數值.',id:'earlyCard'},
+ {t:'降落與撞擊',k:['touchdownG','touchdownStill','landingTimeout','crashEnable','crashG'],n:'降落中任一成立就關馬達:觸地衝擊超過門檻,完全靜止,或滑行抖動持續達標(用提早降落的抖動設定,不管有沒有開啟). 減力走完才開始判斷,都沒成立就等保險時間到.'},
  ];
 const INST_LAYOUT=[
- {t:'飛行速度',k:['lineLength','lapSec'],n:'姿態計算要扣掉繞圈的向心力,用線長與單圈秒數換算速度,大概填對即可.',id:'speedCard'},
+ {t:'飛行速度',k:['lineLength','lapSec'],n:'姿態計算要扣掉繞圈的向心力,用線長與單圈秒數換算速度. 大概填對即可.',id:'speedCard'},
  {t:'機輪收腳',k:['gearEnable','gearRetractSec','gearTravelSec','gearMinUs','gearMaxUs','gearReverse'],id:'gearCard',
-  n:'收腳舵機訊號線接 GPIO3. 馬達啟動後到設定秒數收輪,降落開始減力時放輪;緊急停止,撞擊斷電等馬達停下時立即放輪. 開機,待機,倒數中一律放下. 所有計時器共用.'},
+  n:'舵機訊號線接 GPIO3. 馬達啟動後到設定秒數收輪,開始降落減力時放輪;馬達一停(緊急停止,撞擊斷電)立即放輪. 開機,待機,倒數中一律放下. 所有計時器共用.'},
  {t:'蜂鳴器',k:['buzzerLow'],id:'buzzCard',
-  n:'蜂鳴器訊號接 GPIO7,與控制器共地. 支援有源高電位觸發、有源低電位觸發與無源蜂鳴器(2 kHz). 開機就緒響「滴滴」;等安全開關按下時每 2.5 秒響一聲長音;倒數時短音越來越急,最後 3 秒連續響到馬達啟動. 切換後立即生效.'}
+  n:'蜂鳴器訊號接 GPIO7,與控制器共地. 開機就緒響「滴滴」;等按安全開關時每 2.5 秒一聲長音;倒數時短音越來越急,最後 3 秒連續響到馬達啟動. 切換立即生效.'}
 ];
 const ESC_LAYOUT=[
- {t:'輸出協定',k:['escProtocol','escPwmHz','escRpm','motorPoles'],id:'protoCard',n:'一般電變用 PWM(出廠 100Hz). 開源韌體電變(BLHeli_S,Bluejay,BLHeli_32,AM32)可選 DShot:數位油門,不用校正行程,也不看下面的脈寬. 換協定或頻率要<b>儲存後重新開機</b>才生效,電變也要重新通電.'},
- {t:'電變脈寬',k:['escMinUs','escMaxUs'],n:'油門 0% 與 100% 對應的脈寬. 出廠 1000 / 2000 µs(標準值). 改過建議重新校正電變.'}
+ {t:'輸出協定',k:['escProtocol','escPwmHz','escRpm','motorPoles'],id:'protoCard',n:'一般電變用 PWM(出廠 100Hz). 開源韌體電變(BLHeli_S,Bluejay,BLHeli_32,AM32)可選 DShot:數位油門,不用校正,也不看下面的脈寬. 換協定或頻率要<b>儲存後重新開機</b>,電變也要重新通電.'},
+ {t:'電變脈寬',k:['escMinUs','escMaxUs'],n:'油門 0% 與 100% 對應的脈寬,出廠 1000 / 2000 µs. 改過建議重新校正電變.'}
 ];
 
 async function poll(url,opt){
@@ -1086,8 +1092,8 @@ const TL_KIND={
  takeoff:{c:'#ef4444',t:'起飛油門:維持起飛油門,最後 1 秒換到第一段'},
  p1:{c:'#65a30d',t:'第一段'},
  change:{c:'#db2777',t:'換段:從第一段油門加到第二段'},
- p2:{c:'#b45309',t:'第二段'},
- land:{c:'#a8a29e',t:'降落:減力後維持降落油門,等觸地關馬達'}
+ p2:{c:'#60a5fa',t:'第二段'},
+ land:{c:'#94a3b8',t:'降落:減力後維持降落油門,等觸地關馬達'}
 };
 
 // --- 角度補償:只有一條曲線,兩段飛行共用. 「第二段」頁籤只換基本油門顯示,讓人看出加力後哪裡會撞到上限 ---
@@ -1380,16 +1386,16 @@ function buildShared(){
  for(const [layout,boxId] of [[SET_LAYOUT,'setCards'],[INST_LAYOUT,'instCards'],[ESC_LAYOUT,'escCards']])for(const g of layout){const box=$(boxId);
   const c=card(g.t,g.n,g.id);
   for(const k of g.k){
-   if(k==='gestureEnable')c.appendChild(makeSelect('s',k,'啟動方式',['上電後直接倒數','推一下才倒數(手勢)'],'推一下才倒數:待機時推一下飛機或按上方「開始起飛程序」,飛機放穩後按下安全開關開始倒數. 上電後直接倒數:接上電池,按下安全開關(飛機放平)就開始倒數,每次通電只一次;更新韌體,網頁重新開機,當機重開都不會自己倒數,要飛請拔電再接電. 想按下開關 N 秒後就一定啟動,把「外力介入時」設成不理會外力.'));
+   if(k==='gestureEnable')c.appendChild(makeSelect('s',k,'啟動方式',['上電後直接倒數','推一下才倒數(手勢)'],'推一下才倒數:推一下飛機或按上方「開始起飛程序」,放穩後按安全開關開始倒數. 上電後直接倒數:接上電池,飛機放平按下安全開關就倒數,每次通電只一次(軟體重開不算,要飛請拔電再接電). 想按開關後一定準時啟動,把「外力介入時」設成不理會外力.'));
    else if(k==='disturbMode')c.appendChild(makeSelect('s',k,'外力介入時',['延長秒數','從頭倒數','不理會外力'],'倒數中有人碰到飛機(晃動超過外力門檻)時怎麼處理.'));
-   else if(k==='earlyLand')c.appendChild(makeSelect('s',k,'觸地提早降落',['關閉','開啟'],'建議先關閉,到紀錄頁看過特技與地面滑行各自的 Z 軸抖動,確定門檻不會誤觸再開啟. 開啟時收輪不作用.'));
-   else if(k==='gearEnable')c.appendChild(makeSelect('s',k,'收輪功能',['關閉','開啟'],'沒有收腳的飛機保持關閉. 觸地提早降落開啟時不收輪:不知道什麼時候要貼地降落,輪子要一直放著.'));
-   else if(k==='gearReverse')c.appendChild(makeSelect('s',k,'舵機方向',['正轉(收起在上限)','反轉(收起在下限)'],'正轉:放下在下限,收起在上限. 反轉:相反. 按「試收輪」看方向,收的方向反了就切換.'));
+   else if(k==='earlyLand')c.appendChild(makeSelect('s',k,'觸地提早降落',['關閉','開啟'],'建議先關閉,到紀錄頁比對特技與地面滑行的 Z 軸抖動,確定不會誤觸再開啟. 開啟時收輪不作用.'));
+   else if(k==='gearEnable')c.appendChild(makeSelect('s',k,'收輪功能',['關閉','開啟'],'沒有收腳的飛機保持關閉. 觸地提早降落開啟時不收輪:隨時可能貼地降落,輪子要一直放著.'));
+   else if(k==='gearReverse')c.appendChild(makeSelect('s',k,'舵機方向',['正轉(收起在上限)','反轉(收起在下限)'],'正轉:放下在下限,收起在上限;反轉相反. 按「試收輪」看方向,反了就切換.'));
    else if(k==='armSwitchOff')c.appendChild(makeArmOff());
-   else if(k==='buzzerLow')c.appendChild(makeSelect('s',k,'蜂鳴器類型',['有源:高電位觸發','有源:低電位觸發','無源蜂鳴器(2 kHz)'],'通電就響的有源模組依標示選高/低電位;需要方波驅動的選無源. 無源模式輸出 2 kHz、50% 占空比,靜音時為低電位. GPIO7 是 3.3V 訊號,需較大電流的蜂鳴器請透過驅動模組連接. 改完按上方的儲存.'));
+   else if(k==='buzzerLow')c.appendChild(makeSelect('s',k,'蜂鳴器類型',['有源:高電位觸發','有源:低電位觸發','無源蜂鳴器(2 kHz)'],'通電就會響的有源模組,依標示選高或低電位;要方波才響的選無源(輸出 2 kHz). GPIO7 是 3.3V 小電流訊號,大電流蜂鳴器請接驅動模組. 改完按上方的儲存.'));
    else if(k==='crashEnable')c.appendChild(makeSelect('s',k,'撞擊斷電',['關閉','開啟'],'開啟時,飛行中衝擊超過撞擊門檻立即關馬達.'));
-   else if(k==='escRpm')c.appendChild(makeSelect('s',k,'轉速回傳(雙向 DShot)',['關閉','開啟'],'電變把馬達轉速送回來顯示. 只有 DShot300 可用,電變韌體要支援雙向 DShot(Bluejay,AM32,BLHeli_32 32.7 以上). 出廠開啟,但只在 DShot300 作用. <b>不支援的電變開了可能不解鎖,不轉</b>:換成 DShot300 後先用手動輸出確認馬達會轉,不轉就關閉. 儲存並重新開機生效. 收不到回傳只顯示警告,不擋起飛.'));
-   else if(k==='escProtocol')c.appendChild(makeSelect('s',k,'電變訊號',['PWM(一般電變)','DShot150','DShot300'],'一般電變用 PWM. Bluejay 只能用 DShot. BLHeli_S 的 L 型(24MHz)晶片官方建議 DShot150,其他開源電變用 DShot300. 詳見下方廠牌說明.'));
+   else if(k==='escRpm')c.appendChild(makeSelect('s',k,'轉速回傳(雙向 DShot)',['關閉','開啟'],'電變把馬達轉速送回來顯示. 只有 DShot300 可用,電變韌體要支援雙向 DShot(Bluejay,AM32,BLHeli_32 32.7 以上). <b>不支援的電變開了可能不解鎖</b>:改用 DShot300 後先用手動輸出確認馬達會轉,不轉就關閉. 儲存並重新開機生效;收不到回傳只顯示警告,不擋起飛.'));
+   else if(k==='escProtocol')c.appendChild(makeSelect('s',k,'電變訊號',['PWM(一般電變)','DShot150','DShot300'],'一般電變用 PWM;Bluejay 只能用 DShot. BLHeli_S 的 L 型(24MHz)官方建議 DShot150,其他開源電變用 DShot300. 詳見下方廠牌說明.'));
    else c.appendChild(makeParam('s',k));
   }
   if(g.id==='earlyCard')c.insertAdjacentHTML('beforeend','<div class="live" id="elLive"><span>目前</span><b id="elVib">--</b><span id="elLvl">--</span><span class="meter"><i id="elMeter"></i></span><span id="elHold">--</span></div>');
@@ -2121,7 +2127,7 @@ function drawLog(){
    if(on&&s<0)s=i;else if(!on&&s>=0){const x0=xOf(s),x1=xOf(i-1)+plotW/winN;g.fillRect(x0,y,Math.max(1,x1-x0),h);s=-1}}};
  band(1,'rgba(34,197,94,.14)',p3.y,ph);band(2,'rgba(245,158,11,.9)',p3.y+1,5);
  for(let v=0;v<=vMax;v+=vMax>3?1:0.5){g.fillStyle=MUTE;g.textAlign='right';g.fillText(v,Lm-3,yOf(p3,v,0,vMax)+4);g.textAlign='left'}
- series(p3,LOG.vib,0,vMax,'#b45309',1.6);
+ series(p3,LOG.vib,0,vMax,'#a855f7',1.6);
  hline(p3,sh.earlyLandVib,0,vMax,'#d97706','門檻',true);
  // 時間軸
  const step=logWinS<=60?10:(logWinS<=180?30:60),yAxis=H-axisH+12;
@@ -2186,7 +2192,7 @@ function bkShow(ok,text,id){const e=$(id||'bkMsg');e.className='msg '+(ok?'ok':'
 // 預設只選「測試」組;只記在這個網頁,重新整理回預設
 const BK_ALL=63,BK_SEC_SHARED=7;
 const BK_SECS=[
- {bit:1,t:'起飛降落與安全',pg:'設定頁',d:'啟動手勢,安全開關,倒數秒數,外力介入,觸地提早降落,降落觸地判斷,撞擊斷電.'},
+ {bit:1,t:'起飛降落與安全',pg:'設定頁',d:'啟動手勢,安全開關,起飛倒數秒數,外力介入,觸地提早降落,降落觸地判斷,撞擊斷電.'},
  {bit:2,t:'安裝',pg:'安裝頁',d:'感測器方位,角度修正,線長與單圈秒數,機輪收腳,蜂鳴器.',ad:'每台飛機裝法不同,分享給別人通常不要勾.',ap:'每台飛機裝法不同,別人的安裝設定通常不要套用.'},
  {bit:4,t:'電變',pg:'電變頁',d:'輸出協定,PWM 頻率,油門 0% / 100% 脈寬,校正保持秒數,轉速回傳,馬達極數.',ad:'電變不同通常不要勾.',ap:'電變不同通常不要套用.'},
  {bit:8,t:'WiFi',pg:'系統頁',d:'家用 WiFi 名稱與密碼,熱點名稱與密碼,裝置名稱,等待秒數,一律用熱點,發射功率.',w:'⚠ 含密碼,不要傳給別人. 套用後要重新開機才生效.',
@@ -2318,7 +2324,7 @@ async function loadWifi(){
  try{const w=await poll('/api/wifi');
   $('fSsid').value=w.ssid;$('fPw').value=w.pw;$('fHost').value=w.host;$('fTmo').value=w.tmo;
   $('fTmo').min=w.tmomin;$('fTmo').max=w.tmomax;$('fForce').checked=!!w.forceap;
-  $('fTxp').min=w.txmin;$('fTxp').max=w.txmax;$('fTxp').value=w.txp;$('txpVal').textContent=w.txp+' dBm';
+  $('fTxp').min=w.txmin;$('fTxp').max=w.txmax;$('fTxp').value=w.txp;txpShow();
   $('apName').textContent=w.apnow;$('netHost').textContent=w.host+'.local';$('build').textContent=w.build;
   $('apPrefix').textContent=w.apprefix;$('fApSfx').value=w.apsfx;AP_SFX_MAX=w.apsfxmax;apPreview();
   $('fApPw').value=w.appw||'';WIFI_APPW=w.appw||'';
@@ -2332,7 +2338,10 @@ $('fApSfx').oninput=apPreview;
 $('btnPwShow').onclick=()=>{const f=$('fPw');f.type=f.type==='password'?'text':'password';$('btnPwShow').textContent=f.type==='password'?'顯示':'隱藏'};
 $('btnApPwShow').onclick=()=>{const f=$('fApPw');f.type=f.type==='password'?'text':'password';$('btnApPwShow').textContent=f.type==='password'?'顯示':'隱藏'};
 let WIFI_APPW='';   // 板上目前存的熱點密碼(儲存時比對有沒有改)
-$('fTxp').oninput=()=>{$('txpVal').textContent=$('fTxp').value+' dBm'};
+// 發射功率超過 7 dBm:數值與拉桿下的警告變紅(GG 2026-09-16)
+function txpShow(){const v=+$('fTxp').value,hi=v>7;$('txpVal').textContent=v+' dBm';
+ $('txpVal').className=hi?'txphi':'';$('txpWarn').className='sub'+(hi?' txphi':'')}
+$('fTxp').oninput=txpShow;
 $('fTxp').onchange=()=>post('/api/txpower',{txp:$('fTxp').value}).then(r=>{if(!r.ok){toast(CODES[r.code]||r.code,true);loadWifi()}}).catch(()=>{});
 $('btnWifiSave').onclick=async()=>{
  try{const r=await post('/api/wifi',{ssid:$('fSsid').value,pw:$('fPw').value,host:$('fHost').value.trim(),
