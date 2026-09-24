@@ -1,4 +1,5 @@
-// 版本流水號: r9 (2026-09-15) 安全審查:解碼從板上目前值起算(碼裡沒有的欄位一律保持,舊碼不再把新功能洗回出廠);含 WiFi 時先存 WiFi 再套飛行設定
+// 版本流水號: r10 (2026-09-24) 世代 6:搖擺機尾強制停機 wagStop;降落減力方式 landingMode,蜂鳴器提醒 landingBuzz,忽高忽低 pulseLow/pulseHigh/pulsePeriod
+// 舊: r9 (2026-09-15) 安全審查:解碼從板上目前值起算(碼裡沒有的欄位一律保持,舊碼不再把新功能洗回出廠);含 WiFi 時先存 WiFi 再套飛行設定
 // 舊: r8 (2026-09-15) 套用時可取消碼裡的項目(GG:對方多複製了不要的設定):取消的項目照樣讀掉位元但寫進 scratch,保持目前的值;
 //   回傳實際套用的分區/風格與碼裡各組名稱;格式不變
 // 舊: r7 (2026-09-15) 格式大版本 3:分區選擇(GG:分享計時器不該蓋掉對方的安裝與電變,備份獨立分頁全部可選).
@@ -102,6 +103,15 @@ const CodecField GEN5_SHARED[] = {
     {"buzzerLow", 0, 1, 3},
 };
 
+// --- 世代 6(2026-09-24):強制停機,忽高忽低減力 ---------------------------------------------
+const CodecField GEN6_SHARED[] = {
+    {"wagStop", 0, 1, 8},
+};
+const CodecField GEN6_PROFILE[] = {
+    {"landingMode", 0, 1, 3}, {"landingBuzz", 0, 1, 2}, {"pulseLow", 0, 1, 8}, {"pulseHigh", 0, 1, 8},
+    {"pulsePeriod", 0, 0.1f, 7},
+};
+
 // --- 共用參數的分區(與網頁分頁一致;★ 登記後永遠不改,參數刪掉也保留) -----------------------------
 struct KeySection {
   const char *key;
@@ -116,6 +126,7 @@ const KeySection SHARED_SECTIONS[] = {
     {"earlyLandVib", BACKUP_SEC_FLIGHT},  {"earlyLandHold", BACKUP_SEC_FLIGHT}, {"earlyLandTilt", BACKUP_SEC_FLIGHT},
     {"earlyLandArm", BACKUP_SEC_FLIGHT},  {"touchdownG", BACKUP_SEC_FLIGHT},   {"touchdownStill", BACKUP_SEC_FLIGHT},
     {"landingTimeout", BACKUP_SEC_FLIGHT}, {"crashEnable", BACKUP_SEC_FLIGHT}, {"crashG", BACKUP_SEC_FLIGHT},
+    {"wagStop", BACKUP_SEC_FLIGHT},
     // 安裝頁:感測器方位,角度修正,飛行速度,機輪收腳,蜂鳴器
     {"noseAxis", BACKUP_SEC_INSTALL},     {"upAxis", BACKUP_SEC_INSTALL},      {"noseRight", BACKUP_SEC_INSTALL},
     {"pitchTrim", BACKUP_SEC_INSTALL},    {"lineLength", BACKUP_SEC_INSTALL},  {"lapSec", BACKUP_SEC_INSTALL},
@@ -148,6 +159,7 @@ const Generation GENERATIONS[] = {
     {GEN3_SHARED, COUNT_OF(GEN3_SHARED), nullptr, 0},
     {nullptr, 0, GEN4_PROFILE, COUNT_OF(GEN4_PROFILE)},
     {GEN5_SHARED, COUNT_OF(GEN5_SHARED), nullptr, 0},
+    {GEN6_SHARED, COUNT_OF(GEN6_SHARED), GEN6_PROFILE, COUNT_OF(GEN6_PROFILE)},
 };
 const uint8_t MY_GENERATION = COUNT_OF(GENERATIONS);
 

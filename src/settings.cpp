@@ -1,4 +1,6 @@
-// 版本流水號: r25 (2026-09-15) 「測試」組(PROFILE_TEST_INDEX)名稱鎖定:改名回 namelocked,備份碼套用略過這組名稱
+// 版本流水號: r26 (2026-09-24) 版面 v11:風格加減力方式 landingMode,蜂鳴器提醒 landingBuzz,忽高忽低低/高油門 pulseLow/pulseHigh 與週期 pulsePeriod;
+//   共用設定加搖擺機尾強制停機 wagStop(0 或 15~90 度). 讀 v10 以前風格尾端補出廠值,共用設定 v9/v10 的 wagStop 補出廠值
+// 舊: r25 (2026-09-15) 「測試」組(PROFILE_TEST_INDEX)名稱鎖定:改名回 namelocked,備份碼套用略過這組名稱
 // 舊: r24 (2026-09-15) 版面 v10:風格尾端加起飛油門 takeoffPct(10~100)與持續時間 takeoffHold(0~30 秒,0 = 不使用);
 //   讀 v4~v9 風格尾端補「不使用」(起飛油門 = 第一段油門),共用設定 v9 版面相同照讀;交叉驗證 takeofftime
 // 舊: r23 (2026-09-14) 參數 armSwitchOff 忽略安全開關(0/1,出廠 0,用 v9 預留位元組)
@@ -57,7 +59,13 @@ static_assert(sizeof(SharedSettings) == SHARED_V8_SIZE + 4, "SharedSettings v9 s
 static_assert(offsetof(SharedSettings, armWaitMin) == offsetof(SharedSettings, gearRetractSec) + 1, "SharedSettings armWaitMin");
 // 風格 v4,v6~v9 的長度到 takeoffPct 為止;v10 在尾端加起飛油門 8 位元組
 static const size_t PROFILE_V9_SIZE = offsetof(ProfileSettings, takeoffPct);
-static_assert(sizeof(ProfileSettings) == PROFILE_V9_SIZE + 8, "ProfileSettings v10 size");
+// v11 在尾端加忽高忽低減力 8 位元組
+static const size_t PROFILE_V10_SIZE = offsetof(ProfileSettings, pulseLowPct);
+static_assert(PROFILE_V10_SIZE == PROFILE_V9_SIZE + 8, "ProfileSettings v10 size");
+static_assert(sizeof(ProfileSettings) == PROFILE_V10_SIZE + 8, "ProfileSettings v11 size");
+// landingMode/landingBuzz 占用原本 reserved0[2],wagStopDeg 占用 reserved9[0]:位置不可移動
+static_assert(offsetof(ProfileSettings, landingMode) == offsetof(ProfileSettings, phaseMode) + 1, "ProfileSettings landingMode");
+static_assert(offsetof(SharedSettings, wagStopDeg) == offsetof(SharedSettings, armSwitchOff) + 1, "SharedSettings wagStopDeg");
 
 static SharedSettings savedShared;
 static ProfileSettings savedProfiles[PROFILE_COUNT];
@@ -113,6 +121,7 @@ static void defaultShared(SharedSettings &s) {
   s.gearTravelSec = 0.7f;  // (2.0)
   s.buzzerActiveLow = 0;   // GG 的蜂鳴器是高電位響
   s.armSwitchOff = 0;      // 出廠一定要按安全開關才倒數
+  s.wagStopDeg = WAG_STOP_DEFAULT_DEG;
 }
 
 // 第 6 組出廠名稱「測試」(原本 TEST). 備份碼的「沿用出廠名稱」用的是 settings_backup.cpp 自己凍結的舊名稱表.
@@ -123,6 +132,13 @@ static void setSide(CurveSide &s, int8_t deadband, uint8_t count, const CurvePoi
   s.count = count;
   for (uint8_t i = 0; i < 4; ++i) s.pts[i] = pts[i];
   s.pts[4] = pts[3];   // 第 5 格不再使用
+}
+
+static void defaultPulse(ProfileSettings &p) {
+  p.pulseLowPct = 40;
+  p.pulseHighPct = 70;
+  memset(p.reserved11, 0, sizeof(p.reserved11));
+  p.pulsePeriodSec = 1.0f;
 }
 
 static void defaultProfile(ProfileSettings &p, uint8_t index) {
@@ -184,6 +200,10 @@ static void defaultProfile(ProfileSettings &p, uint8_t index) {
   // 起飛油門出廠不使用(持續時間 0),飛法和加這個功能之前一樣;油門值先放第一段油門,開啟時從這裡調
   p.takeoffPct = p.phase1Pct;
   p.takeoffHoldSec = 0;
+  // 降落出廠逐漸減力,蜂鳴器不響(和加這個功能之前一樣);忽高忽低的值先放 GG 說的 40~70%,1 秒一個來回
+  p.landingMode = LANDING_RAMP;
+  p.landingBuzz = 0;
+  defaultPulse(p);
 }
 
 // --- 參數表 ----------------------------------------------------------------------
@@ -243,6 +263,7 @@ static const ParamDef SHARED_PARAMS[] = {
     SP("gearTravelSec", PARAM_F32, gearTravelSec, 0, 10, 0.1f, 0.5f),
     SP("buzzerLow", PARAM_U8, buzzerActiveLow, 0, 2, 1, 1),   // 高電位/低電位/無源,立即生效
     SP("armSwitchOff", PARAM_U8, armSwitchOff, 0, 1, 1, 1),   // 1 = 忽略安全開關(網頁要打勾確認)
+    SP("wagStop", PARAM_U8, wagStopDeg, 0, 90, 1, 5),         // 0 = 關閉,開啟時至少 15 度(交叉驗證)
 };
 
 static const ParamDef PROFILE_PARAMS[] = {
@@ -259,6 +280,11 @@ static const ParamDef PROFILE_PARAMS[] = {
     PP("maxPct", PARAM_U8, maxPct, 0, 100, 1, 5),
     PP("landingRamp", PARAM_F32, landingRampSec, 0, 30, 0.5f, 1),
     PP("landingPct", PARAM_U8, landingPct, 0, 100, 1, 5),
+    PP("landingMode", PARAM_U8, landingMode, 0, 1, 1, 1),     // LandingMode
+    PP("landingBuzz", PARAM_U8, landingBuzz, 0, 1, 1, 1),
+    PP("pulseLow", PARAM_U8, pulseLowPct, THROTTLE_FLOOR_PCT, 100, 1, 5),
+    PP("pulseHigh", PARAM_U8, pulseHighPct, THROTTLE_FLOOR_PCT, 100, 1, 5),
+    PP("pulsePeriod", PARAM_F32, pulsePeriodSec, 0.4f, 4, 0.1f, 0.5f),
     PP("phaseMode", PARAM_U8, phaseMode, 0, 2, 1, 1),
     PP("upDb", PARAM_I8, up.deadband, 0, 89, 1, 5),
     PP("upN", PARAM_U8, up.count, CURVE_MIN_POINTS, CURVE_MAX_POINTS, 1, 1),
@@ -354,6 +380,8 @@ static const char *validateShared(const SharedSettings &s) {
   if (s.escPwmHz < 50 || 1000000UL / s.escPwmHz < (uint32_t)s.escMaxUs + 300) return "pwmhz";
   // 太小的角度放飛機時稍微轉一下就取消,不合理
   if (s.twistCancelDeg != 0 && s.twistCancelDeg < 15) return "twistdeg";
+  // 太小的角度在地上碰一碰就可能湊到 3 個來回
+  if (s.wagStopDeg != 0 && s.wagStopDeg < 15) return "wagdeg";
   if (s.gearMaxUs < s.gearMinUs + 100) return "gearrange";
   return nullptr;
 }
@@ -399,6 +427,7 @@ static const char *validateProfile(const ProfileSettings &p) {
   if (p.phase1Sec >= p.flightSec) return "phasetime";
   // 起飛油門(含換回第一段的過渡)要在第一段時間內結束,不然會蓋到換段
   if (p.takeoffHoldSec > 0 && p.takeoffRampSec + p.takeoffHoldSec + TAKEOFF_BLEND_S > p.phase1Sec) return "takeofftime";
+  if (p.pulseLowPct + 10 > p.pulseHighPct) return "pulserange";   // 差太小飛手感覺不出來
   if (const char *e = validateSide(p.up, true)) return e;
   if (const char *e = validateSide(p.down, false)) return e;
   return nullptr;
@@ -436,6 +465,7 @@ static bool loadBlobAny(Preferences &prefs, const char *key, uint8_t *data, size
 //   v8:共用設定尾端加機輪收腳 12 位元組;風格不變
 //   v9:共用設定尾端加蜂鳴器電位 + 3 預留;風格不變
 //   v10:風格尾端加起飛油門(油門 + 3 預留 + 持續時間);共用設定不變
+//   v11:風格尾端加忽高忽低減力(低,高,2 預留,週期),減力方式與蜂鳴器提醒用 reserved0;共用設定大小不變,wagStopDeg 用 reserved9[0]
 // 所以風格 v4/v6~v9 原樣沿用後尾端補「不使用」,v5 取前段;共用設定 v4~v6 較短,尾端補預設. GG 已經在板子上調好參數,改版不可洗掉.
 static const size_t CURVE_SIDE_SIZE = sizeof(CurveSide);
 
@@ -444,7 +474,7 @@ static bool loadShared(Preferences &prefs, SharedSettings &out) {
   defaultShared(s);   // v6 以前的存檔比較短,尾端新欄位保留預設值
   uint16_t ver = 0, size = 0;
   if (!loadBlobAny(prefs, "shared", (uint8_t *)&s, sizeof(s), ver, size)) return false;
-  const bool current = (ver == SETTINGS_LAYOUT_VERSION || ver == 9) && size == sizeof(s);   // v10 只改了風格
+  const bool current = (ver == SETTINGS_LAYOUT_VERSION || ver == 10 || ver == 9) && size == sizeof(s);   // v9~v11 大小相同
   const bool old6 = ver >= 4 && ver <= 6 && size == SHARED_V6_SIZE;
   const bool old7 = ver == 7 && size == SHARED_V7_SIZE;
   const bool old8 = ver == 8 && size == SHARED_V8_SIZE;
@@ -460,6 +490,8 @@ static bool loadShared(Preferences &prefs, SharedSettings &out) {
   if (s.startLevelDeg < 10) s.startLevelDeg = 35;   // 以前是預留位元組 0
   if (s.armWaitMin < 1 || s.armWaitMin > 30) s.armWaitMin = ARM_WAIT_DEFAULT_MIN;   // 以前是收腳區塊的預留位元組 0
   if (s.armSwitchOff > 1) s.armSwitchOff = 0;   // 預留位元組不是 0/1 時當成要按開關(安全側)
+  if (ver < 11) s.wagStopDeg = WAG_STOP_DEFAULT_DEG;   // 以前是預留位元組 0,不是使用者關閉
+  if (s.wagStopDeg > 90) s.wagStopDeg = WAG_STOP_DEFAULT_DEG;
   if (validateShared(s)) return false;
   if (ver != SETTINGS_LAYOUT_VERSION) Serial.printf("settings shared migrated v%u -> v%u\n", ver, SETTINGS_LAYOUT_VERSION);
   out = s;
@@ -470,14 +502,23 @@ static bool loadProfile(Preferences &prefs, const char *key, ProfileSettings &ou
   uint8_t raw[512];
   uint16_t ver = 0, size = 0;
   if (!loadBlobAny(prefs, key, raw, sizeof(raw), ver, size)) return false;
-  // 風格結構 v4,v6~v9 版面相同(v7~v9 只改了共用設定),v10 尾端多了起飛油門
+  // 風格結構 v4,v6~v9 版面相同(v7~v9 只改了共用設定),v10 尾端多了起飛油門,v11 再多忽高忽低減力
   const bool current = ver == SETTINGS_LAYOUT_VERSION && size == sizeof(ProfileSettings);
+  const bool old10 = ver == 10 && size == PROFILE_V10_SIZE;
   const bool old9 = (ver == 9 || ver == 8 || ver == 7 || ver == 6 || ver == 4) && size == PROFILE_V9_SIZE;
   const bool v5 = ver == 5 && size == PROFILE_V9_SIZE + 2 * CURVE_SIDE_SIZE;
-  if (!current && !old9 && !v5) return false;
+  if (!current && !old10 && !old9 && !v5) return false;
   ProfileSettings p;
-  memcpy(&p, raw, current ? sizeof(p) : PROFILE_V9_SIZE);   // v5 多出來的第二段曲線在尾端,直接不取
+  memcpy(&p, raw, current ? sizeof(p) : old10 ? PROFILE_V10_SIZE : PROFILE_V9_SIZE);   // v5 多出來的第二段曲線在尾端,直接不取
   if (!current) {
+    // 加忽高忽低之前的存檔:減力方式與蜂鳴器是預留的 0(逐漸減力,不響),尾端補出廠值
+    p.landingMode = LANDING_RAMP;
+    p.landingBuzz = 0;
+    defaultPulse(p);
+  }
+  if (p.landingMode > LANDING_PULSE) p.landingMode = LANDING_RAMP;
+  if (p.landingBuzz > 1) p.landingBuzz = 0;
+  if (!current && !old10) {
     // 加起飛油門之前的存檔:不使用(飛法不變),油門值先放第一段油門
     memset(p.reserved10, 0, sizeof(p.reserved10));
     p.takeoffPct = max(p.phase1Pct, THROTTLE_FLOOR_PCT);

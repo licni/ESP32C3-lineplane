@@ -1,4 +1,5 @@
-// 版本流水號: r14 (2026-09-15) 輸入加 escFail(電變輸出掛載失敗),拒絕原因 10 REJECT_ESC_OUTPUT
+// 版本流水號: r15 (2026-09-24) 強制停機結束原因 END_FORCE_SWITCH(長按安全開關)/ END_FORCE_WAG(搖擺機尾);狀態加 landPulse,landBuzz
+// 舊: r14 (2026-09-15) 輸入加 escFail(電變輸出掛載失敗),拒絕原因 10 REJECT_ESC_OUTPUT
 // 舊: r13 (2026-09-15) 狀態加 takeoffBoost(起飛油門階段)
 // 舊: r12 (2026-09-14) 安全開關等待上限(GG):超過設定分鐘數沒按就取消(END_ARM_TIMEOUT);輸入加測試覆寫秒數,狀態加剩餘秒數
 // 舊: r11 (2026-09-14) 安全開關改成「起飛程序照常開始,按下才倒數」(GG);狀態加 armLatched
@@ -55,6 +56,8 @@ enum FlightEndReason : uint8_t {
   END_TWIST_CANCEL,    // 手勢起飛後扭轉機尾取消
   END_TILT_CANCEL,     // 起飛程序中(等待放穩/倒數)角度超過起飛前水平限制,取消
   END_ARM_TIMEOUT,     // 等安全開關超過等待上限,取消(上電自動倒數的等待逾時也用這個)
+  END_FORCE_SWITCH,    // 馬達運轉中長按安全開關 2 秒,強制停機
+  END_FORCE_WAG,       // 馬達運轉中左右搖擺機尾 3 個來回,強制停機
 };
 
 enum LandingCause : uint8_t { LAND_NONE = 0, LAND_TIME, LAND_EARLY_ROLL };
@@ -125,6 +128,8 @@ struct FlightStatus {
   bool armSwitch;            // 安全開關目前是否按下(網頁顯示用)
   bool armLatched;           // 這趟起飛程序(等待放穩/倒數,或上電自動倒數等待中)已經按過安全開關
   float armWaitLeftS;        // 等安全開關還剩幾秒就自動取消(-1 = 不在等安全開關)
+  bool landPulse;            // 降落中忽高忽低提醒進行中
+  bool landBuzz;             // 這一拍蜂鳴器要響(降落提醒)
 };
 
 void flightBegin();

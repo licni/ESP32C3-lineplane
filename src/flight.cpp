@@ -1,4 +1,7 @@
-// 版本流水號: r24 (2026-09-15) 安全審查第二次:非待機狀態一律清掉手勢請求(飛行中收到的不會在停止後被受理);馬達停止後 2 秒不接受手勢;
+// 版本流水號: r25 (2026-09-24) 強制停機(GG):馬達運轉中長按安全開關 2 秒(馬達啟動後要先看到放開過),或左右搖擺機尾 3 個來回
+//   (每次擺動超過設定角度,間隔 1.2 秒內)→ 關馬達,之後至少 2 秒(或扭轉取消的封鎖秒數)不接受手勢;
+//   降落減力方式忽高忽低:減力秒數內在低/高油門間方波切換,走完換降落油門;減力期間可選蜂鳴器提醒
+// 舊: r24 (2026-09-15) 安全審查第二次:非待機狀態一律清掉手勢請求(飛行中收到的不會在停止後被受理);馬達停止後 2 秒不接受手勢;
 //   撞擊鎖改獨立旗標(拒絕一次不解除,成功開始或重新上電才清);等待放穩/倒數中韌體開始寫入就取消;網頁開始不受 1.5 秒重臂限制;
 //   外力設不理會時清掉測試 disturb 旗標;自動倒數等待中改成手勢啟動記事件 28/6 並標自動倒數已用;電變輸出掛載失敗拒絕起飛(原因 10)
 // 舊: r23 (2026-09-15) 起飛油門(GG):緩啟動加到起飛油門,維持持續時間後 1 秒平順換到時間軸油門;狀態 takeoffBoost;馬達啟動事件 a 記起飛油門
@@ -54,6 +57,54 @@ static const float COUNTDOWN_EXTEND_LIMIT_S = 10.0f;
 // 抓著機尾繞機背軸轉超過設定角度 → 回待機,並且一段時間不接受手勢(抬尾巴放下的撞擊不會又觸發).
 // 角速度小於這個值不累積:放在地上時陀螺儀零點殘差不會慢慢積到門檻,手扭轉一定比這快很多.
 static const float TWIST_RATE_DEADBAND_DPS = 5.0f;
+
+// --- 強制停機(GG 2026-09-24):飛機起飛後出狀況時,人在飛機旁邊可以直接關馬達 ---
+// 長按安全開關:馬達啟動後要先看到開關放開過才開始算. 飛場上把開關兩腳短路(一直按著)也能飛,不能一起飛就被關掉.
+static const uint32_t FORCE_SWITCH_HOLD_MS = 2000;
+static bool forceSwReleased = false;
+static uint32_t forceSwPressMs = 0;   // 0 = 沒按著
+// 搖擺機尾:累積機背軸的轉角,從上一個極點反方向轉超過設定角度算一次擺動(遲滯,馬達震動造成的小抖動不會亂算).
+// 從中間開始「左右來回三次」= 中間 → 左(不到設定角度不算)→ 右 → 左 → 右 → 左 → 右,共 5 次完整擺動.
+// 飛行中機背軸的角速度一直是同方向的繞圈角速度(正飛倒飛,筋斗都一樣,線拉著內側翼朝圓心),轉角只往一邊增加,
+// 永遠不會出現來回擺動,所以不會誤觸發.
+static const uint8_t WAG_SWINGS = 5;
+static const uint32_t WAG_GAP_MS = 1200;   // 兩次擺動間隔超過這麼久就從頭算(慢慢轉不算搖擺)
+static float wagAngle = 0;     // 累積轉角
+static float wagExt = 0;       // 目前方向的極點
+static float wagMin = 0, wagMax = 0;   // 還沒決定方向時的範圍
+static int8_t wagDir = 0;      // 0 = 還沒決定,1 = 正在往正方向轉,-1 = 往負方向轉
+static uint8_t wagCount = 0;
+static uint32_t wagLastMs = 0;
+
+static void wagReset() {
+  wagAngle = wagExt = wagMin = wagMax = 0;
+  wagDir = 0;
+  wagCount = 0;
+}
+
+// 回傳這一拍是否完成一次擺動
+static bool wagUpdate(float rateDps, float dt, float deg) {
+  if (fabsf(rateDps) >= TWIST_RATE_DEADBAND_DPS) wagAngle += rateDps * dt;
+  if (wagDir == 0) {
+    wagMin = min(wagMin, wagAngle);
+    wagMax = max(wagMax, wagAngle);
+    if (wagMax - wagMin < deg) return false;
+    wagDir = wagAngle >= wagMax ? 1 : -1;   // 剛轉到的那一端決定現在的方向
+    wagExt = wagAngle;
+    return true;
+  }
+  if (wagDir > 0) {
+    if (wagAngle > wagExt) wagExt = wagAngle;
+    else if (wagExt - wagAngle >= deg) { wagDir = -1; wagExt = wagAngle; return true; }
+  } else {
+    if (wagAngle < wagExt) wagExt = wagAngle;
+    else if (wagAngle - wagExt >= deg) { wagDir = 1; wagExt = wagAngle; return true; }
+  }
+  return false;
+}
+
+// 降落提醒(忽高忽低,蜂鳴器)
+static bool landPulseOn = false, landBuzzOn = false;
 
 static portMUX_TYPE statusLock = portMUX_INITIALIZER_UNLOCKED;
 static FlightStatus status;
@@ -405,6 +456,41 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
     crashTicks = 0;
   }
 
+  // --- 強制停機:馬達運轉中長按安全開關,或搖擺機尾 ---
+  if (motorState(state)) {
+    FlightEndReason force = END_NONE;
+    float value = 0, limit = 0;
+    // 用實體開關(不看「忽略安全開關」設定):沒裝開關的腳位是上拉,永遠放開,不會觸發
+    if (!in.armSwitch) {
+      forceSwReleased = true;
+      forceSwPressMs = 0;
+    } else if (forceSwReleased) {
+      if (!forceSwPressMs) forceSwPressMs = now | 1;
+      else if (now - forceSwPressMs >= FORCE_SWITCH_HOLD_MS) {
+        force = END_FORCE_SWITCH;
+        value = (now - forceSwPressMs) / 1000.0f;
+        limit = FORCE_SWITCH_HOLD_MS / 1000.0f;
+      }
+    }
+    if (fs.wagStopDeg > 0 && in.imuOk && force == END_NONE) {
+      if (wagCount && now - wagLastMs > WAG_GAP_MS) wagReset();
+      if (wagUpdate(in.gyroDps[2], dt, fs.wagStopDeg)) {
+        ++wagCount;
+        wagLastMs = now;
+        if (wagCount >= WAG_SWINGS) {
+          force = END_FORCE_WAG;
+          value = wagCount;
+          limit = fs.wagStopDeg;
+        }
+      }
+    }
+    if (force != END_NONE) {
+      finish(force, value, limit);
+      // 關掉之後人還抓著飛機(可能還在搖或按著開關):封鎖手勢久一點,至少和扭轉取消一樣
+      gestureBlockUntilMs = (now + max((uint32_t)MOTOR_STOP_REARM_MS, (uint32_t)fs.twistBlockSec * 1000u)) | 1;
+    }
+  }
+
   switch (state) {
     case FS_ARMING:
       if (in.escService) {
@@ -586,6 +672,10 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
         countdownRemain = 0;
         motorStartMs = now;
         phase = 1;
+        forceSwReleased = false;
+        forceSwPressMs = 0;
+        wagReset();
+        wagLastMs = now;
         enter(FS_TAKEOFF);
         eventLog(EV_MOTOR_START, fpIndex, fp.phase1Pct, fp.takeoffHoldSec > 0 ? fp.takeoffPct : 0);
       }
@@ -655,12 +745,30 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
 
     if (state == FS_LANDING) {
       landingElapsed += dt;
-      const float r = fp.landingRampSec > 0 ? min(1.0f, landingElapsed / fp.landingRampSec) : 1.0f;
-      const float pct = landingStartPct + (fp.landingPct - landingStartPct) * r;
+      const bool warning = landingElapsed < fp.landingRampSec;   // 減力(提醒)階段
+      float pct, speedPct;
+      if (fp.landingMode == LANDING_PULSE) {
+        // 忽高忽低(GG 2026-09-24):先高後低的方波,讓飛手感覺動力一陣一陣,知道快停了. 走完直接換降落油門.
+        landPulseOn = warning;
+        if (warning) {
+          const float period = max(0.2f, fp.pulsePeriodSec);
+          const bool high = fmodf(landingElapsed, period) < period * 0.5f;
+          pct = high ? fp.pulseHighPct : fp.pulseLowPct;
+          speedPct = min(landingStartPct, (fp.pulseHighPct + fp.pulseLowPct) * 0.5f);   // 飛機速度跟不上方波,用平均
+          landBuzzOn = fp.landingBuzz && high;   // 蜂鳴器跟著高油門響
+        } else {
+          pct = speedPct = fp.landingPct;
+          landBuzzOn = false;
+        }
+      } else {
+        const float r = fp.landingRampSec > 0 ? min(1.0f, landingElapsed / fp.landingRampSec) : 1.0f;
+        pct = speedPct = landingStartPct + (fp.landingPct - landingStartPct) * r;
+        landBuzzOn = fp.landingBuzz && warning && fmodf(landingElapsed, 1.0f) < 0.5f;   // 響半秒停半秒
+      }
       lastBase = pct;
       lastComp = 0;   // 降落中不補償
       lastOut = pct;
-      out.speedMps = landingStartPct > 1 ? v * pct / landingStartPct : 0;
+      out.speedMps = landingStartPct > 1 ? v * speedPct / landingStartPct : 0;
 
       if (in.imuOk) {
         if (gyroLpfMag < LAND_STILL_GYRO_DPS && dist3(accLpf, landAccRef) < LAND_STILL_ACC_G) {
@@ -694,6 +802,8 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
     lastGearUp = gearUp;
   }
   out.gearUp = gearUp;
+
+  if (state != FS_LANDING) landPulseOn = landBuzzOn = false;   // 降落中被強制停機,撞擊等結束時一起清掉
 
   if (motorState(state)) {
     out.motorOn = true;
@@ -737,6 +847,8 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
   status.armLatched = armLatched && (state == FS_WAIT_STILL || state == FS_COUNTDOWN || autoWaitLevel);
   status.armWaitLeftS = !armLatched && (state == FS_WAIT_STILL || (state == FS_STANDBY && autoWaitLevel))
                             ? max(0.0f, armWaitLimitS(in) - armWaitS) : -1.0f;
+  status.landPulse = landPulseOn;
+  status.landBuzz = landBuzzOn;
   status.gestureBlockS =
       gestureBlockUntilMs && (int32_t)(now - gestureBlockUntilMs) < 0 ? (gestureBlockUntilMs - now) / 1000.0f : 0;
   portEXIT_CRITICAL(&statusLock);

@@ -86,6 +86,8 @@
 // 舊: r3 (2026-09-13) 數字放大,斜坡改稱加力/減力秒數,換段方式(線性/階梯),曲線點分框,觸地提早降落設定,監看頁最近觸地衝擊
 // 舊: r2 (2026-09-13) 加風格頁(六組,命名/選用/複製/回預設,時間軸,斜坡,上下限,補償曲線數值)與設定頁(方位,啟動,降落撞擊,速度,電變脈寬);參數一律 +/- 粗細調
 // 舊: r1 (2026-09-13) 初版:監看頁(飛機側視姿態圖,感測器與控制迴圈狀態),系統頁(WiFi,韌體更新)
+// r91 (2026-09-24) 降落減力方式(逐漸減力/忽高忽低)與低高油門,週期,蜂鳴器提醒;時間軸圖畫出忽高忽低;強制停機卡(搖擺機尾角度);
+//   結束原因與事件:長按安全開關,搖擺機尾強制停機;錯誤碼 pulserange,wagdeg;降落中狀態列顯示忽高忽低提醒
 // r90 (2026-09-16) 全部 ⓘ 說明重寫得精簡(GG):44 條參數說明,卡片說明,下拉選單說明,備份頁說明;內容與數值不變,只去掉重複與贅字.
 // r89 (2026-09-16) 備份碼框字級 13 → 16px(點框時手機不再自動放大),套用框 inputmode=none 不彈鍵盤,提示改「長按這裡 → 貼上」.
 // r88 (2026-09-16) 參數名稱「倒數秒數」改「起飛倒數秒數」(GG),延長秒數說明與備份頁項目說明跟著改.
@@ -746,7 +748,7 @@ const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔�
  locked:'起飛流程進行中,設定已鎖定.',range:'超出可調範圍.',order:'曲線的角度必須由水平往外依序排列,不可越過相鄰的點或死區.',
  minmax:'油門下限必須小於上限.',phasetime:'第一段時間必須比總飛行時間短.',takeofftime:'緩啟動加力秒數 + 起飛油門持續時間 + 1 秒過渡,要在第一段持續時間內結束.',
  appwshort:'熱點密碼至少 8 個字.',appwlong:'熱點密碼最多 63 個字.',appwspace:'熱點密碼頭尾不能是空白(看不出來,容易打錯).',appwbad:'熱點密碼只能用英文,數字與鍵盤上的半形符號(不能有中文或全形字).',axis:'朝機頭與朝機背不能是同一軸.',
- escrange:'100% 的脈寬至少要比 0% 大 100 µs.',pwmhz:'PWM 週期要比 100% 脈寬多 300 µs:頻率調低一點,或把 100% 脈寬調小.',twistdeg:'扭轉取消角度設 0(關閉)或至少 15 度.',gearrange:'舵機行程上限至少要比下限大 100 µs.',geartest:'已送出.',name:'名稱不能空白,也不能有換行等特殊字元.',key:'未知的參數.',value:'數值格式不對.',scope:'風格編號不對.',
+ escrange:'100% 的脈寬至少要比 0% 大 100 µs.',pwmhz:'PWM 週期要比 100% 脈寬多 300 µs:頻率調低一點,或把 100% 脈寬調小.',twistdeg:'扭轉取消角度設 0(關閉)或至少 15 度.',wagdeg:'搖擺機尾停機角度設 0(關閉)或至少 15 度.',pulserange:'忽高忽低的高油門要比低油門至少高 10%.',gearrange:'舵機行程上限至少要比下限大 100 µs.',geartest:'已送出.',name:'名稱不能空白,也不能有換行等特殊字元.',key:'未知的參數.',value:'數值格式不對.',scope:'風格編號不對.',
  selected:'已設為飛行使用.',copied:'已複製,記得儲存.',defaults:'已回預設,按儲存才會寫入;按放棄變更可以救回.',reverted:'已放棄變更.',
  manualstate:'只有待機或飛行結束時可以手動輸出(倒數中請先取消倒數).',manuallow:'手動輸出要從最低油門開始.',
  calibdirty:'有未儲存的變更,請先儲存(校正用存檔裡的脈寬).',calibproto:'DShot 是數位油門,不需要校正行程.',
@@ -770,8 +772,12 @@ const L={
  noCompSec:['起飛後不補償','sec','起飛滑跑這段不補償. 後三點飛機停著就機頭朝上,免得被當成爬升而加油門.'],
  minPct:['飛行中油門下限','pct','補償後的油門不會低於這個值,兩段共用. 最低 10%.'],
  maxPct:['飛行中油門上限','pct','補償後的油門不會超過這個值,兩段共用.'],
- landingRamp:['降落減力秒數','sec','開始降落後,油門減到降落油門的秒數.'],
+ landingRamp:['降落減力秒數','sec','開始降落後,油門減到降落油門的秒數. 選忽高忽低時是忽高忽低持續的秒數,走完換降落油門. 0 = 直接換降落油門.'],
  landingPct:['降落油門','pct','降落時維持的油門,判定觸地才關馬達.'],
+ pulseLow:['忽高忽低:低油門','pct','忽高忽低時的低油門. 至少比高油門低 10%.'],
+ pulseHigh:['忽高忽低:高油門','pct','忽高忽低時的高油門. 先高後低.'],
+ pulsePeriod:['忽高忽低週期','sec','一高一低合起來的秒數. 1 秒 = 高半秒,低半秒.'],
+ wagStop:['搖擺機尾停機角度','deg','馬達運轉中抓著機尾左右搖擺,每次從一邊擺到另一邊超過這個角度,連續 3 個來回就關馬達. 0 = 關閉.'],
  upDb:['補速開始角度','deg','機頭朝上超過這個角度才開始補速.'],
  dnDb:['減速開始角度','deg','機頭朝下超過這個角度才開始減速.'],
  pitchTrim:['角度修正','deg','加到量到的角度上. 平飛姿勢讀到 +2° 就設 −2. 出廠 0.'],
@@ -809,7 +815,7 @@ const L={
 const PROF_LAYOUT=[
  {t:'起飛',k:['takeoffRamp','takeoffPct','takeoffHold','noCompSec']},
  {t:'飛行時間軸(從馬達開始轉算起)',k:['phase1Pct','phase1Sec','phaseMode','phaseRamp','phase2Pct','flightSec']},
- {t:'降落',k:['landingRamp','landingPct']}
+ {t:'降落',k:['landingMode','landingRamp','pulseHigh','pulseLow','pulsePeriod','landingPct','landingBuzz']}
 ];
 const PROF_NOTE='時間都從馬達開始轉算起. 總飛行時間到了,或觸地提早降落(設定頁),就開始降落;降落期間不補償. 油門上下限在角度補償頁.';
 const SET_LAYOUT=[
@@ -817,6 +823,7 @@ const SET_LAYOUT=[
   n:'推一下飛機或按上方「開始起飛程序」→ 飛機放穩 → 按安全開關 → 倒數 → 馬達啟動. 開關放穩前後按都可以,超過等待上限沒按就取消. 倒數中可按「取消倒數」或扭轉機尾取消.'},
  {t:'觸地提早降落',k:['earlyLand','earlyLandVib','earlyLandHold','earlyLandTilt','earlyLandArm'],n:'想提早結束時,讓飛機正飛水平貼地滑行,機輪彈跳的抖動持續一段時間就開始降落. 門檻參考「紀錄」頁的實際數值.',id:'earlyCard'},
  {t:'降落與撞擊',k:['touchdownG','touchdownStill','landingTimeout','crashEnable','crashG'],n:'降落中任一成立就關馬達:觸地衝擊超過門檻,完全靜止,或滑行抖動持續達標(用提早降落的抖動設定,不管有沒有開啟). 減力走完才開始判斷,都沒成立就等保險時間到.'},
+ {t:'強制停機',k:['wagStop'],n:'馬達運轉中(起飛後到降落)人在飛機旁要關馬達:長按安全開關 2 秒,或抓著機尾左右搖擺 3 個來回. 長按開關一定有效(馬達啟動後開關要先放開過,短路跳線的開關不會誤關). 飛行中機尾只會往同一邊轉,不會誤觸搖擺停機.'},
  ];
 const INST_LAYOUT=[
  {t:'飛行速度',k:['lineLength','lapSec'],n:'姿態計算要扣掉繞圈的向心力,用線長與單圈秒數換算速度. 大概填對即可.',id:'speedCard'},
@@ -1010,7 +1017,10 @@ function buildProfile(){
  const c=card('時間軸',`<div id="timeline" style="color:var(--ink);margin-bottom:4px"></div>${PROF_NOTE}`,'profParams');
  c.appendChild($('tlSvg'));c.appendChild($('tlLegend'));   // 時間軸圖與顏色說明放在參數上方,同一張卡
  for(const g of PROF_LAYOUT){c.insertAdjacentHTML('beforeend',`<h3 class="grp">${g.t}</h3>`);
-  g.k.forEach(k=>c.appendChild(k==='phaseMode'?makeSelect('p',k,'換段方式',PHASE_NAMES,'直接跳:時間到立刻變成第二段油門. 有過渡:時間到後用「換段加力秒數」加上去. 平均分攤:起飛後就把兩段的油門差平均加在第一段時間內,第一段結束剛好到第二段油門.'):makeParam('p',k)))}
+  g.k.forEach(k=>c.appendChild(k==='phaseMode'?makeSelect('p',k,'換段方式',PHASE_NAMES,'直接跳:時間到立刻變成第二段油門. 有過渡:時間到後用「換段加力秒數」加上去. 平均分攤:起飛後就把兩段的油門差平均加在第一段時間內,第一段結束剛好到第二段油門.')
+   :k==='landingMode'?makeSelect('p',k,'減力方式',['逐漸減力','忽高忽低'],'逐漸減力:在減力秒數內慢慢降到降落油門. 忽高忽低:減力秒數內油門在高低之間規律切換,讓飛手知道動力快停了,走完換降落油門.')
+   :k==='landingBuzz'?makeSelect('p',k,'蜂鳴器提醒',['不響','減力期間響'],'減力期間蜂鳴器響:忽高忽低時跟著高油門響,逐漸減力時響半秒停半秒. 蜂鳴器類型在安裝頁設定.')
+   :makeParam('p',k)))}
  box.appendChild(c);
 }
 // --- 風格頁時間軸圖 ---
@@ -1031,7 +1041,7 @@ function drawTimeline(p,sh){
  if(hold)segs.push([tr,toEnd,`起飛 ${hold}s`,'takeoff']);
  segs.push([toEnd,T1,'第一段','p1']);
  if(pm===1&&rampEnd>T1)segs.push([T1,rampEnd,`換段 ${p.phaseRamp}s`,'change']);
- segs.push([rampEnd,F,'第二段','p2'],[F,F+p.landingRamp,`減力 ${p.landingRamp}s`,'land'],[F+p.landingRamp,F+p.landingRamp+WAIT,'等觸地','land']);
+ segs.push([rampEnd,F,'第二段','p2'],[F,F+p.landingRamp,`${p.landingMode===1?'忽高忽低':'減力'} ${p.landingRamp}s`,'land'],[F+p.landingRamp,F+p.landingRamp+WAIT,'等觸地','land']);
  const MINW=62,dur=segs.map(s=>Math.max(0,s[1]-s[0]));
  const total=dur.reduce((a,b)=>a+b,0)||1;
  let widths=dur.map(d=>Math.max(MINW,pw*d/total));
@@ -1062,7 +1072,11 @@ function drawTimeline(p,sh){
  // 直接跳:第一段結束瞬間跳到第二段(同一個 x 上的垂直線)
  const segFlyEnd=segs.length-2;
  const xL0=x0s[segFlyEnd],xL1=xL0+widths[segFlyEnd],xW1=xL1+widths[segFlyEnd+1];
- pts+=`${xL0.toFixed(1)},${yOf(p2).toFixed(1)} ${xL1.toFixed(1)},${yOf(p.landingPct).toFixed(1)}`;
+ if(p.landingMode===1&&p.landingRamp>0){   // 忽高忽低:先高後低的方波(週期太多只畫 8 個示意),走完換降落油門
+  const n=Math.min(8,Math.max(1,Math.round(p.landingRamp/p.pulsePeriod))),dx=(xL1-xL0)/n,yH=yOf(p.pulseHigh).toFixed(1),yLo=yOf(p.pulseLow).toFixed(1);
+  for(let j=0;j<n;j++){const a=(xL0+dx*j).toFixed(1),m=(xL0+dx*(j+.5)).toFixed(1),e=(xL0+dx*(j+1)).toFixed(1);pts+=`${a},${yH} ${m},${yH} ${m},${yLo} ${e},${yLo} `}
+  pts+=`${xL1.toFixed(1)},${yOf(p.landingPct).toFixed(1)}`}
+ else pts+=`${xL0.toFixed(1)},${yOf(p2).toFixed(1)} ${xL1.toFixed(1)},${yOf(p.landingPct).toFixed(1)}`;
  h+=`<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round"/>`;
  h+=`<line x1="${xL1}" y1="${yOf(p.landingPct)}" x2="${xW1}" y2="${yOf(p.landingPct)}" stroke="var(--accent)" stroke-width="3" stroke-dasharray="6 5"/>`;
  // 關鍵油門值
@@ -1448,9 +1462,12 @@ function render(){
  const toClamp=p.takeoffHold>0?(p.takeoffPct>p.maxPct?`⚠ 起飛油門 ${p.takeoffPct}% 超過上限,實際 ${p.maxPct}%. `:p.takeoffPct<p.minPct?`⚠ 起飛油門 ${p.takeoffPct}% 低於下限,實際 ${p.minPct}%. `:''):'';
  $('timeline').textContent=toClamp+(p.takeoffHold>0?`時間軸:0:00 緩啟動(${p.takeoffRamp} 秒加到起飛油門 ${p.takeoffPct}%) → 維持 ${p.takeoffHold} 秒 → 1 秒換到第一段 ${p.phase1Pct}%`
   :`時間軸:0:00 緩啟動(${p.takeoffRamp} 秒加到 ${p.phase1Pct}%)`)+(pm===2?` → 第一段期間平均加油門`:'')+
-  ` → ${mmss(p.phase1Sec)} 換段(${phaseText}) → ${mmss(p.flightSec)} 降落(${p.landingRamp} 秒減到 ${p.landingPct}%)`+
+  ` → ${mmss(p.phase1Sec)} 換段(${phaseText}) → ${mmss(p.flightSec)} 降落(`+
+  (p.landingMode===1?`${p.pulseHigh}% / ${p.pulseLow}% 忽高忽低 ${p.landingRamp} 秒,再換 ${p.landingPct}%`:`${p.landingRamp} 秒減到 ${p.landingPct}%`)+
+  (p.landingBuzz?',蜂鳴器提醒':'')+')'+
   (VALS.shared.gearEnable?(VALS.shared.earlyLand?'. 收輪:觸地提早降落開啟中,輪子不收':`. 收輪:${mmss(VALS.shared.gearRetractSec)} 收起,降落開始時放下`):'');
  for(const w of WIDGETS)if(w.key==='phaseRamp')w.el.hidden=pm!==1;   // 只有「有過渡」用得到加力秒數
+ for(const w of WIDGETS)if(['pulseLow','pulseHigh','pulsePeriod'].includes(w.key)&&w.scope==='p')w.el.hidden=p.landingMode!==1;   // 忽高忽低才用得到
  buildCurve();
  buildCurvePanel();drawCurve();
  // 共用設定
@@ -1716,6 +1733,8 @@ function evText(e){
    case 4:r={m:`降落 ${s1(a)} 秒都沒判定觸地,保險時間到關馬達`,h:'如果飛機早就落地:觸地衝擊門檻可能太高,到監看頁輕敲飛機看「最近觸地衝擊」數值.'};break;
    case 5:r={m:`撞擊斷電:衝擊 ${s2(a)} g ≥ 門檻 ${s2(b)} g`,h:'如果是飛行中做特技誤觸:到紀錄頁看總 G 力最高值,調高撞擊門檻.'};break;
    case 6:r={m:'網頁緊急停止',h:''};break;
+   case 11:r={m:`長按安全開關 ${s1(a)} 秒,強制停機`,h:''};break;
+   case 12:r={m:`搖擺機尾 3 個來回(每次超過 ${Math.round(b)}°),強制停機`,h:'如果沒有人搖機尾:到設定頁把「搖擺機尾停機角度」調大,或設 0 關閉.'};break;
    default:r={m:`馬達停止(原因代碼 ${arg})`,h:''};}
    const out={c:'stop',m:r.m+fl(),h:r.h};evMotorMs=-1;return out}
   case 12:return {c:'bad',m:arg===2?'開機時找不到感測器':arg===1?'飛行中感測器讀取失敗:角度補償停止,撞擊與觸地判斷失效':'感測器讀取失敗',h:'這次通電不再使用感測器,就算之後恢復也一樣,要重新上電. 檢查感測器接線與焊點(震動容易鬆脫),以及供電.'};
@@ -1775,7 +1794,7 @@ async function evSync(s){
 }
 
 // --- 飛行狀態列 ---
-const END_TEXT=['','降落觸地(衝擊)','降落觸地(靜止)','降落觸地(地面滑行)','降落保險時間到','撞擊斷電','緊急停止','已取消','扭轉機尾取消','角度超過水平限制取消','等安全開關超過上限取消'];
+const END_TEXT=['','降落觸地(衝擊)','降落觸地(靜止)','降落觸地(地面滑行)','降落保險時間到','撞擊斷電','緊急停止','已取消','扭轉機尾取消','角度超過水平限制取消','等安全開關超過上限取消','長按安全開關強制停機','搖擺機尾強制停機'];
 let cdMax=0;
 function renderFlight(f){
  const bar=$('fbar'),tm=s=>mmss(Math.max(0,Math.floor(s)));
@@ -1805,7 +1824,7 @@ function renderFlight(f){
   case 4:cls='fly';badge='馬達運轉';title=`緩啟動 ${f.out.toFixed(0)}%`;detail=`${tm(f.t)},${us(f.out)}`;break;
   case 5:cls='fly';badge='馬達運轉';title=f.tb?`飛行中 起飛油門 ${tm(f.t)}`:`飛行中 第${f.ph===1?'一':'二'}段 ${tm(f.t)}`;
    detail=`油門 ${f.out.toFixed(0)}%(基本 ${f.base.toFixed(0)} ${f.comp>=0?'+':''}${f.comp.toFixed(0)}),${us(f.out)}`;break;
-  case 6:cls='land';badge='馬達運轉';title=`降落中(${f.lc===2?'觸地提早降落':'時間到'})`;detail=`油門 ${f.out.toFixed(0)}%,${tm(f.t)}`;break;
+  case 6:cls='land';badge='馬達運轉';title=`降落中(${f.lc===2?'觸地提早降落':'時間到'})`;detail=(f.lp?'忽高忽低提醒中,':'')+`油門 ${f.out.toFixed(0)}%,${tm(f.t)}`;break;
   case 7:cls=f.er===5?'crash':'done';badge='已結束';title=`已結束:${END_TEXT[f.er]||''}`;
    detail=(f.t>0?`飛行 ${tm(f.t)},`:'')+(f.ge?(f.er===5?'撞擊斷電後推飛機不會啟動;要再飛請按「開始起飛程序」或拔電再接電':'推一下或按「開始起飛程序」可再飛'):'要再飛請重新上電');break;
  }
@@ -2178,8 +2197,8 @@ $('btnRevert').onclick=async()=>{try{const r=await post('/api/revert');toast(COD
 // --- 設定備份碼(GG 2026-09-14,設計見 docs/設定備份碼設計_2026-09-14.md) ---
 // 有未儲存變更時整張卡不能用. 貼上當下就送板子檢查;不是 LP 開頭或檢查碼錯就提示並清空.
 const BK_NAMES={noseAxis:'朝機頭的軸',upAxis:'朝機背的軸',noseRight:'圖示機頭方向',escProtocol:'輸出協定',gestureEnable:'啟動手勢',
- earlyLand:'觸地提早降落',escRpm:'轉速回傳',gearEnable:'機輪收腳',gearReverse:'舵機反轉',buzzerLow:'蜂鳴器類型',armSwitchOff:'停用安全開關',phaseMode:'換段方式',upN:'補速曲線點數',dnN:'減速曲線點數'};
-const BK_SHARED_ERR=['axis','escrange','pwmhz','twistdeg','gearrange'];
+ earlyLand:'觸地提早降落',escRpm:'轉速回傳',gearEnable:'機輪收腳',gearReverse:'舵機反轉',buzzerLow:'蜂鳴器類型',armSwitchOff:'停用安全開關',phaseMode:'換段方式',landingMode:'減力方式',landingBuzz:'降落蜂鳴器提醒',upN:'補速曲線點數',dnN:'減速曲線點數'};
+const BK_SHARED_ERR=['axis','escrange','pwmhz','twistdeg','gearrange','wagdeg'];
 function bkLabel(item){
  if(item==='act')return '飛行使用的風格';
  const i=item.indexOf(':'),sc=item.slice(0,i),key=item.slice(i+1);

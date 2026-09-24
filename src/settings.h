@@ -1,4 +1,6 @@
-// 版本流水號: r21 (2026-09-15) PROFILE_TEST_INDEX:「測試」組名稱鎖定
+// 版本流水號: r22 (2026-09-24) 版面 v11:風格加降落減力方式 landingMode(逐漸減力/忽高忽低)與蜂鳴器提醒 landingBuzz(用 reserved0),
+//   尾端加忽高忽低的低/高油門與週期;共用設定加搖擺機尾強制停機角度 wagStopDeg(用 reserved9[0])
+// 舊: r21 (2026-09-15) PROFILE_TEST_INDEX:「測試」組名稱鎖定
 // 舊: r20 (2026-09-15) 版面 v10:風格尾端加起飛油門 takeoffPct 與持續時間 takeoffHoldSec(舊存檔補「不使用」)
 // 舊: r19 (2026-09-14) v9 預留位元組改為忽略安全開關 armSwitchOff(大小不變,舊存檔讀到 0 = 要按開關)
 // 舊: r18 (2026-09-14) 出廠值改成 GG 的基準設定:安全開關等待上限 3 → 2 分鐘,出廠飛行風格第 6 組 DEFAULT_ACTIVE_PROFILE
@@ -44,7 +46,7 @@ const uint8_t CURVE_STORE_POINTS = 5;
 const uint8_t CURVE_MAX_POINTS = 4;
 const uint8_t CURVE_MIN_POINTS = 1;
 const uint8_t PROFILE_NAME_BUFFER = 24;   // UTF-8,中文一字 3 位元組,約 7 個中文字
-const uint16_t SETTINGS_LAYOUT_VERSION = 10;
+const uint16_t SETTINGS_LAYOUT_VERSION = 11;
 // 起飛油門持續時間走完後,用這麼多秒平順換到時間軸的基本油門(不直接跳,免得剛離地推力突然掉)
 const float TAKEOFF_BLEND_S = 1.0f;
 const uint8_t ARM_WAIT_DEFAULT_MIN = 2;   // 安全開關等待上限出廠值(GG 2026-09-14 基準設定:2 分鐘,可調)
@@ -57,6 +59,9 @@ enum DisturbMode : uint8_t { DISTURB_EXTEND = 0, DISTURB_RESET = 1, DISTURB_OFF 
 // 換段方式:直接跳 / 直接跳但以換段加力秒數過渡 / 把兩段的油門差平均分攤在第一段時間內
 enum PhaseMode : uint8_t { PHASE_STEP = 0, PHASE_STEP_RAMP = 1, PHASE_SPREAD = 2 };
 // DShot 只做 150 與 300(GG:600 太高用不到). ESC_PROTO_PWM50 的名稱沿用,實際頻率看 escPwmHz.
+// 降落減力方式(GG 2026-09-24):逐漸減到降落油門 / 在低高兩個油門之間規律切換,提醒飛手動力快停了
+enum LandingMode : uint8_t { LANDING_RAMP = 0, LANDING_PULSE = 1 };
+const uint8_t WAG_STOP_DEFAULT_DEG = 30;   // 搖擺機尾強制停機的角度出廠值
 enum EscProtocol : uint8_t { ESC_PROTO_PWM50 = 0, ESC_PROTO_DSHOT150 = 1, ESC_PROTO_DSHOT300 = 2 };
 
 struct SharedSettings {
@@ -107,7 +112,10 @@ struct SharedSettings {
   // 忽略安全開關(GG 2026-09-14):1 = 不用按開關就倒數,讓使用者真的可以上電直接飛. 出廠 0.
   // 用 v9 的預留位元組(舊存檔是 0 = 要按開關),版面不變. 網頁開啟時要打勾確認風險,置頂一直顯示警告.
   uint8_t armSwitchOff;
-  uint8_t reserved9[2];
+  // 搖擺機尾強制停機(GG 2026-09-24):馬達運轉中抓著機尾左右搖擺 3 個來回,每次超過這個角度就關馬達. 0 = 關閉.
+  // 用 v9 的預留位元組,版面不變;v10 以前的存檔讀進來補出廠值(預留位元組是 0,不能當成使用者關閉)
+  uint8_t wagStopDeg;
+  uint8_t reserved9[1];
 };
 
 struct CurvePoint {
@@ -132,16 +140,23 @@ struct ProfileSettings {
   float takeoffRampSec;      // 緩啟動加力秒數:從 0 加到起飛油門(起飛油門不使用時是第一段油門)
   float phaseRampSec;        // 換段加力秒數(線性增加時)
   float noCompSec;           // 馬達啟動後幾秒內不補償
-  float landingRampSec;      // 降落減力秒數
+  float landingRampSec;      // 降落減力秒數(忽高忽低時是波動持續的秒數,走完才換降落油門)
   uint8_t landingPct;        // 降落時降到的油門
   uint8_t phaseMode;         // PhaseMode
-  uint8_t reserved0[2];
+  // v11 起用原本的預留位元組(舊存檔是 0 = 逐漸減力,不響,飛法不變)
+  uint8_t landingMode;       // LandingMode
+  uint8_t landingBuzz;       // 1 = 降落減力(或忽高忽低)期間蜂鳴器響,提醒動力快停了
   CurveSide up;              // 補償曲線(兩段飛行共用同一條;第二段只是基本油門不同)
   CurveSide down;
   // --- v10 起加在尾端:起飛油門(GG 2026-09-15;v9 以前的存檔讀進來時補「不使用」) ---
   uint8_t takeoffPct;        // 起飛油門:緩啟動加到這個值,維持 takeoffHoldSec 秒後換到第一段
   uint8_t reserved10[3];
   float takeoffHoldSec;      // 起飛油門持續時間(緩啟動走完才開始算). 0 = 不使用,緩啟動直接加到第一段油門
+  // --- v11 起加在尾端:忽高忽低減力(GG 2026-09-24;v10 以前的存檔讀進來時補出廠值) ---
+  uint8_t pulseLowPct;       // 忽高忽低的低油門
+  uint8_t pulseHighPct;      // 忽高忽低的高油門
+  uint8_t reserved11[2];
+  float pulsePeriodSec;      // 一高一低合起來的秒數
 };
 
 // --- 目前生效的設定(RAM) -----------------------------------------------------

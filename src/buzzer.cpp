@@ -1,4 +1,5 @@
-// 版本流水號: r2 (2026-09-14) 電位改用設定 buzzerLow(網頁切換,立即生效);滴聲 80 → 150ms;倒數短音 60 → 120ms,間隔改 剩餘×0.06(0.2~1.2 秒)(GG:太短,不夠急促)
+// 版本流水號: r3 (2026-09-24) 降落提醒:飛行狀態 landBuzz 為真時響(忽高忽低跟著高油門,逐漸減力響半秒停半秒)
+// 舊: r2 (2026-09-14) 電位改用設定 buzzerLow(網頁切換,立即生效);滴聲 80 → 150ms;倒數短音 60 → 120ms,間隔改 剩餘×0.06(0.2~1.2 秒)(GG:太短,不夠急促)
 // 舊: r1 (2026-09-14) 初版(試做):開機就緒滴滴,等安全開關長音,倒數越近越急促,最後 3 秒連續長音到馬達啟動
 #include "buzzer.h"
 #include "pins_config.h"
@@ -77,6 +78,8 @@ void buzzerUpdate(uint32_t now, const FlightStatus &f, uint8_t mode) {
     }
   } else if (armWait) {
     on = (now - armWaitStartMs) % ARM_WAIT_PERIOD_MS < ARM_WAIT_ON_MS;
+  } else if (f.landBuzz) {   // 降落減力提醒(風格設定開啟時,節奏由飛行狀態機決定)
+    on = true;
   }
 
   // 開機就緒:離開電變解鎖階段時滴滴兩聲(每次開機一次),蓋過其他聲音
