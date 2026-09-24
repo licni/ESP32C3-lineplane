@@ -1,4 +1,5 @@
-// 版本流水號: r30 (2026-09-24) 狀態 f.lp:降落忽高忽低提醒中
+// 版本流水號: r31 (2026-09-24) 搜尋附近 WiFi:POST /api/wifi/scan 開始,GET /api/wifi/scan 取結果
+// 舊: r30 (2026-09-24) 狀態 f.lp:降落忽高忽低提醒中
 // 舊: r29 (2026-09-15) 安全審查:/api/start 手動輸出/校正中回 startbusy;/api/cancel 不在等待放穩/倒數回 cancelstate
 // 舊: r28 (2026-09-15) 套用備份碼可帶 sel/sec 取消不要的項目;檢查/套用回 amask,asec(實際套用),names(碼裡各組名稱)
 // 舊: r27 (2026-09-15) 備份分區:GET /api/backup 加 sec(起飛降落與安全/安裝/電變/WiFi),sel 可為 0;檢查/套用回 sec,wifisaved
@@ -419,6 +420,33 @@ static void sendResult(bool ok, const char *code) {
   server.send(ok ? 200 : 400, "application/json", buf);
 }
 
+// 搜尋附近 WiFi:只掃描不寫快閃,飛行中也可以(控制工作優先權高過 WiFi,不受影響)
+static void handleWifiScanStart() {
+  const char *e = wifiScanStart();
+  sendResult(!e, e ? e : "scanning");
+}
+
+// {"run":1} 掃描中;{"run":0,"n":-2} 沒有結果;{"run":0,"n":筆數,"list":[[ssid,rssi,channel,open],...]}
+static void handleWifiScanGet() {
+  const WifiScanItem *items = nullptr;
+  const int8_t n = wifiScanResults(items);
+  String json;
+  if (n == -1) {
+    json = "{\"run\":1}";
+  } else {
+    json.reserve(40 + (n > 0 ? n : 0) * 60);
+    json = "{\"run\":0,\"n\":" + String(n) + ",\"list\":[";
+    for (int8_t i = 0; i < n; ++i) {
+      if (i) json += ',';
+      json += "[\"" + jsonEscape(items[i].ssid) + "\"," + String(items[i].rssi) + "," + String(items[i].channel) + "," +
+              String(items[i].open ? 1 : 0) + "]";
+    }
+    json += "]}";
+  }
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", json);
+}
+
 static void handleWifiSet() {
   // 起飛程序與飛行中不寫快閃(寫入時處理器暫停,安全審查 B5)
   if (refuseIfLocked()) return;
@@ -630,6 +658,8 @@ static void registerRoutes() {
   server.on("/api/wifi", HTTP_POST, handleWifiSet);
   server.on("/api/txpower", HTTP_POST, handleTxPower);
   server.on("/api/wifi/keep", HTTP_POST, handleWifiKeep);
+  server.on("/api/wifi/scan", HTTP_POST, handleWifiScanStart);
+  server.on("/api/wifi/scan", HTTP_GET, handleWifiScanGet);
   server.on("/api/timing/reset", HTTP_POST, handleTimingReset);
   server.on("/api/reboot", HTTP_POST, handleReboot);
   server.on("/api/manual", HTTP_POST, handleManual);

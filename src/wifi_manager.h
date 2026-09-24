@@ -1,4 +1,5 @@
-// 版本流水號: r5 (2026-09-15) wifiValidateConfig(設定備份碼含 WiFi 用)
+// 版本流水號: r6 (2026-09-24) 網頁搜尋附近 WiFi(wifiScanStart / wifiScanResults)
+// 舊: r5 (2026-09-15) wifiValidateConfig(設定備份碼含 WiFi 用)
 // 舊: r4 (2026-09-15) 熱點密碼可改(GG:已有連續開關電救援,改密碼可避免別人連進來亂改設定);出廠 12345678
 // 舊: r3 (2026-09-14) 設定保護:試用確認與退回,連續開關電救援
 // 舊: r2 (2026-09-13) 熱點名稱固定開頭 HappySuperGG_Plane + 可改後綴(最多 14 位元組);熱點密碼固定
@@ -80,5 +81,20 @@ bool wifiHostIsValid(const char *name);
 const char *wifiApSuffixError(const char *suffix);
 // 熱點密碼:8~63 個可見 ASCII 字元(WPA2 規定),頭尾不可是空白. 回傳 nullptr 表示可用.
 const char *wifiApPasswordError(const char *pw);
+// --- 搜尋附近 WiFi(GG 2026-09-24:網頁點選 SSID,不用自己打) ---
+// 非同步掃描,由 wifiTick() 收結果. 同名 SSID(mesh 多個節點)只留訊號最強的一筆,依訊號由強到弱排,隱藏網路不列.
+// 熱點模式也能掃(函式庫會開啟 STA 介面,掃完關掉);掃描約 2~4 秒,期間手機連線可能短暫停頓.
+const uint8_t WIFI_SCAN_MAX = 20;
+struct WifiScanItem {
+  char ssid[WIFI_SSID_BUFFER];
+  int8_t rssi;
+  uint8_t channel;
+  bool open;   // 沒有密碼
+};
+// 開始掃描. 回傳 nullptr = 已開始(或已在掃),否則錯誤代碼(開機連線中 scanbusy,啟動失敗 scanfail).
+const char *wifiScanStart();
+// 回傳 -1 = 掃描中,-2 = 沒有結果(沒掃過或失敗),0 以上 = 筆數(items 指向結果)
+int8_t wifiScanResults(const WifiScanItem *&items);
+
 // 完整熱點名稱(固定開頭 + 後綴). saved = true 取存檔值(下次開機用),false 取目前正在廣播的名稱.
 String wifiApSsid(bool saved);

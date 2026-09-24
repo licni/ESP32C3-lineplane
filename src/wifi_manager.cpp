@@ -1,4 +1,5 @@
-// 版本流水號: r9 (2026-09-15) 安全審查 3-C:存了還沒重開生效的 WiFi 設定後按「保持」,只停掉目前的退回計時,試用旗標與備份保留給重開後的新設定
+// 版本流水號: r10 (2026-09-24) 網頁搜尋附近 WiFi:非同步掃描,同名留最強,依訊號排序;熱點模式掃完關掉 STA 介面
+// 舊: r9 (2026-09-15) 安全審查 3-C:存了還沒重開生效的 WiFi 設定後按「保持」,只停掉目前的退回計時,試用旗標與備份保留給重開後的新設定
 // 舊: r8 (2026-09-15) wifiValidateConfig:只驗證不存檔(設定備份碼含 WiFi 時,檢查階段用)
 // 舊: r7 (2026-09-15) 熱點密碼可改(NVS 鍵 appw,沒有或不合法用出廠 12345678;試用退回與開關電救援都涵蓋)
 // 舊: r6 (2026-09-14) 起飛程序與飛行中暫停功率試用與設定試用的計時,退回延後到落地(安全審查 B5),事件 27
@@ -27,6 +28,12 @@ static WifiState state = WIFI_STATE_AP;
 static uint32_t staStartMs = 0;
 static uint32_t phaseEndMs = 0;
 static bool servicesStarted = false;
+// 網頁搜尋附近 WiFi
+static const uint32_t USER_SCAN_TIMEOUT_MS = 15000;
+static bool userScanRunning = false;
+static uint32_t userScanStartMs = 0;
+static int8_t userScanCount = -2;
+static WifiScanItem userScanItems[WIFI_SCAN_MAX];
 
 // STA 連線的內部階段. 對外一律是「連線中」,顯示端不必多認一種狀態.
 enum StaPhase : uint8_t { PHASE_SCAN = 0, PHASE_BSSID, PHASE_GENERIC };
@@ -431,6 +438,7 @@ static void wifiRestart() {
   // 先停 mDNS 再關 WiFi:mDNS 還綁在舊網卡時關掉 WiFi,mDNS 下一次加入多播群組會碰到已釋放的網卡而當機
   // (2026-09-14 測試:試用退回時 Guru Meditation,esp_netif_is_netif_up ← mdns join_group,板子重開. 飛行中重開 = 馬達停).
   MDNS.end();
+  userScanRunning = false;   // 網頁搜尋的結果不要了(重啟後的連線掃描會用到掃描器)
   WiFi.scanDelete();
   WiFi.disconnect(true);
   WiFi.softAPdisconnect(true);
@@ -439,7 +447,83 @@ static void wifiRestart() {
   wifiBegin();
 }
 
+static void finishUserScan(int16_t found) {
+  userScanRunning = false;
+  uint8_t n = 0;
+  for (int16_t i = 0; i < found; ++i) {
+    const String ssid = WiFi.SSID(i);
+    if (ssid.length() == 0 || ssid.length() >= WIFI_SSID_BUFFER) continue;   // 隱藏網路
+    const int32_t rssi = WiFi.RSSI(i);
+    int8_t same = -1;
+    for (uint8_t k = 0; k < n; ++k)
+      if (ssid == userScanItems[k].ssid) same = k;
+    if (same >= 0) {   // mesh 同名節點:留訊號強的
+      if (rssi > userScanItems[same].rssi) {
+        userScanItems[same].rssi = (int8_t)rssi;
+        userScanItems[same].channel = WiFi.channel(i);
+      }
+      continue;
+    }
+    // 滿了就取代最弱的一筆(比它強才換)
+    uint8_t slot = n;
+    if (n >= WIFI_SCAN_MAX) {
+      slot = 0;
+      for (uint8_t k = 1; k < n; ++k)
+        if (userScanItems[k].rssi < userScanItems[slot].rssi) slot = k;
+      if (rssi <= userScanItems[slot].rssi) continue;
+    } else {
+      ++n;
+    }
+    WifiScanItem &it = userScanItems[slot];
+    memset(&it, 0, sizeof(it));
+    strncpy(it.ssid, ssid.c_str(), sizeof(it.ssid) - 1);
+    it.rssi = (int8_t)constrain(rssi, -127, 0);
+    it.channel = WiFi.channel(i);
+    it.open = WiFi.encryptionType(i) == WIFI_AUTH_OPEN;
+  }
+  // 依訊號由強到弱(筆數少,插入排序)
+  for (uint8_t i = 1; i < n; ++i)
+    for (uint8_t j = i; j > 0 && userScanItems[j].rssi > userScanItems[j - 1].rssi; --j) {
+      const WifiScanItem t = userScanItems[j];
+      userScanItems[j] = userScanItems[j - 1];
+      userScanItems[j - 1] = t;
+    }
+  userScanCount = found < 0 ? -2 : (int8_t)n;
+  WiFi.scanDelete();
+  // 熱點模式:掃描時函式庫打開了 STA 介面,掃完關回純熱點(不留一個沒在用的介面)
+  if (state == WIFI_STATE_AP) WiFi.enableSTA(false);
+  Serial.printf("WiFi scan: %d found, %u listed\n", (int)found, (unsigned)n);
+}
+
+const char *wifiScanStart() {
+  if (state == WIFI_STATE_CONNECTING) return "scanbusy";   // 開機連線自己在用掃描器
+  if (userScanRunning) return nullptr;
+  const int16_t r = WiFi.scanNetworks(true);
+  if (r != WIFI_SCAN_RUNNING) {
+    // 同步完成(不會發生在非同步模式)或失敗
+    if (r >= 0) {
+      finishUserScan(r);
+      return nullptr;
+    }
+    if (state == WIFI_STATE_AP) WiFi.enableSTA(false);
+    return "scanfail";
+  }
+  userScanRunning = true;
+  userScanStartMs = millis();
+  return nullptr;
+}
+
+int8_t wifiScanResults(const WifiScanItem *&items) {
+  items = userScanItems;
+  return userScanRunning ? -1 : userScanCount;
+}
+
 void wifiTick() {
+  if (userScanRunning) {
+    const int16_t found = WiFi.scanComplete();
+    if (found >= 0) finishUserScan(found);
+    else if (found == WIFI_SCAN_FAILED || millis() - userScanStartMs > USER_SCAN_TIMEOUT_MS) finishUserScan(-1);
+  }
   if (servicesStarted) {
     // 待機以外不處理 OTA 請求:連握手都不回,PlatformIO 端會直接顯示連不上.
     if (controlOtaAllowed()) ArduinoOTA.handle();

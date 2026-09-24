@@ -86,6 +86,7 @@
 // 舊: r3 (2026-09-13) 數字放大,斜坡改稱加力/減力秒數,換段方式(線性/階梯),曲線點分框,觸地提早降落設定,監看頁最近觸地衝擊
 // 舊: r2 (2026-09-13) 加風格頁(六組,命名/選用/複製/回預設,時間軸,斜坡,上下限,補償曲線數值)與設定頁(方位,啟動,降落撞擊,速度,電變脈寬);參數一律 +/- 粗細調
 // 舊: r1 (2026-09-13) 初版:監看頁(飛機側視姿態圖,感測器與控制迴圈狀態),系統頁(WiFi,韌體更新)
+// r92 (2026-09-24) 家用 WiFi 名稱旁加「搜尋」:列出附近 WiFi(同名留最強,訊號強到弱,開放/加密),點一筆填入名稱,換網路清空密碼並跳到密碼欄
 // r91 (2026-09-24) 降落減力方式(逐漸減力/忽高忽低)與低高油門,週期,蜂鳴器提醒;時間軸圖畫出忽高忽低;強制停機卡(搖擺機尾角度);
 //   結束原因與事件:長按安全開關,搖擺機尾強制停機;錯誤碼 pulserange,wagdeg;降落中狀態列顯示忽高忽低提醒
 // r90 (2026-09-16) 全部 ⓘ 說明重寫得精簡(GG):44 條參數說明,卡片說明,下拉選單說明,備份頁說明;內容與數值不變,只去掉重複與贅字.
@@ -238,6 +239,13 @@ button.b.sm{padding:3px 10px;font-size:13px}
 .wgrp{border:1px solid var(--line);border-radius:10px;padding:5px 9px 3px;margin:8px 0}
 .wgt{font-size:13px;font-weight:700;color:var(--ink);margin:1px 0 0}
 .apfix{font-weight:700;font-size:14px;white-space:nowrap}.sub.bad{color:var(--bad)}
+/* 搜尋附近 WiFi 的清單(r92):每筆一顆按鈕,點了填入名稱 */
+#scanList{margin:2px 0 6px 104px;display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto}
+#scanList button{display:flex;align-items:center;gap:8px;text-align:left;padding:7px 10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:14px;cursor:pointer}
+#scanList button.on{border-color:var(--accent)}
+#scanList .sn{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#scanList .sq{flex:0 0 auto;font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
+@media(max-width:520px){#scanList{margin-left:0}}
 .txphi{color:var(--bad)!important;font-weight:700}#txpWarn.txphi{padding:4px 8px;border:2px solid var(--bad);border-radius:6px;background:rgba(209,36,47,.1)}
 input[type=text],input[type=password],input[type=number],select{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;min-width:0}
 .row input[type=text],.row input[type=password],.row input[type=number]{flex:1 1 160px}
@@ -642,7 +650,8 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
    <div class="row"><label for="fApPw">熱點密碼</label><input type="password" id="fApPw" maxlength="63" autocomplete="off"><button class="b sm" id="btnApPwShow">顯示</button></div>
   </div>
   <div class="wgrp"><div class="wgt">家用 WiFi:飛機連到家裡的路由器</div>
-   <div class="row"><label for="fSsid">家用 WiFi<span class="lsub">名稱(SSID)</span></label><input type="text" id="fSsid" maxlength="32" autocomplete="off" placeholder="手機 WiFi 清單上的名稱,留空 = 只用熱點"></div>
+   <div class="row"><label for="fSsid">家用 WiFi<span class="lsub">名稱(SSID)</span></label><input type="text" id="fSsid" maxlength="32" autocomplete="off" placeholder="手機 WiFi 清單上的名稱,留空 = 只用熱點"><button class="b sm" id="btnScan">搜尋</button></div>
+   <div id="scanList" hidden></div>
    <div class="sub" style="margin:-2px 0 4px 104px">只能連 2.4GHz 的 WiFi(不支援 5GHz),也不支援隱藏名稱的 WiFi.</div>
    <div class="row"><label for="fPw">家用 WiFi<span class="lsub">密碼</span></label><input type="password" id="fPw" maxlength="63" autocomplete="off"><button class="b sm" id="btnPwShow">顯示</button></div>
   </div>
@@ -748,7 +757,7 @@ const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔�
  locked:'起飛流程進行中,設定已鎖定.',range:'超出可調範圍.',order:'曲線的角度必須由水平往外依序排列,不可越過相鄰的點或死區.',
  minmax:'油門下限必須小於上限.',phasetime:'第一段時間必須比總飛行時間短.',takeofftime:'緩啟動加力秒數 + 起飛油門持續時間 + 1 秒過渡,要在第一段持續時間內結束.',
  appwshort:'熱點密碼至少 8 個字.',appwlong:'熱點密碼最多 63 個字.',appwspace:'熱點密碼頭尾不能是空白(看不出來,容易打錯).',appwbad:'熱點密碼只能用英文,數字與鍵盤上的半形符號(不能有中文或全形字).',axis:'朝機頭與朝機背不能是同一軸.',
- escrange:'100% 的脈寬至少要比 0% 大 100 µs.',pwmhz:'PWM 週期要比 100% 脈寬多 300 µs:頻率調低一點,或把 100% 脈寬調小.',twistdeg:'扭轉取消角度設 0(關閉)或至少 15 度.',wagdeg:'搖擺機尾停機角度設 0(關閉)或至少 15 度.',pulserange:'忽高忽低的高油門要比低油門至少高 10%.',gearrange:'舵機行程上限至少要比下限大 100 µs.',geartest:'已送出.',name:'名稱不能空白,也不能有換行等特殊字元.',key:'未知的參數.',value:'數值格式不對.',scope:'風格編號不對.',
+ escrange:'100% 的脈寬至少要比 0% 大 100 µs.',pwmhz:'PWM 週期要比 100% 脈寬多 300 µs:頻率調低一點,或把 100% 脈寬調小.',twistdeg:'扭轉取消角度設 0(關閉)或至少 15 度.',wagdeg:'搖擺機尾停機角度設 0(關閉)或至少 15 度.',scanbusy:'板子正在連線 WiFi,稍等幾秒再搜尋.',scanfail:'無法開始搜尋,請再試一次.',pulserange:'忽高忽低的高油門要比低油門至少高 10%.',gearrange:'舵機行程上限至少要比下限大 100 µs.',geartest:'已送出.',name:'名稱不能空白,也不能有換行等特殊字元.',key:'未知的參數.',value:'數值格式不對.',scope:'風格編號不對.',
  selected:'已設為飛行使用.',copied:'已複製,記得儲存.',defaults:'已回預設,按儲存才會寫入;按放棄變更可以救回.',reverted:'已放棄變更.',
  manualstate:'只有待機或飛行結束時可以手動輸出(倒數中請先取消倒數).',manuallow:'手動輸出要從最低油門開始.',
  calibdirty:'有未儲存的變更,請先儲存(校正用存檔裡的脈寬).',calibproto:'DShot 是數位油門,不需要校正行程.',
@@ -2355,6 +2364,31 @@ function apPreview(){const v=$('fApSfx').value,n=new TextEncoder().encode(v).len
  $('apHint').textContent=`→ ${$('apPrefix').textContent}${v}(後面 ${n}/${AP_SFX_MAX}${over?',太長':''})`}
 $('fApSfx').oninput=apPreview;
 $('btnPwShow').onclick=()=>{const f=$('fPw');f.type=f.type==='password'?'text':'password';$('btnPwShow').textContent=f.type==='password'?'顯示':'隱藏'};
+// 搜尋附近 WiFi(GG 2026-09-24):板子掃描約 2~4 秒,每 0.7 秒問一次結果;點一筆填入名稱.
+// 換了不同的網路就清空密碼並跳到密碼欄(舊密碼一定不對);點回原本的網路密碼保留.
+const scanBars=r=>r>=-55?'▂▄▆█':r>=-67?'▂▄▆':r>=-78?'▂▄':'▂';
+let scanBusy=false;
+$('btnScan').onclick=async()=>{
+ if(scanBusy)return;scanBusy=true;const b=$('btnScan'),box=$('scanList');
+ b.disabled=true;b.textContent='搜尋中…';box.hidden=false;box.innerHTML='<div class="sub">搜尋附近的 WiFi,約 3 秒(手機連線可能停頓一下)…</div>';
+ try{
+  const r=await post('/api/wifi/scan');
+  if(!r.ok){box.innerHTML=`<div class="sub bad">${esc(CODES[r.code]||r.code)}</div>`;return}
+  let res=null;
+  for(let i=0;i<30&&!res;i++){await new Promise(ok=>setTimeout(ok,700));try{const g=await poll('/api/wifi/scan');if(!g.run)res=g}catch(e){}}
+  if(!res||res.n<0){box.innerHTML='<div class="sub bad">搜尋失敗,請再按一次.</div>';return}
+  if(!res.n){box.innerHTML='<div class="sub">附近找不到 2.4GHz 的 WiFi.</div>';return}
+  const cur=$('fSsid').value;box.innerHTML='';
+  for(const [ssid,rssi,ch,open] of res.list){
+   const it=document.createElement('button');it.type='button';it.className=ssid===cur?'on':'';
+   it.innerHTML=`<span class="sn">${esc(ssid)}</span><span class="sq">${open?'開放':'🔒'} ${scanBars(rssi)} ${rssi} dBm</span>`;
+   it.onclick=()=>{const changed=$('fSsid').value!==ssid;$('fSsid').value=ssid;box.hidden=true;
+    if(changed){$('fPw').value='';if(!open)$('fPw').focus()}
+    toast(open?`已選「${ssid}」(開放網路,密碼留空),按下方儲存.`:`已選「${ssid}」,輸入密碼後按下方儲存.`)};
+   box.appendChild(it)}
+ }catch(e){box.innerHTML='<div class="sub bad">連線失敗,請再試一次.</div>'}
+ finally{scanBusy=false;b.disabled=false;b.textContent='搜尋'}
+};
 $('btnApPwShow').onclick=()=>{const f=$('fApPw');f.type=f.type==='password'?'text':'password';$('btnApPwShow').textContent=f.type==='password'?'顯示':'隱藏'};
 let WIFI_APPW='';   // 板上目前存的熱點密碼(儲存時比對有沒有改)
 // 發射功率超過 7 dBm:數值與拉桿下的警告變紅(GG 2026-09-16)
