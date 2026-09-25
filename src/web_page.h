@@ -86,6 +86,7 @@
 // 舊: r3 (2026-09-13) 數字放大,斜坡改稱加力/減力秒數,換段方式(線性/階梯),曲線點分框,觸地提早降落設定,監看頁最近觸地衝擊
 // 舊: r2 (2026-09-13) 加風格頁(六組,命名/選用/複製/回預設,時間軸,斜坡,上下限,補償曲線數值)與設定頁(方位,啟動,降落撞擊,速度,電變脈寬);參數一律 +/- 粗細調
 // 舊: r1 (2026-09-13) 初版:監看頁(飛機側視姿態圖,感測器與控制迴圈狀態),系統頁(WiFi,韌體更新)
+// r94 (2026-09-25) 韌體卡顯示板子種類(普通版/帶螢幕板);選檔時讀身分標記的種類,和這塊板子不同就不讓上傳(錯誤碼 fwboard)
 // r93 (2026-09-25) 安全開關腳位號碼改讀狀態 swp(兩種板子腳位不同),監看頁與拒絕原因 7 說明不再寫死 GPIO21
 // r92 (2026-09-24) 家用 WiFi 名稱旁加「搜尋」:列出附近 WiFi(同名留最強,訊號強到弱,開放/加密),點一筆填入名稱,換網路清空密碼並跳到密碼欄
 // r91 (2026-09-24) 降落減力方式(逐漸減力/忽高忽低)與低高油門,週期,蜂鳴器提醒;時間軸圖畫出忽高忽低;強制停機卡(搖擺機尾角度);
@@ -674,7 +675,7 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
   <div class="live" id="fwPendBox" hidden><span class="pill warn">新韌體待確認</span><span id="fwPendText" class="sub"></span></div>
   <div class="live" id="fwRbBox" hidden><span class="pill bad">已退回舊版</span><span id="fwRbText" class="sub"></span></div>
   <div class="grid g3">
-   <div class="stat"><div class="k">韌體版本</div><div class="v" id="fwVer" style="font-size:14px">--</div></div>
+   <div class="stat"><div class="k">韌體版本</div><div class="v" id="fwVer" style="font-size:14px">--</div><div class="k" id="fwBoard"></div></div>
    <div class="stat"><div class="k">開機時間</div><div class="v" id="uptime">--</div></div>
    <div class="stat"><div class="k">可用記憶體</div><div class="v" id="heap">--</div></div>
   </div>
@@ -748,6 +749,7 @@ const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔�
  txp:'發射功率超出範圍.',savefail:'寫入失敗,請再試一次.',badform:'欄位不齊.',busy:'飛行中不能執行.',
  updated:'更新完成,重新開機中…',updatefail:'更新失敗,檔案可能不對.',reboot:'重新開機中…',
  fwnotours:'這個檔案不是線控飛機控制器的韌體(找不到身分標記),已放棄,目前韌體不變. 2026.09.14.16 和更早的版本沒有標記,不能用上傳的方式安裝.',
+ fwboard:'這個檔案是另一種板子的韌體(普通版 / 帶螢幕板不能互裝),已放棄,目前韌體不變. 帶螢幕板請用檔名有 -oled 的檔案.',
  fwchecking:'檢查中…',fwinstalling:'開始下載安裝,請勿斷電.',fwconfirmed:'新韌體已確認.',fwconfirmfail:'確認失敗,請重新整理網頁.',
  fwbusy:'更新作業進行中,請稍候.',fwpending:'目前的韌體還沒確認,請重新整理網頁後再試.',fwdirty:'有未儲存的設定,請先儲存或放棄(更新會重新開機).',
  fwstale:'版本資訊已經變了,請重新檢查更新.',fwnotnewer:'網站上的版本沒有比目前的新,不需要更新.',nosta:'要連上家用 WiFi(能上網)才能檢查更新,自身熱點模式沒有網路.',nomem:'記憶體不足,請重新開機後再試.',
@@ -1566,10 +1568,12 @@ $('btnWifiKeep').onclick=()=>post('/api/wifi/keep').then(r=>{if(r.ok)toast('已�
 // --- 韌體更新(GG 2026-09-14):板子自己下載,新韌體由開著的網頁自動確認 ---
 // 狀態 fw:[更新中,待確認,確認剩餘秒數,檢查狀態(0 未檢查/1 檢查中/2 已讀到/3 下載中/4 完成/5 失敗),進度,已退回]
 let FW=null,fwConfirmAt=0,fwArm=0;
+const BOARD_NAME={MINI:'普通版',OLED:'帶螢幕板'};   // 韌體身分標記裡的板子種類(GG 2026-09-25)
 async function fwLoad(){try{FW=await poll('/api/fw');fwRender()}catch(e){}}
 function fwRender(){
  const f=FW;if(!f)return;
  $('fwVer').textContent=f.ver;
+ $('fwBoard').textContent=BOARD_NAME[f.board]||f.board||'';
  $('fwPendBox').hidden=!f.pending;
  $('fwPendText').textContent=f.remain>=0?`網頁連上就會自動確認(不用按按鈕);${Math.ceil(f.remain)} 秒內沒有網頁連上會退回舊版. 確認前不能起飛.`:'等待 WiFi 就緒後開始計時. 確認前不能起飛.';
  $('fwRbBox').hidden=!f.rb;
@@ -2411,20 +2415,25 @@ $('btnTiming').onclick=()=>post('/api/timing/reset').catch(()=>{});
 // 選好檔案先在瀏覽器找韌體身分標記(板子上傳時也會再檢查一次):不是這個控制器的韌體就不讓上傳,是的話顯示版本新舊.
 // 比對字串拆開寫:網頁本身也在韌體裡,整段連在一起會被當成標記的開頭(板子掃描會因為後面不是版本號而略過,拆開更單純).
 const FW_ID_PREFIX='LPFWID1:'+'ESP32C3-lineplane|';
-let fwFileVer=null;   // null = 還沒檢查,'' = 找不到標記
+let fwFileVer=null,fwFileBoardBad=false;   // null = 還沒檢查,'' = 找不到標記;種類不同也擋
 function fwVerCmp(a,b){const x=a.split('.').map(Number),y=b.split('.').map(Number);
  for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1}return 0}
 $('fwFile').onchange=async()=>{
- const f=$('fwFile').files[0];fwFileVer=null;$('fwMsg').textContent='';if(!f)return;
+ const f=$('fwFile').files[0];fwFileVer=null;fwFileBoardBad=false;$('fwMsg').textContent='';if(!f)return;
  try{
-  const b=new Uint8Array(await f.arrayBuffer()),p=[...FW_ID_PREFIX].map(c=>c.charCodeAt(0));let ver='';
+  const b=new Uint8Array(await f.arrayBuffer()),p=[...FW_ID_PREFIX].map(c=>c.charCodeAt(0));let ver='',board='';
   for(let i=b.indexOf(p[0]);i>=0&&!ver;i=b.indexOf(p[0],i+1)){
    let k=1;while(k<p.length&&b[i+k]===p[k])k++;if(k<p.length)continue;
    let j=i+p.length,v='';while(j<b.length&&v.length<23&&((b[j]>=48&&b[j]<=57)||b[j]===46))v+=String.fromCharCode(b[j++]);
-   if(v&&b[j]===124)ver=v;
+   if(v&&b[j]===124){
+    ver=v;let bd='';j++;while(j<b.length&&bd.length<7&&b[j]>=65&&b[j]<=90)bd+=String.fromCharCode(b[j++]);
+    board=b[j]===124&&bd?bd:'MINI';   // 2026.09.25 以前的檔案沒寫種類 = 普通版
+   }
   }
   fwFileVer=ver;
   if(!ver){msg('fwMsg',false,'fwnotours');return}
+  if(FW&&FW.board&&board!==FW.board){fwFileBoardBad=true;
+   msg('fwMsg',false,`這個檔案是「${BOARD_NAME[board]||board}」的韌體,這塊板子是「${BOARD_NAME[FW.board]||FW.board}」,不能互裝.`);return}
   const cur=$('fwVer').textContent,c=fwVerCmp(ver,cur);
   $('fwMsg').className='msg '+(c<0?'bad':'ok');
   $('fwMsg').textContent=c>0?`檔案版本 ${ver},比目前的 ${cur} 新,可以上傳更新.`:c===0?`檔案版本 ${ver},和目前相同.`:`檔案版本 ${ver},比目前的 ${cur} 舊:上傳後會退回舊版.`;
@@ -2433,6 +2442,7 @@ $('fwFile').onchange=async()=>{
 $('btnFw').onclick=()=>{
  const f=$('fwFile').files[0];if(!f){msg('fwMsg',false,'請先選擇檔案.');return}
  if(fwFileVer===''){msg('fwMsg',false,'fwnotours');return}
+ if(fwFileBoardBad){msg('fwMsg',false,'fwboard');return}
  const fd=new FormData();fd.append('firmware',f,f.name);
  const x=new XMLHttpRequest(),pg=$('fwProg');pg.hidden=false;pg.value=0;$('btnFw').disabled=true;
  x.upload.onprogress=e=>{if(e.lengthComputable)pg.value=e.loaded*100/e.total};

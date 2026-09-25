@@ -1,4 +1,5 @@
-// 版本流水號: r6 (2026-09-14) 韌體身分標記 FW_ID_MARK 與上傳檔案掃描(網頁上傳拿錯成別的 ESP32-C3 程式時擋下)
+// 版本流水號: r7 (2026-09-25) 身分標記加板子種類(MINI/OLED);板子下載也掃描標記,種類不同(fwboard)或沒有標記就不切換
+// 舊: r6 (2026-09-14) 韌體身分標記 FW_ID_MARK 與上傳檔案掃描(網頁上傳拿錯成別的 ESP32-C3 程式時擋下)
 // 舊: r5 (2026-09-14) 修正:網站版本和目前「不同」就當成新版(板子 .12,網站 .11 也說有新版本,GG 發現).
 //   改成逐段比數字,只有網站版本比較新才可以下載安裝;狀態加 remoteNewer
 // 舊: r4 (2026-09-14) manifest 的 file 可以是「一層資料夾/檔名」(公開專案韌體檔集中到 firmware/,GG)
@@ -51,17 +52,23 @@ static uint8_t dlBuf[2048];
 
 // --- 韌體身分標記 ------------------------------------------------------------------
 // 標記本身就是比對用的字串(被掃描程式引用,連結器不會丟掉),放在韌體檔的唯讀資料段,檔案裡是連續的原始位元組.
-__attribute__((used)) static const char FW_ID_MARK[] = FW_ID_PREFIX FW_VERSION "|";
+__attribute__((used)) static const char FW_ID_MARK[] = FW_ID_PREFIX FW_VERSION "|" FW_BOARD_NAME "|";
 static const size_t FW_ID_PREFIX_LEN = sizeof(FW_ID_PREFIX) - 1;
 static size_t idMatch = 0;
 static char idVer[24] = "";
 static size_t idVerLen = 0;
+static bool idVerDone = false;    // 版本讀完,接著讀種類
+static char idBoard[8] = "";
+static size_t idBoardLen = 0;
 static bool idFound = false;
 
 void fwIdScanReset() {
   idMatch = 0;
   idVerLen = 0;
   idVer[0] = 0;
+  idVerDone = false;
+  idBoardLen = 0;
+  idBoard[0] = 0;
   idFound = false;
 }
 
@@ -72,9 +79,18 @@ void fwIdScanFeed(const uint8_t *data, size_t len) {
       if (c == FW_ID_MARK[idMatch]) ++idMatch;
       else idMatch = c == FW_ID_MARK[0] ? 1 : 0;
       idVerLen = 0;
+    } else if (idVerDone) {
+      // 種類:大寫英數到下一個 |. 舊檔「版本|」後面不是種類(字串結尾 0):當普通版
+      if (c >= 'A' && c <= 'Z' && idBoardLen < sizeof(idBoard) - 1) {
+        idBoard[idBoardLen++] = c;
+        continue;
+      }
+      idBoard[c == '|' ? idBoardLen : 0] = 0;
+      if (!idBoard[0]) strlcpy(idBoard, FW_BOARD_MINI, sizeof(idBoard));
+      idFound = true;
     } else if (c == '|' && idVerLen > 0) {
       idVer[idVerLen] = 0;
-      idFound = true;
+      idVerDone = true;
     } else if (((c >= '0' && c <= '9') || c == '.') && idVerLen < sizeof(idVer) - 1) {
       idVer[idVerLen++] = c;
     } else {
@@ -86,6 +102,8 @@ void fwIdScanFeed(const uint8_t *data, size_t len) {
 }
 
 const char *fwIdScanVersion() { return idFound ? idVer : nullptr; }
+const char *fwIdScanBoard() { return idFound ? idBoard : nullptr; }
+bool fwIdScanBoardOk() { return idFound && strcmp(idBoard, FW_BOARD_NAME) == 0; }
 
 static void setError(const char *code) {
   LOCKED(strlcpy(st.err, code, sizeof(st.err)); st.check = FWC_ERROR);
@@ -391,6 +409,7 @@ static void doInstall() {
   mbedtls_sha256_init(&sha);
   mbedtls_sha256_starts(&sha, 0);
   NetworkClient *stream = http.getStreamPtr();
+  fwIdScanReset();   // 板子種類也要對(manifest 放錯檔案時擋下)
   uint32_t got = 0, lastDataMs = millis();
   const char *err = nullptr;
   while (got < size) {
@@ -404,6 +423,7 @@ static void doInstall() {
         break;
       }
       mbedtls_sha256_update(&sha, dlBuf, r);
+      fwIdScanFeed(dlBuf, r);
       got += r;
       lastDataMs = millis();
       LOCKED(st.progress = (uint8_t)((uint64_t)got * 100 / size));
@@ -429,9 +449,14 @@ static void doInstall() {
     if (strcmp(hex, remoteSha) != 0) {
       Serial.printf("FW sha mismatch got %s\n", hex);
       err = "sha";
+    } else if (!fwIdScanVersion()) {
+      err = "fwnotours";
+    } else if (!fwIdScanBoardOk()) {
+      Serial.printf("FW board mismatch file=%s this=%s\n", fwIdScanBoard(), FW_BOARD_NAME);
+      err = "fwboard";
     }
   }
-  // 大小或 SHA-256 不符:不切換開機分區,舊韌體照常
+  // 大小,SHA-256,身分標記或板子種類不符:不切換開機分區,舊韌體照常
   if (err || !Update.end()) {
     if (!err) err = "flashend";
     Update.abort();

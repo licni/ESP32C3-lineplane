@@ -1,4 +1,5 @@
-// 版本流水號: r31 (2026-09-24) 搜尋附近 WiFi:POST /api/wifi/scan 開始,GET /api/wifi/scan 取結果
+// 版本流水號: r32 (2026-09-25) 狀態加 swp(安全開關腳位);GET /api/buzz;/api/fw 加 board;網頁上傳另一種板子的韌體擋下(fwboard)
+// 舊: r31 (2026-09-24) 搜尋附近 WiFi:POST /api/wifi/scan 開始,GET /api/wifi/scan 取結果
 // 舊: r30 (2026-09-24) 狀態 f.lp:降落忽高忽低提醒中
 // 舊: r29 (2026-09-15) 安全審查:/api/start 手動輸出/校正中回 startbusy;/api/cancel 不在等待放穩/倒數回 cancelstate
 // 舊: r28 (2026-09-15) 套用備份碼可帶 sel/sec 取消不要的項目;檢查/套用回 amask,asec(實際套用),names(碼裡各組名稱)
@@ -555,6 +556,14 @@ static void handleUpdateUpload() {
       fwUpdateFlashed(false);
       return;
     }
+    if (ver && !fwIdScanBoardOk() && !Update.hasError()) {
+      // 另一種板子的韌體(普通版 / 帶螢幕板):不切換開機分區
+      Serial.printf("WEB OTA refused: board %s, this board %s\n", fwIdScanBoard(), FW_BOARD_NAME);
+      Update.abort();
+      uploadErr = "fwboard";
+      fwUpdateFlashed(false);
+      return;
+    }
     if (Update.end(true)) {
       strlcpy(uploadVer, ver, sizeof(uploadVer));
       Serial.printf("WEB OTA done %u bytes, version %s\n", (unsigned)up.totalSize, uploadVer);
@@ -594,7 +603,7 @@ static void handleFwGet() {
   fwUpdateGetStatus(s);
   String j;
   j.reserve(900);
-  j = "{\"ver\":\"" FW_VERSION "\",\"build\":\"";
+  j = "{\"ver\":\"" FW_VERSION "\",\"board\":\"" FW_BOARD_NAME "\",\"build\":\"";
   j += BUILD_TEXT;
   j += "\",\"busy\":" + String(s.busy ? 1 : 0) + ",\"pending\":" + String(s.pending ? 1 : 0) + ",\"remain\":" + String(s.confirmRemainS, 0) +
        ",\"rb\":" + String(s.rolledBack ? 1 : 0) + ",\"rbver\":\"" + jsonText(s.rolledBackFrom) + "\",\"check\":" + String(s.check) +

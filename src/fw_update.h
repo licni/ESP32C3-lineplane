@@ -1,10 +1,12 @@
-// 版本流水號: r4 (2026-09-14) 韌體身分標記 FW_ID_PREFIX + 上傳檔案掃描(fwIdScan*):網頁上傳找不到標記就不切換
+// 版本流水號: r5 (2026-09-25) 身分標記加板子種類(MINI/OLED),上傳與下載種類不同就不切換
+// 舊: r4 (2026-09-14) 韌體身分標記 FW_ID_PREFIX + 上傳檔案掃描(fwIdScan*):網頁上傳找不到標記就不切換
 // 舊: r3 (2026-09-14) 版本逐段比數字(fwVersionCompare),狀態加 remoteNewer;板子下載只裝比目前新的版本
 // 舊: r2 (2026-09-14) 確認時限 WiFi 就緒後 300 → 60 秒,開機後上限 420 → 240 秒(GG)
 // 舊: r1 (2026-09-14) 初版:更新鎖,新韌體確認與自動退回,板子自己下載更新(公開 GitHub 專案)
 #pragma once
 #include <Arduino.h>
 #include "version.h"
+#include "pins_config.h"
 // ============================================================================
 // 韌體更新(GG 2026-09-14):板子送人後,對方在網頁「檢查更新」就能刷 GG 發布的新版.
 //
@@ -32,9 +34,21 @@ const size_t FW_NOTES_MAX = 400;                // 更新說明最長位元組(U
 // 允許上傳比目前舊的版本(退回舊版). 2026.09.14.16 和更早發布的版本沒有標記,不能用網頁上傳.
 // 開頭大寫 L 在標記裡只出現一次,掃描比對失敗時不必回溯.
 #define FW_ID_PREFIX "LPFWID1:ESP32C3-lineplane|"
+// 板子種類(GG 2026-09-25):標記在版本後面接「種類|」,完整是「LPFWID1:ESP32C3-lineplane|版本|OLED|」.
+// 舊版板子只讀到版本就停,不受影響;2026.09.25 以前的檔案沒有種類,一律當普通版(那時只有普通版).
+// 網頁上傳與板子下載都要種類相同才切換:普通版的檔案裝到帶螢幕板螢幕不亮,反過來也不對.
+#define FW_BOARD_MINI "MINI"
+#define FW_BOARD_OLED "OLED"
+#if BOARD_C3_OLED
+#define FW_BOARD_NAME FW_BOARD_OLED
+#else
+#define FW_BOARD_NAME FW_BOARD_MINI
+#endif
 void fwIdScanReset();
 void fwIdScanFeed(const uint8_t *data, size_t len);
 const char *fwIdScanVersion();   // 找到標記回檔案的版本字串,沒找到回 nullptr
+const char *fwIdScanBoard();     // 找到標記後回檔案的板子種類(沒寫種類的舊檔回 FW_BOARD_MINI)
+bool fwIdScanBoardOk();          // 找到標記,而且種類和這塊板子相同
 
 enum FwCheckState : uint8_t {
   FWC_IDLE = 0,     // 還沒檢查
