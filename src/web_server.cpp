@@ -31,6 +31,7 @@
 #include "web_server.h"
 #include <WebServer.h>
 #include <Update.h>
+#include "buzzer.h"
 #include "control.h"
 #include "esc_output.h"
 #include "esc_service.h"
@@ -39,6 +40,7 @@
 #include "flight.h"
 #include "fw_update.h"
 #include "gear.h"
+#include "pins_config.h"
 #include "settings.h"
 #include "settings_backup.h"
 #include "test_hooks.h"
@@ -115,7 +117,7 @@ static void handleStatus() {
            "\"f\":{\"s\":%u,\"ss\":%.1f,\"cd\":%.1f,\"t\":%.1f,\"base\":%.1f,\"comp\":%.1f,\"out\":%.1f,\"ph\":%u,\"tb\":%d,"
            "\"lc\":%u,\"er\":%u,\"rj\":%u,\"rja\":%ld,\"da\":%u,\"dg\":%.2f,\"dga\":%ld,\"ge\":%d,\"au\":%d,\"fp\":%u,\"set\":%.1f,\"tw\":%.0f,\"gb\":%.1f,\"aw\":%d,\"arm\":%d,\"al\":%d,\"awl\":%ld,\"lp\":%d},"
            "\"man\":%d,\"cal\":[%u,%.1f,%d,%d,%.0f],\"dsh\":%ld,\"proto\":%u,\"hz\":%u,\"evn\":%lu,\"rpm\":[%d,%lu,%lu,%lu,%lu,%lu,%lu,%ld],"
-           "\"sim\":%d,\"cap\":[%d,%lu,%lu,%lu,%lu,%lu,%ld],\"gear\":[%.0f,%u,%d],\"wt\":[%.0f,%d,%.0f,%u],\"fw\":[%d,%d,%.0f,%u,%u,%d],\"asoff\":%d}",
+           "\"sim\":%d,\"cap\":[%d,%lu,%lu,%lu,%lu,%lu,%ld],\"gear\":[%.0f,%u,%d],\"wt\":[%.0f,%d,%.0f,%u],\"fw\":[%d,%d,%.0f,%u,%u,%d],\"asoff\":%d,\"swp\":%u}",
            t.pitchDeg, t.rawPitchDeg, t.rollDeg, t.accMagG, t.gyroDps[0], t.gyroDps[1], t.gyroDps[2], t.biasDps[0],
            t.biasDps[1], t.biasDps[2], t.still ? 1 : 0, t.stillSeconds, imu, t.escUs, (unsigned long)t.maxExecUs,
            (unsigned long)t.maxLateMs, (unsigned long)(millis() / 1000), (unsigned long)ESP.getFreeHeap(),
@@ -138,7 +140,7 @@ static void handleStatus() {
            (unsigned long)cap.minHighUs, (unsigned long)cap.maxHighUs, cap.edgeAgeMs == UINT32_MAX ? -1L : (long)cap.edgeAgeMs,
            gearPosition() * 100.0f, (unsigned)gearCurrentUs(), controlGearTesting() ? 1 : 0, wtTxp, wtBoot ? 1 : 0, wtBootRemain,
            (unsigned)wifiLiveTxPower(), fw.busy ? 1 : 0, fw.pending ? 1 : 0, fw.confirmRemainS, (unsigned)fw.check,
-           (unsigned)fw.progress, fw.rolledBack ? 1 : 0, sharedSettings.armSwitchOff ? 1 : 0);
+           (unsigned)fw.progress, fw.rolledBack ? 1 : 0, sharedSettings.armSwitchOff ? 1 : 0, (unsigned)PIN_ARM_SWITCH);
   server.send(200, "application/json", buf);
 }
 
@@ -671,6 +673,11 @@ static void registerRoutes() {
   server.on("/api/fw/check", HTTP_POST, handleFwCheck);
   server.on("/api/fw/install", HTTP_POST, handleFwInstall);
   server.on("/api/fw/confirm", HTTP_POST, handleFwConfirm);
+  server.on("/api/buzz", HTTP_GET, []() {   // 蜂鳴器診斷(同序列指令 buzz)
+    char buf[96];
+    buzzerDebug(buf, sizeof(buf));
+    server.send(200, "text/plain", buf);
+  });
   server.onNotFound([]() { server.send(404, "text/plain", "Not found"); });
 }
 

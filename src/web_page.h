@@ -86,6 +86,7 @@
 // 舊: r3 (2026-09-13) 數字放大,斜坡改稱加力/減力秒數,換段方式(線性/階梯),曲線點分框,觸地提早降落設定,監看頁最近觸地衝擊
 // 舊: r2 (2026-09-13) 加風格頁(六組,命名/選用/複製/回預設,時間軸,斜坡,上下限,補償曲線數值)與設定頁(方位,啟動,降落撞擊,速度,電變脈寬);參數一律 +/- 粗細調
 // 舊: r1 (2026-09-13) 初版:監看頁(飛機側視姿態圖,感測器與控制迴圈狀態),系統頁(WiFi,韌體更新)
+// r93 (2026-09-25) 安全開關腳位號碼改讀狀態 swp(兩種板子腳位不同),監看頁與拒絕原因 7 說明不再寫死 GPIO21
 // r92 (2026-09-24) 家用 WiFi 名稱旁加「搜尋」:列出附近 WiFi(同名留最強,訊號強到弱,開放/加密),點一筆填入名稱,換網路清空密碼並跳到密碼欄
 // r91 (2026-09-24) 降落減力方式(逐漸減力/忽高忽低)與低高油門,週期,蜂鳴器提醒;時間軸圖畫出忽高忽低;強制停機卡(搖擺機尾角度);
 //   結束原因與事件:長按安全開關,搖擺機尾強制停機;錯誤碼 pulserange,wagdeg;降落中狀態列顯示忽高忽低提醒
@@ -494,7 +495,7 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
   <div class="grid sensor-grid">
    <div class="stat"><div class="k">加速度大小</div><div class="v" id="acc">--</div></div>
    <div class="stat"><div class="k">靜止</div><div class="v" id="still">--</div></div>
-   <div class="stat"><div class="k">安全開關(GPIO21)</div><div class="v" id="armSw">--</div></div>
+   <div class="stat"><div class="k">安全開關(GPIO<span id="armSwPin">--</span>)</div><div class="v" id="armSw">--</div></div>
    <div class="stat"><div class="k">電變輸出</div><div class="v" id="esc">--</div></div>
    <div class="stat"><div class="k">迴圈 最長執行 / 延遲</div><div class="v" id="timing">--</div></div>
    <div class="stat"><div class="k">最近觸地衝擊</div><div class="v" id="impact">--</div></div>
@@ -1646,6 +1647,7 @@ function renderStatus(s){
  $('plane').setAttribute('transform',`rotate(${noseRightNow?-s.p:s.p})`);
  $('acc').textContent=s.a.toFixed(2)+' g';
  $('still').textContent=s.st?`是(${s.sts.toFixed(1)} 秒)`:'否';
+ $('armSwPin').textContent=s.swp;
  {const e=$('armSw');e.textContent=(s.f.arm?'已按下':'沒按下')+(s.asoff?'(已停用)':'');e.style.color=s.asoff?'var(--bad)':s.f.arm?'var(--ok)':'var(--mute)'}
  {const t=rpmText(s);$('esc').textContent=(s.proto?`DShot ${s.dsh}`:s.esc+' µs')+(t?(t.ok?` · ${t.rpm} RPM`:' · 轉速收不到'):'')}
  setAxes('gyro',s.g,1);
@@ -1724,7 +1726,7 @@ function evText(e){
   case 4:{const lim=VALS?VALS.shared.startLevel:'?';
    if(arg===3)return {c:'bad',m:`拒絕啟動:${REJ_TEXT[3]}(機頭 ${s1(a)}°,滾轉 ${s1(b)}°,限制 ±${lim}°)`,h:'把飛機放平再推啟動手勢. 停放時機頭本來就朝上的話,到設定頁把「起飛前水平限制」調大.'};
    if(arg===4)return {c:'bad',m:`${REJ_TEXT[4]}(機頭 ${s1(a)}°,滾轉 ${s1(b)}°,限制 ±${lim}°)`,h:'飛機放平並維持 1 秒就會開始倒數.'};
-   if(arg===7)return {c:'bad',m:'拒絕啟動:安全開關沒有按下',h:'GPIO21 的微動開關要接地(按下)才能開始起飛程序. 沒接開關或線斷掉都算沒按下.'};
+   if(arg===7)return {c:'bad',m:'拒絕啟動:安全開關沒有按下',h:`GPIO${STATUS?STATUS.swp:'?'} 的微動開關要接地(按下)才能開始起飛程序. 沒接開關或線斷掉都算沒按下.`};
    if(arg===8)return {c:'bad',m:REJ_TEXT[8],h:'按下安全開關並維持 1 秒就會開始倒數.'};
    if(arg===9)return {c:'bad',m:`拒絕啟動:撞擊斷電後推飛機不會啟動(推力 ${s2(a)} g)`,h:'撞機後撿飛機,扶正時很容易推到. 要再飛請按網頁「開始起飛程序」,或拔電再接電.'};
    return {c:'bad',m:'拒絕啟動:'+(REJ_TEXT[arg]||arg),h:''}}

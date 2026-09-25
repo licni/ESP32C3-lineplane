@@ -29,7 +29,8 @@
 - **編譯,燒錄,OTA,序列監控全部由 Claude 用 PlatformIO 操作**. GG 不用 Arduino IDE.
   pio 路徑:`$env:USERPROFILE\.platformio\penv\Scripts\pio.exe`.
 - GG 開發期間全程不裝螺旋槳,燒錄與測試時不需要提醒拆槳.
-- 開發板在 **COM20**(GG 確認是測試用板,可直接燒). 出現別的 COM 埠時先讀序列輸出確認再燒.
+- **GG 有很多片開發板,COM 埠號不固定**(GG 2026-09-25:不要糾結哪個 COM port,檢查正確就好). 燒錄前列出序列埠找 ESP32-C3(VID 303A),
+  讀序列輸出確認是本專案(或可蓋掉的測試板)就直接燒,不用問也不用在回報交代埠號變化. 下面指令的 COM20 換成實際埠號.
   開發板的 MPU6050 接在 **GPIO5/6**(GG 2026-09-14 從 GPIO0/1 改線,和使用者的板子與參考專案相同).
   原本 GPIO5 ↔ GPIO4 的測試跳線已拔掉:序列指令 pwmcap(量電變脈寬)/escemu(模擬電變)韌體直接擋下(會搶走 I2C 腳位),
   用到它們的測試(t0,t2,t3,t5,t6,t9,rpm_emulator_test,gear_test_nosettings)要換一隻腳重新跳線並改 test_hooks/esc_output 腳位才能完整跑.

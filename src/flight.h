@@ -1,4 +1,5 @@
-// 版本流水號: r15 (2026-09-24) 強制停機結束原因 END_FORCE_SWITCH(長按安全開關)/ END_FORCE_WAG(搖擺機尾);狀態加 landPulse,landBuzz
+// 版本流水號: r16 (2026-09-25) 狀態加 phaseRamp(往第二段爬),landingWarn(降落減力中)給螢幕顯示
+// 舊: r15 (2026-09-24) 強制停機結束原因 END_FORCE_SWITCH(長按安全開關)/ END_FORCE_WAG(搖擺機尾);狀態加 landPulse,landBuzz
 // 舊: r14 (2026-09-15) 輸入加 escFail(電變輸出掛載失敗),拒絕原因 10 REJECT_ESC_OUTPUT
 // 舊: r13 (2026-09-15) 狀態加 takeoffBoost(起飛油門階段)
 // 舊: r12 (2026-09-14) 安全開關等待上限(GG):超過設定分鐘數沒按就取消(END_ARM_TIMEOUT);輸入加測試覆寫秒數,狀態加剩餘秒數
@@ -108,6 +109,8 @@ struct FlightStatus {
   float outPct;
   uint8_t phase;             // 1 = 第一段,2 = 第二段(換段過渡中也算 2)
   bool takeoffBoost;         // 在起飛油門階段(維持中或換回第一段的過渡中)
+  bool phaseRamp;            // 油門正從第一段往第二段爬(漸進換段的過渡中,或分散換段的第一段)
+  bool landingWarn;          // 降落中還在減力(提醒)階段;false = 減力走完,等觸地
   LandingCause landingCause;
   FlightEndReason endReason;
   RejectReason rejectReason;

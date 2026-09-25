@@ -1,4 +1,5 @@
-// 版本流水號: r25 (2026-09-24) 強制停機(GG):馬達運轉中長按安全開關 2 秒(馬達啟動後要先看到放開過),或左右搖擺機尾 3 個來回
+// 版本流水號: r26 (2026-09-25) 狀態快照加 phaseRamp(往第二段爬),landingWarn(降落減力中)給帶螢幕板顯示
+// 舊: r25 (2026-09-24) 強制停機(GG):馬達運轉中長按安全開關 2 秒(馬達啟動後要先看到放開過),或左右搖擺機尾 3 個來回
 //   (每次擺動超過設定角度,間隔 1.2 秒內)→ 關馬達,之後至少 2 秒(或扭轉取消的封鎖秒數)不接受手勢;
 //   降落減力方式忽高忽低:減力秒數內在低/高油門間方波切換,走完換降落油門;減力期間可選蜂鳴器提醒
 // 舊: r24 (2026-09-15) 安全審查第二次:非待機狀態一律清掉手勢請求(飛行中收到的不會在停止後被受理);馬達停止後 2 秒不接受手勢;
@@ -826,7 +827,15 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
   status.compPct = motorState(state) ? lastComp : 0;
   status.outPct = motorState(state) ? lastOut : 0;
   status.phase = phase;
-  status.takeoffBoost = (state == FS_TAKEOFF || state == FS_FLYING) && inTakeoffBoost((now - motorStartMs) / 1000.0f);
+  {
+    const float tm = (now - motorStartMs) / 1000.0f;
+    const bool powered = state == FS_TAKEOFF || state == FS_FLYING;
+    status.takeoffBoost = powered && inTakeoffBoost(tm);
+    status.phaseRamp = powered && !status.takeoffBoost &&
+                       (fp.phaseMode == PHASE_SPREAD ? phase == 1
+                        : fp.phaseMode == PHASE_STEP_RAMP && phase == 2 && tm < fp.phase1Sec + fp.phaseRampSec);
+    status.landingWarn = state == FS_LANDING && landingElapsed < fp.landingRampSec;
+  }
   status.landingCause = landingCause;
   status.endReason = endReason;
   status.rejectReason = rejectReason;

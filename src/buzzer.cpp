@@ -3,6 +3,7 @@
 // 舊: r1 (2026-09-14) 初版(試做):開機就緒滴滴,等安全開關長音,倒數越近越急促,最後 3 秒連續長音到馬達啟動
 #include "buzzer.h"
 #include "pins_config.h"
+#include "driver/gpio.h"
 
 static const uint16_t READY_BEEP_MS = 150;     // 滴滴:響 150 停 150 響 150
 static const uint16_t READY_GAP_MS = 150;
@@ -99,4 +100,10 @@ void buzzerUpdate(uint32_t now, const FlightStatus &f, uint8_t mode) {
 
   lastState = f.state;
   writeOut(on, mode);
+}
+
+void buzzerDebug(char *out, size_t n) {
+  gpio_input_enable((gpio_num_t)PIN_BUZZER);   // 只開輸入緩衝讀電位,不影響輸出
+  snprintf(out, n, "buzz mode=%u attached=%d on=%d duty=%lu pin=%d", outputMode, attached, outOn,
+           (unsigned long)(attached ? ledcRead(PIN_BUZZER) : 0), gpio_get_level((gpio_num_t)PIN_BUZZER));
 }

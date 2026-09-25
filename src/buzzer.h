@@ -15,3 +15,4 @@
 enum BuzzerMode : uint8_t { BUZZER_ACTIVE_HIGH = 0, BUZZER_ACTIVE_LOW = 1, BUZZER_PASSIVE = 2 };
 bool buzzerBegin(uint8_t mode);   // 載入設定後先靜音,回傳硬體 PWM 是否就緒
 void buzzerUpdate(uint32_t nowMs, const FlightStatus &f, uint8_t mode);
+void buzzerDebug(char *out, size_t n);   // 序列指令 buzz:模式,PWM 是否掛上,duty 讀回,腳位實際電位

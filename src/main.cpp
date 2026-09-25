@@ -1,4 +1,5 @@
-// 版本流水號: r19 (2026-09-14) 載入設定後蜂鳴器腳位依設定的電位先設成不響(buzzerBegin)
+// 版本流水號: r20 (2026-09-25) 帶螢幕板 OLED(displayBegin/displayTick);開機印板子種類與安全開關腳位;序列指令 buzz(蜂鳴器診斷)
+// 舊: r19 (2026-09-14) 載入設定後蜂鳴器腳位依設定的電位先設成不響(buzzerBegin)
 // 舊: r18 (2026-09-14) 開機檢查設定備份碼的編碼表(backupSelfCheck)
 // 舊: r17 (2026-09-14) 序列指令 armwait <秒>|off(測試用縮短安全開關等待上限,軟體重開保留)
 // 舊: r16 (2026-09-14) 感測器改 GPIO5/6 後擋 GPIO5 測試指令 pwmcap/escemu;開機印 I2C 腳位;
@@ -36,6 +37,7 @@
 #include "settings.h"
 #include "settings_backup.h"
 #include "buzzer.h"
+#include "display.h"
 #include "flight.h"
 #include "fw_update.h"
 #include "wifi_manager.h"
@@ -197,6 +199,10 @@ static void handleSerial() {
       return;
     } else testPwmCapStart();
     Serial.println(F("OK pwmcap"));
+  } else if (line == "buzz") {
+    char buf[96];
+    buzzerDebug(buf, sizeof(buf));
+    Serial.println(buf);
   } else if (line == "pwm") {
     PwmCapStats c;
     testPwmCapGet(c);
@@ -413,6 +419,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   Serial.begin(115200);
   if (!buzzerOk) Serial.println(F("ERR buzzer PWM unavailable (passive buzzer silent)"));
+  Serial.printf("board %s, arm switch GPIO%u\n", BOARD_C3_OLED ? "C3 OLED" : "C3 SuperMini", PIN_ARM_SWITCH);
 
   const bool i2cWasStuck = i2cBusRecover(PIN_I2C_SDA, PIN_I2C_SCL);   // 上次在感測器傳資料到一半時重開,匯流排會卡住
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
@@ -422,6 +429,7 @@ void setup() {
   const bool imuOk = imuBegin();
   if (i2cWasStuck) Serial.println(F("I2C bus was stuck at boot (SDA low), recovered"));
   Serial.println(imuOk ? F("MPU OK") : F("ERR MPU"));
+  displayBegin();   // 帶螢幕板:OLED 與感測器共用 I2C(普通版空函式)
   {
     static const char *const protoNames[] = {"PWM", "DShot150", "DShot300"};
     Serial.printf("ESC protocol %s %uHz\n", protoNames[escActiveProtocol() <= 2 ? escActiveProtocol() : 0], escActivePwmHz());
@@ -448,6 +456,7 @@ void loop() {
   webTick();
   fwUpdateTick(millis());
   escCalibTick(millis());   // 校正旗標時效
+  displayTick(millis());
   static uint32_t lastPrintMs = 0;
   const uint32_t now = millis();
   if (telemetryPrint && now - lastPrintMs >= 200) {
