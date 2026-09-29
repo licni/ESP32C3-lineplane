@@ -1,4 +1,6 @@
-# 版本流水號: r7 (2026-09-25) 兩種板子(GG):每次發布各編一次普通版與帶螢幕板(PLATFORMIO_BUILD_FLAGS=-DBOARD_C3_OLED=0/1),
+# 版本流水號: r8 (2026-09-25) 全新板子用的完整燒錄檔(GG):平台每次編譯產生 firmware.factory.bin(開機程式+分割表+韌體,從 0x0 燒),
+#   存成 lineplane-full-版本.bin / lineplane-full-版本-oled.bin,只附在 Release(不進 firmware/,首頁與資料夾不變長)
+# 舊: r7 (2026-09-25) 兩種板子(GG):每次發布各編一次普通版與帶螢幕板(PLATFORMIO_BUILD_FLAGS=-DBOARD_C3_OLED=0/1),
 #   韌體檔 firmware-版本.bin / firmware-版本-oled.bin,manifest.json / manifest-oled.json,Release 附兩個檔;每天一版兩種各自清
 # 舊: r6 (2026-09-14) 發布的版本號要比公開專案上的新(板子 fw_update r5 起只裝比目前新的版本,沒比較新的發布板子收不到)
 # 舊: r5 (2026-09-14) 修正 CHANGELOG 讀取:版本號只抓到第一個字,當天舊條目沒刪掉且標題壞成「## 2()」
@@ -47,6 +49,7 @@ VARIANTS = [
     ("MINI", "manifest.json", "", "-DBOARD_C3_OLED=0"),
     ("OLED", "manifest-oled.json", "-oled", "-DBOARD_C3_OLED=1"),
 ]
+FULL_PREFIX = "lineplane-full"   # 完整燒錄檔名 lineplane-full-版本[-oled].bin,放 firmware_release/full/(不進 git)
 BIN_RE = re.compile(r"^firmware-(\d{4}\.\d{2}\.\d{2}\.\d+)(-oled)?\.bin$")
 PIO = os.path.join(os.environ.get("USERPROFILE", ""), ".platformio", "penv", "Scripts", "pio.exe")
 VER_RE = re.compile(r"^(\d{4})\.(\d{2})\.(\d{2})\.(\d+)$")
@@ -136,8 +139,10 @@ def release(ver, day_text, assets):
     """GitHub Release「韌體 版本」,說明 = 當天合併的修改,附兩種板子的韌體檔. 已存在就更新說明並補上檔案."""
     tag = f"v{ver}"
     body = (day_text + "\n\n---\n板子網頁「系統 → 韌體更新 → 檢查更新」即可更新(兩種板子各自抓對應的檔案).\n"
-            "手動更新:下載下面的 .bin,到「手動上傳韌體檔」上傳. 普通版用 firmware-版本.bin,帶螢幕板用 firmware-版本-oled.bin(裝錯板子會被擋下).")
-    files = [os.path.join(REL, a) for a in assets]
+            "手動更新:下載下面的 .bin,到「手動上傳韌體檔」上傳. 普通版用 firmware-版本.bin,帶螢幕板用 firmware-版本-oled.bin(裝錯板子會被擋下).\n\n"
+            f"全新開發板第一次燒錄:用 {FULL_PREFIX}-版本.bin(普通版)或 {FULL_PREFIX}-版本-oled.bin(帶螢幕板),從位址 0x0 燒入整片,"
+            "做法見專案首頁 README「全新開發板第一次燒錄」. 已在用的板子不要用這個檔,用上面的檢查更新.")
+    files = [a if os.path.isabs(a) else os.path.join(REL, a) for a in assets]
     if run(["gh", "release", "view", tag, "-R", REPO], check=False).returncode == 0:
         run(["gh", "release", "edit", tag, "-R", REPO, "--title", f"韌體 {ver}", "--notes", body, "--latest"])
         run(["gh", "release", "upload", tag, *files, "-R", REPO, "--clobber"])
@@ -238,12 +243,24 @@ def main():
         sys.exit(f"公開專案上是 {old_ver},這次 {ver} 沒有比較新(板子只會更新到比目前新的版本):請改 src/version.h 的 FW_VERSION")
     # 兩種板子各編一次. 編譯旗標換了 PlatformIO 會整個重編;編完馬上讀進記憶體(下一種會蓋掉 build 資料夾).
     src = os.path.join(ROOT, ".pio", "build", ENV, "firmware.bin")
+    fsrc = os.path.join(ROOT, ".pio", "build", ENV, "firmware.factory.bin")
     builds = []   # [(manifest 檔名, 韌體檔名, 內容, manifest)]
+    fulls = []    # [(完整燒錄檔名, 內容)]
     for board, mname, suffix, flag in VARIANTS:
         print(f"  -- 編譯 {board}")
         run([PIO, "run", "-e", ENV], cwd=ROOT, env={"PLATFORMIO_BUILD_FLAGS": flag})
         with open(src, "rb") as f:
             data = f.read()
+        if not os.path.exists(fsrc) or os.path.getmtime(fsrc) < os.path.getmtime(src):
+            sys.exit(f"{board} 沒有產生完整燒錄檔 firmware.factory.bin(平台版本改了?)")
+        with open(fsrc, "rb") as f:
+            full = f.read()
+        # 完整檔 0x10000 起就是韌體本體:比對確認合併的是這次編的韌體
+        if full[0x10000:0x10000 + len(data)] != data:
+            sys.exit(f"{board} 完整燒錄檔裡的韌體和 firmware.bin 不一樣")
+        if b"Users/" in full or b"Users\\" in full:
+            sys.exit(f"{board} 完整燒錄檔含本機路徑(Users/)")
+        fulls.append((f"{FULL_PREFIX}-{ver}{suffix}.bin", full))
         mark = f"LPFWID1:ESP32C3-lineplane|{ver}|{board}|".encode()
         if mark not in data:
             sys.exit(f"編譯出的 {board} 韌體裡找不到身分標記 {mark.decode()}(版本或板子種類不對)")
@@ -252,7 +269,7 @@ def main():
         name = f"firmware-{ver}{suffix}.bin"
         man = {"version": ver, "size": len(data), "sha256": hashlib.sha256(data).hexdigest(), "file": f"{FWDIR}/{name}", "notes": notes}
         builds.append((mname, name, data, man))
-        print(f"  {board}:大小 {len(data)} 位元組,SHA-256 {man['sha256']}")
+        print(f"  {board}:大小 {len(data)} 位元組,SHA-256 {man['sha256']};完整燒錄檔 {len(full)} 位元組")
     day_text = merged_day_text(ver, notes, a.day_notes_file)
     print(f"  上一版 {old.get('version', '(無)')}")
     print(f"  當天合併說明:\n{day_text}")
@@ -271,13 +288,24 @@ def main():
         with open(os.path.join(REL, mname), "w", encoding="utf-8", newline="\n") as f:
             json.dump(man, f, ensure_ascii=False, indent=2)
             f.write("\n")
+    fdir = os.path.join(REL, "full")   # .gitignore 排除,只給 Release 上傳用
+    shutil.rmtree(fdir, ignore_errors=True)
+    os.makedirs(fdir)
+    for name, full in fulls:
+        with open(os.path.join(fdir, name), "wb") as f:
+            f.write(full)
+    gi = os.path.join(REL, ".gitignore")
+    lines = open(gi, encoding="utf-8").read().splitlines() if os.path.exists(gi) else []
+    if "full/" not in lines:
+        with open(gi, "w", encoding="utf-8", newline="\n") as f:
+            f.write("\n".join(lines + ["full/"]) + "\n")
     # 先推新版並建好 Release,最後才刪同一天的舊 Release:中途失敗時板子與 Releases 仍有可用的版本
     changelog_write(ver, day_text)
     prune_files()
     run(["git", "add", "-A"], cwd=REL)
     run(["git", "commit", "-m", f"韌體 {ver}\n\n{day_text}"], cwd=REL)
     run(["git", "push"], cwd=REL)
-    release(ver, day_text, [man["file"] for _, _, _, man in builds])
+    release(ver, day_text, [man["file"] for _, _, _, man in builds] + [os.path.join(fdir, n) for n, _ in fulls])
     prune_releases(ver)
     print(f"== 已發布 {ver}(當天只留這一版,說明已合併). raw 快取可能要幾分鐘才更新,板子暫時看到舊版屬正常.")
 
