@@ -1,4 +1,7 @@
-// 版本流水號: r3 (2026-09-24) 降落提醒:飛行狀態 landBuzz 為真時響(忽高忽低跟著高油門,逐漸減力響半秒停半秒)
+// 版本流水號: r6 (2026-10-07) 取消確認改兩短音,每聲 150ms,比按住時的 50ms 長
+// 舊: r5 (2026-10-07) 安全開關成功取消後兩長音,同次按壓不再急響
+// 舊: r4 (2026-10-07) 安全開關按住時響 50ms/停 50ms,優先於所有狀態提示
+// 舊: r3 (2026-09-24) 降落提醒:飛行狀態 landBuzz 為真時響(忽高忽低跟著高油門,逐漸減力響半秒停半秒)
 // 舊: r2 (2026-09-14) 電位改用設定 buzzerLow(網頁切換,立即生效);滴聲 80 → 150ms;倒數短音 60 → 120ms,間隔改 剩餘×0.06(0.2~1.2 秒)(GG:太短,不夠急促)
 // 舊: r1 (2026-09-14) 初版(試做):開機就緒滴滴,等安全開關長音,倒數越近越急促,最後 3 秒連續長音到馬達啟動
 #include "buzzer.h"
@@ -10,6 +13,11 @@ static const uint16_t READY_GAP_MS = 150;
 static const uint16_t ARM_WAIT_ON_MS = 500;    // 等安全開關:長音 0.5 秒
 static const uint16_t ARM_WAIT_PERIOD_MS = 2500;   // 響 0.5 + 停 2
 static const uint16_t COUNT_BEEP_MS = 120;     // 倒數短音
+static const uint16_t SWITCH_BEEP_MS = 50;    // 按住安全開關:每秒 10 聲
+static const uint16_t SWITCH_PERIOD_MS = 100;
+static const uint16_t CANCEL_LEAD_MS = 100;   // 先短暫靜音,與急促提示分開
+static const uint16_t CANCEL_BEEP_MS = 150;   // 取消成功:兩短音,每聲是急響的 3 倍長
+static const uint16_t CANCEL_GAP_MS = 150;
 static const float COUNT_FINAL_S = 3.0f;       // 最後幾秒改連續長音
 // 倒數短音的間隔 = 剩餘秒數 × 0.06,限制在 0.2~1.2 秒:剩 20 秒 1.2 秒一聲,10 秒 0.6 秒,5 秒 0.3 秒,3 秒前 0.2 秒
 static const float COUNT_INTERVAL_PER_S = 0.06f;
@@ -31,6 +39,11 @@ static bool armWaitWas = false;
 static uint32_t armWaitStartMs = 0;
 static uint32_t nextCountBeepMs = 0;
 static uint32_t countBeepEndMs = 0;
+static bool switchWasPressed = false;
+static uint32_t switchPressMs = 0;
+static bool cancelWasHeld = false;
+static bool cancelToneActive = false;
+static uint32_t cancelToneStartMs = 0;
 
 static void writeOut(bool on, uint8_t mode) {
   if (on == outOn && mode == outputMode) return;
@@ -95,6 +108,32 @@ void buzzerUpdate(uint32_t now, const FlightStatus &f, uint8_t mode) {
     } else {
       readyStartMs = 0;
       if (armWait) armWaitStartMs = now;   // 滴滴蓋掉了等開關的第一聲:結束後從頭開始
+    }
+  }
+
+  // 狀態機真的完成取消/長按停機才播放確認音,不靠蜂鳴器自己推算按住時間.
+  if (f.armCancelHeld && !cancelWasHeld) {
+    cancelToneActive = true;
+    cancelToneStartMs = now;
+  }
+  cancelWasHeld = f.armCancelHeld;
+
+  // 按住開關急響,成功取消/停機後同次按壓保持靜音,放開再按才恢復急響.
+  // 放在就緒滴滴之後覆蓋,每次按下第一聲立即響,不阻塞控制工作.
+  if (f.armSwitch) {
+    if (!switchWasPressed) switchPressMs = now;
+    on = !f.armCancelHeld && (now - switchPressMs) % SWITCH_PERIOD_MS < SWITCH_BEEP_MS;
+  }
+  switchWasPressed = f.armSwitch;
+
+  // 確認音優先於急響與其他提示;途中放開仍播完兩聲,不阻塞控制迴圈.
+  if (cancelToneActive) {
+    const uint32_t t = now - cancelToneStartMs;
+    const uint32_t secondStart = CANCEL_LEAD_MS + CANCEL_BEEP_MS + CANCEL_GAP_MS;
+    if (t < secondStart + CANCEL_BEEP_MS) {
+      on = (t >= CANCEL_LEAD_MS && t < CANCEL_LEAD_MS + CANCEL_BEEP_MS) || t >= secondStart;
+    } else {
+      cancelToneActive = false;
     }
   }
 

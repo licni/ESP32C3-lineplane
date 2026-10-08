@@ -1,4 +1,6 @@
-// 版本流水號: r16 (2026-09-25) 狀態加 phaseRamp(往第二段爬),landingWarn(降落減力中)給螢幕顯示
+// 版本流水號: r18 (2026-10-07) armCancelHeld 涵蓋安全開關長按停機成功
+// 舊: r17 (2026-10-07) 狀態加 armCancelHeld,供蜂鳴器確認安全開關已取消起飛
+// 舊: r16 (2026-09-25) 狀態加 phaseRamp(往第二段爬),landingWarn(降落減力中)給螢幕顯示
 // 舊: r15 (2026-09-24) 強制停機結束原因 END_FORCE_SWITCH(長按安全開關)/ END_FORCE_WAG(搖擺機尾);狀態加 landPulse,landBuzz
 // 舊: r14 (2026-09-15) 輸入加 escFail(電變輸出掛載失敗),拒絕原因 10 REJECT_ESC_OUTPUT
 // 舊: r13 (2026-09-15) 狀態加 takeoffBoost(起飛油門階段)
@@ -129,6 +131,7 @@ struct FlightStatus {
   float gestureBlockS;       // 扭轉取消後還要幾秒才接受手勢
   bool autoWaitLevel;        // 上電自動倒數在等飛機放平(角度超過起飛前水平限制)或等安全開關按下
   bool armSwitch;            // 安全開關目前是否按下(網頁顯示用)
+  bool armCancelHeld;        // 安全開關已成功取消起飛或長按停機,且尚未放開
   bool armLatched;           // 這趟起飛程序(等待放穩/倒數,或上電自動倒數等待中)已經按過安全開關
   float armWaitLeftS;        // 等安全開關還剩幾秒就自動取消(-1 = 不在等安全開關)
   bool landPulse;            // 降落中忽高忽低提醒進行中

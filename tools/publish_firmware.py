@@ -1,4 +1,5 @@
-# 版本流水號: r8 (2026-09-25) 全新板子用的完整燒錄檔(GG):平台每次編譯產生 firmware.factory.bin(開機程式+分割表+韌體,從 0x0 燒),
+# 版本流水號: r9 (2026-10-07) GitHub Release 多行說明改用 UTF-8 檔案傳入,保留換行
+# 舊: r8 (2026-09-25) 全新板子用的完整燒錄檔(GG):平台每次編譯產生 firmware.factory.bin(開機程式+分割表+韌體,從 0x0 燒),
 #   存成 lineplane-full-版本.bin / lineplane-full-版本-oled.bin,只附在 Release(不進 firmware/,首頁與資料夾不變長)
 # 舊: r7 (2026-09-25) 兩種板子(GG):每次發布各編一次普通版與帶螢幕板(PLATFORMIO_BUILD_FLAGS=-DBOARD_C3_OLED=0/1),
 #   韌體檔 firmware-版本.bin / firmware-版本-oled.bin,manifest.json / manifest-oled.json,Release 附兩個檔;每天一版兩種各自清
@@ -37,6 +38,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REL = os.path.join(ROOT, "firmware_release")
@@ -143,11 +145,16 @@ def release(ver, day_text, assets):
             f"全新開發板第一次燒錄:用 {FULL_PREFIX}-版本.bin(普通版)或 {FULL_PREFIX}-版本-oled.bin(帶螢幕板),從位址 0x0 燒入整片,"
             "做法見專案首頁 README「全新開發板第一次燒錄」. 已在用的板子不要用這個檔,用上面的檢查更新.")
     files = [a if os.path.isabs(a) else os.path.join(REL, a) for a in assets]
-    if run(["gh", "release", "view", tag, "-R", REPO], check=False).returncode == 0:
-        run(["gh", "release", "edit", tag, "-R", REPO, "--title", f"韌體 {ver}", "--notes", body, "--latest"])
-        run(["gh", "release", "upload", tag, *files, "-R", REPO, "--clobber"])
-    else:
-        run(["gh", "release", "create", tag, *files, "-R", REPO, "--title", f"韌體 {ver}", "--notes", body, "--latest"])
+    # 多行說明以 UTF-8 檔案交給 gh,保留原始換行與文字.
+    with tempfile.TemporaryDirectory(prefix="lineplane-release-") as tmp:
+        notes_path = os.path.join(tmp, "notes.md")
+        with open(notes_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(body)
+        if run(["gh", "release", "view", tag, "-R", REPO], check=False).returncode == 0:
+            run(["gh", "release", "edit", tag, "-R", REPO, "--title", f"韌體 {ver}", "--notes-file", notes_path, "--latest"])
+            run(["gh", "release", "upload", tag, *files, "-R", REPO, "--clobber"])
+        else:
+            run(["gh", "release", "create", tag, *files, "-R", REPO, "--title", f"韌體 {ver}", "--notes-file", notes_path, "--latest"])
 
 
 def prune_releases(ver):

@@ -1,4 +1,6 @@
-// 版本流水號: r26 (2026-09-25) 狀態快照加 phaseRamp(往第二段爬),landingWarn(降落減力中)給帶螢幕板顯示
+// 版本流水號: r28 (2026-10-07) 長按安全開關停機成功也回報確認音,同次按壓封鎖重新起飛
+// 舊: r27 (2026-10-07) 起飛等待/倒數長按安全開關 2 秒取消;按住時倒數歸零不啟動馬達
+// 舊: r26 (2026-09-25) 狀態快照加 phaseRamp(往第二段爬),landingWarn(降落減力中)給帶螢幕板顯示
 // 舊: r25 (2026-09-24) 強制停機(GG):馬達運轉中長按安全開關 2 秒(馬達啟動後要先看到放開過),或左右搖擺機尾 3 個來回
 //   (每次擺動超過設定角度,間隔 1.2 秒內)→ 關馬達,之後至少 2 秒(或扭轉取消的封鎖秒數)不接受手勢;
 //   降落減力方式忽高忽低:減力秒數內在低/高油門間方波切換,走完換降落油門;減力期間可選蜂鳴器提醒
@@ -60,10 +62,13 @@ static const float COUNTDOWN_EXTEND_LIMIT_S = 10.0f;
 static const float TWIST_RATE_DEADBAND_DPS = 5.0f;
 
 // --- 強制停機(GG 2026-09-24):飛機起飛後出狀況時,人在飛機旁邊可以直接關馬達 ---
-// 長按安全開關:馬達啟動後要先看到開關放開過才開始算. 飛場上把開關兩腳短路(一直按著)也能飛,不能一起飛就被關掉.
+// 飛行中長按安全開關:馬達啟動後要先看到開關放開過才開始算.
 static const uint32_t FORCE_SWITCH_HOLD_MS = 2000;
 static bool forceSwReleased = false;
 static uint32_t forceSwPressMs = 0;   // 0 = 沒按著
+// 起飛前從按下起算,等待放穩與倒數互切不重算. 取消/長按停機後持續按著不能又觸發手勢.
+static bool cancelSwTiming = false, cancelSwHeld = false;
+static uint32_t cancelSwPressMs = 0;
 // 搖擺機尾:累積機背軸的轉角,從上一個極點反方向轉超過設定角度算一次擺動(遲滯,馬達震動造成的小抖動不會亂算).
 // 從中間開始「左右來回三次」= 中間 → 左(不到設定角度不算)→ 右 → 左 → 右 → 左 → 右,共 5 次完整擺動.
 // 飛行中機背軸的角速度一直是同方向的繞圈角速度(正飛倒飛,筋斗都一樣,線拉著內側翼朝圓心),轉角只往一邊增加,
@@ -123,7 +128,7 @@ static uint8_t crashTicks = 0;
 
 // 安全開關(GG 2026-09-14 r19):起飛程序照常開始,等安全開關按下才倒數. 用途是「人在飛機旁,確定要飛了」.
 // 起飛程序中(等待放穩,或上電自動倒數等待中)按下一次就記住:按的時候碰動飛機沒關係,重新放穩就開始倒數.
-// 開始當下已經按著也算 —— 飛場上開關壞掉時把兩腳跳線短路(等於一直按著),照樣能飛.
+// 開始當下已經按著也算,但持續長按 2 秒會取消起飛(r27),永久短路不再適用.
 static bool armLatched = false;
 static bool armWaitLogged = false;   // 這趟起飛程序已記過「等安全開關」事件
 // 等待上限(GG 2026-09-14 r20):開發板放桌上被碰一下(手勢門檻調低時很容易)就進入起飛程序,沒按開關會一直等,設定也一直鎖著.
@@ -358,6 +363,7 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
   nowMsCache = in.nowMs;
   const uint32_t now = in.nowMs;
   FlightOutputs out = {false, 0, 0, false, false};
+  if (!in.armSwitch) cancelSwHeld = false;
 
   // 待機類狀態:設定即時生效. 手勢成立後 fs 凍結成快照,整趟飛行不變.
   if (state == FS_ARMING || state == FS_STANDBY || state == FS_DONE) settingsCopyShared(fs);
@@ -415,6 +421,33 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
       enter(FS_STANDBY);
       eventLog(EV_CANCEL);
     }
+  }
+
+  // --- 起飛前長按安全開關取消,含上電自動倒數等待放平 ---
+  // 使用去抖後的實體開關,「忽略安全開關」只略過啟動確認,不略過長按取消.
+  const bool preflight = state == FS_WAIT_STILL || state == FS_COUNTDOWN ||
+                         (state == FS_STANDBY && autoWaitLevel);
+  if (preflight && in.armSwitch) {
+    if (!cancelSwTiming) {
+      cancelSwTiming = true;
+      cancelSwPressMs = now;
+    } else if (now - cancelSwPressMs >= FORCE_SWITCH_HOLD_MS) {
+      endReason = END_CANCELED;
+      resumeCountdown = false;
+      pendingAction = DISTURB_ACT_NONE;
+      countdownRemain = 0;
+      autoWaitLevel = false;
+      autoStartUsed = true;
+      armLatched = false;
+      cancelSwHeld = true;
+      cancelSwTiming = false;
+      reqGesture = false;
+      gestureBlockUntilMs = (now + max((uint32_t)MOTOR_STOP_REARM_MS, (uint32_t)fs.twistBlockSec * 1000u)) | 1;
+      enter(FS_STANDBY);
+      eventLog(EV_CANCEL, 1, (now - cancelSwPressMs) / 1000.0f, FORCE_SWITCH_HOLD_MS / 1000.0f);
+    }
+  } else {
+    cancelSwTiming = false;
   }
 
   // --- 扭轉機尾取消手勢起飛(等待放穩與倒數中) ---
@@ -487,6 +520,7 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
     }
     if (force != END_NONE) {
       finish(force, value, limit);
+      if (force == END_FORCE_SWITCH) cancelSwHeld = true;   // 停機成功也播兩短音,按住不再急響
       // 關掉之後人還抓著飛機(可能還在搖或按著開關):封鎖手勢久一點,至少和扭轉取消一樣
       gestureBlockUntilMs = (now + max((uint32_t)MOTOR_STOP_REARM_MS, (uint32_t)fs.twistBlockSec * 1000u)) | 1;
     }
@@ -534,6 +568,10 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
 
     case FS_STANDBY:
     case FS_DONE:
+      if (cancelSwHeld) {   // 長按取消/停機後要先放開,才接受下一次起飛程序
+        reqGesture = false;
+        break;
+      }
       if (in.escService) {   // 網頁手動輸出中:手勢一律不理(推飛機試轉時很容易誤觸)
         autoStartUsed = true;
         reqGesture = false;
@@ -671,6 +709,8 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
       countdownRemain -= dt;
       if (countdownRemain <= 0) {
         countdownRemain = 0;
+        // 最後不足 2 秒才按下時,先維持停機直到長按取消或放開,不讓馬達搶先啟動.
+        if (in.armSwitch) break;
         motorStartMs = now;
         phase = 1;
         forceSwReleased = false;
@@ -853,6 +893,7 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
   status.twistDeg = (state == FS_WAIT_STILL || state == FS_COUNTDOWN) && gestureStarted ? twistDeg : 0;
   status.autoWaitLevel = autoWaitLevel;
   status.armSwitch = in.armSwitch;
+  status.armCancelHeld = cancelSwHeld;
   status.armLatched = armLatched && (state == FS_WAIT_STILL || state == FS_COUNTDOWN || autoWaitLevel);
   status.armWaitLeftS = !armLatched && (state == FS_WAIT_STILL || (state == FS_STANDBY && autoWaitLevel))
                             ? max(0.0f, armWaitLimitS(in) - armWaitS) : -1.0f;
