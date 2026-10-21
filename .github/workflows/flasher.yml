@@ -1,6 +1,9 @@
-# 版本流水號: r1 (2026-10-21) 初版:在 Windows 打包燒錄工具 LineplaneFlasher.exe
+# 版本流水號: r2 (2026-10-21) main 分支打包完直接發布 Release(標籤 flasher-v<APP_VERSION>,設為最新),不用另外推標籤
+# 舊: r1 (2026-10-21) 初版:在 Windows 打包燒錄工具 LineplaneFlasher.exe
 # - 改到 tools/flasher/ 就打包,exe 放在這次執行的 Artifacts(Actions 頁面下載).
-# - 推送 flasher-v* 標籤(例如 flasher-v1.0.0)時另外建立 GitHub Release 並附上 exe,給使用者下載.
+# - main 分支(推送或手動執行)打包完建立/更新 Release「燒錄工具 v版本」並附上 exe,設為最新版:
+#   固定下載網址 https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneFlasher.exe
+#   同一版本重跑會覆蓋 exe;發新版前先改 lineplane_flasher.py 的 APP_VERSION.
 name: 燒錄工具 exe
 
 on:
@@ -53,12 +56,33 @@ jobs:
           path: tools/flasher/dist/LineplaneFlasher.exe
           if-no-files-found: error
 
-      - name: 建立 Release(flasher-v* 標籤)
-        if: startsWith(github.ref, 'refs/tags/flasher-v')
+      - name: 讀工具版本
+        id: ver
+        shell: pwsh
+        run: |
+          $m = Select-String -Path tools/flasher/lineplane_flasher.py -Pattern '^APP_VERSION = "([^"]+)"'
+          if (-not $m) { throw "lineplane_flasher.py 找不到 APP_VERSION" }
+          "ver=$($m.Matches[0].Groups[1].Value)" >> $env:GITHUB_OUTPUT
+
+      - name: 發布 Release(main 分支)
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/flasher-v')
         uses: softprops/action-gh-release@v2
         with:
-          name: 燒錄工具 ${{ github.ref_name }}
+          tag_name: flasher-v${{ steps.ver.outputs.ver }}
+          target_commitish: ${{ github.sha }}
+          name: 線控飛機韌體燒錄工具 v${{ steps.ver.outputs.ver }}
+          make_latest: "true"
           files: tools/flasher/dist/LineplaneFlasher.exe
           body: |
-            線控飛機韌體燒錄工具(Windows,免安裝).
-            下載 LineplaneFlasher.exe,接上開發板後打開即可使用. 用法見 tools/flasher/README.md.
+            ## 線控飛機韌體燒錄工具(Windows,免安裝)
+
+            **下載:[LineplaneFlasher.exe](https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneFlasher.exe)**
+
+            1. 下載後直接打開,不用安裝. Windows 跳出「Windows 已保護您的電腦」時,按「其他資訊」→「仍要執行」.
+            2. 用可以傳資料的 USB 線接上 ESP32-C3 開發板,工具會自動找到板子.
+            3. 選「普通版」或「帶螢幕板」,按「下載最新版完整燒錄檔」.
+            4. 按「開始燒錄」,確定. 燒完會自動檢查,全部打勾就完成了.
+            5. 手機連板子的 WiFi 熱點,瀏覽器開 http://192.168.4.1 設定.
+
+            燒錄與測試時請拆下螺旋槳. 找不到板子時:按住板子上的 BOOT 鍵,拔掉再插上 USB,放開 BOOT.
+            詳細說明:https://github.com/licni/ESP32C3-lineplane/blob/main/tools/flasher/README.md

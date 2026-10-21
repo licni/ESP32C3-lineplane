@@ -44,7 +44,8 @@
   **每天只留當天最新一版**(GG 2026-09-14):同一天再發布時工具自動刪掉當天舊的 Release/tag/韌體檔,當天修改合併進最新版的 Release 與 CHANGELOG.
   --notes 是板子顯示的精簡版(≤400 位元組,寫當天合併重點),--day-notes-file 是當天所有修改的完整條列(自己整理,拿掉已被取代的內容). firmware/ 只留最近 3 天.
 - **免安裝燒錄工具** tools/flasher/(2026-10-21,GG:給不想裝開發環境的使用者):Python tkinter + esptool,GitHub Actions 在 Windows 打包 LineplaneFlasher.exe,
-  推 `flasher-v*` 標籤建 Release. 「下載最新版」依賴發布工具的命名(manifest 的 version,Release 標籤 v版本,lineplane-full-版本[-oled].bin);
+  main 分支打包完自動發布 Release(標籤 flasher-v<APP_VERSION>,設為最新;雲端環境推不了標籤所以不靠標籤觸發). 給使用者的固定網址
+  https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneFlasher.exe ;發新版改 lineplane_flasher.py 的 APP_VERSION. 「下載最新版」依賴發布工具的命名(manifest 的 version,Release 標籤 v版本,lineplane-full-版本[-oled].bin);
   改 publish_firmware.py 的命名,身分標記格式,分割表時要一起改 tools/flasher/fw_image.py.
 - **使用說明書** docs/使用說明書.md(GG 2026-09-14 要求,給拿到硬體的使用者):改參數範圍/出廠值,網頁畫面文字,操作流程時同步更新說明書,
   再跑 `tools/manual_check.py`(目錄,連結,參數數值對照 settings.cpp). 網頁版用 `tools/manual_page/build.py` 產生,發布在 GG 的 Codex.ai 私人 Artifact「線控飛機油門控制器 使用說明書」.

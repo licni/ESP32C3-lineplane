@@ -7,8 +7,8 @@
 
 ## 下載
 
-- 正式版:本專案 [Releases](https://github.com/licni/ESP32C3-lineplane/releases) 裡標題「燒錄工具 flasher-v…」的 `LineplaneFlasher.exe`.
-- 最新開發版:[Actions →「燒錄工具 exe」](https://github.com/licni/ESP32C3-lineplane/actions/workflows/flasher.yml) 最近一次成功的執行,下方 Artifacts 的 `LineplaneFlasher`(要登入 GitHub,下載後解壓縮).
+**直接下載:<https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneFlasher.exe>**
+(永遠是最新版;各版本說明在 [Releases](https://github.com/licni/ESP32C3-lineplane/releases))
 
 不用安裝,直接執行. 第一次打開時 Windows SmartScreen 可能提示「無法辨識的應用程式」(沒有付費簽章),按「其他資訊 → 仍要執行」.
 
@@ -73,7 +73,8 @@ tools\flasher\build_exe.bat
 產出 `tools/flasher/dist/LineplaneFlasher.exe`. 不打包直接跑:`pip install -r requirements.txt` 後 `python lineplane_flasher.py`.
 
 GitHub Actions(`.github/workflows/flasher.yml`)在 `tools/flasher/` 有變更時用 Windows 自動打包,exe 放在該次執行的 Artifacts;
-推送 `flasher-v*` 標籤(例如 `flasher-v1.0.0`)時另外建立 Release 並附上 exe. 發新版前先改 `lineplane_flasher.py` 的 `APP_VERSION`.
+在 main 分支打包完直接建立/更新 Release「燒錄工具 v版本」(標籤 `flasher-v版本`)並設為最新,上面的固定網址就會拿到新版.
+發新版前先改 `lineplane_flasher.py` 的 `APP_VERSION`(版本沒改時重跑會覆蓋同一版的 exe).
 
 | 檔案 | 內容 |
 |---|---|
