@@ -1,0 +1,64 @@
+# 版本流水號: r1 (2026-10-21) 初版:在 Windows 打包燒錄工具 LineplaneFlasher.exe
+# - 改到 tools/flasher/ 就打包,exe 放在這次執行的 Artifacts(Actions 頁面下載).
+# - 推送 flasher-v* 標籤(例如 flasher-v1.0.0)時另外建立 GitHub Release 並附上 exe,給使用者下載.
+name: 燒錄工具 exe
+
+on:
+  push:
+    paths:
+      - "tools/flasher/**"
+      - ".github/workflows/flasher.yml"
+    tags:
+      - "flasher-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安裝套件
+        run: python -m pip install -r tools/flasher/requirements.txt
+
+      - name: 單元測試
+        working-directory: tools/flasher
+        run: python -m unittest -v test_fw_image
+
+      - name: 打包 exe
+        working-directory: tools/flasher
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name LineplaneFlasher --collect-data esptool lineplane_flasher.py
+
+      - name: 檢查 exe 帶了 esptool 的 ESP32-C3 燒錄小程式
+        working-directory: tools/flasher
+        shell: pwsh
+        run: |
+          $exe = "dist/LineplaneFlasher.exe"
+          if (-not (Test-Path $exe)) { throw "沒有產生 $exe" }
+          $hit = python -m PyInstaller.utils.cliutils.archive_viewer --list $exe | Select-String "esp32c3.json"
+          if (-not $hit) { throw "exe 裡沒有 esptool 的 esp32c3.json(--collect-data esptool 沒作用)" }
+          $hit
+          "大小 {0:N0} 位元組" -f (Get-Item $exe).Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LineplaneFlasher
+          path: tools/flasher/dist/LineplaneFlasher.exe
+          if-no-files-found: error
+
+      - name: 建立 Release(flasher-v* 標籤)
+        if: startsWith(github.ref, 'refs/tags/flasher-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 燒錄工具 ${{ github.ref_name }}
+          files: tools/flasher/dist/LineplaneFlasher.exe
+          body: |
+            線控飛機韌體燒錄工具(Windows,免安裝).
+            下載 LineplaneFlasher.exe,接上開發板後打開即可使用. 用法見 tools/flasher/README.md.

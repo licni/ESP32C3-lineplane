@@ -14,3 +14,8 @@ __pycache__/
 
 # 公開韌體更新專案(licni/ESP32lineplane-firmware)的本機複本,由 tools/publish_firmware.py 管理
 firmware_release/
+
+# 燒錄工具打包產物(tools/flasher/build_exe.bat,GitHub Actions 另外打包)
+tools/flasher/build/
+tools/flasher/dist/
+tools/flasher/*.spec

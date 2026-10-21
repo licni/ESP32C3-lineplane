@@ -33,6 +33,7 @@
 | `recover.py` | 測試中斷時救援:緊急停止,關閉模擬,用備份還原 |
 | `run_regression.py` | 批次跑回歸測試 |
 | `publish_firmware.py` | 發布韌體到公開更新專案(每天只留最新一版,說明合併) |
+| `flasher/` | 給使用者的 Windows 免安裝燒錄工具 LineplaneFlasher.exe(自動偵測序列埠,下載最新版,燒錄,開機檢查,序列監看),見 [flasher/README.md](flasher/README.md) |
 | `pio_strip_paths.py` | PlatformIO 建置前腳本:編進韌體的原始檔路徑換成短前綴,發布的韌體不帶電腦使用者名稱 |
 | `manual_check.py` | 使用說明書維護:重新產生目錄,檢查內部連結與圖片,參數表格的出廠值/範圍/步進與 `src/settings.cpp` 一致 |
 | `manual_page/build.py` | 使用說明書轉成網頁(樣式與互動在同資料夾),發布成 claude.ai 私人 Artifact 給使用者看 |
