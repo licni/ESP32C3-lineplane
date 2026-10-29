@@ -1,4 +1,5 @@
-// 版本流水號: r22 (2026-10-29) 翼軸仰角送進飛行狀態機與遙測(側傾補償曲線)
+// 版本流水號: r23 (2026-10-29) 飛行紀錄加線軸 G(來自狀態機的低通值)
+// 舊: r22 (2026-10-29) 翼軸仰角送進飛行狀態機與遙測(側傾補償曲線)
 // 舊: r21 (2026-09-15) 控制工作加入任務看門狗(5 秒沒餵 panic 重開);飛行輸入加電變輸出掛載失敗
 // 舊: r20 (2026-09-14) 蜂鳴器每拍依飛行狀態與設定的電位更新(buzzerUpdate)
 // 舊: r19 (2026-09-14) 飛行輸入加安全開關等待上限的測試覆寫秒數(序列指令 armwait)
@@ -309,7 +310,7 @@ static void controlTask(void *) {
     if (groundRoll.holdSeconds() >= cfg.earlyLandHoldSec) flags |= LOG_FLAG_ROLL_HOLD;
     if (imuFault) flags |= LOG_FLAG_IMU_FAULT;
     if (gestureLamp) flags |= LOG_FLAG_GESTURE;
-    flightLogFeed(pitch, pct, reading.accMagG, groundRoll.vibG(), spikeThisTick, pushG, fst.state, flags, nowMs);
+    flightLogFeed(pitch, pct, reading.accMagG, groundRoll.vibG(), spikeThisTick, pushG, fst.lineG, fst.state, flags, nowMs);
 
     const uint32_t execUs = micros() - startUs;
     if (execUs > maxExecUs) maxExecUs = execUs;

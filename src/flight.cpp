@@ -1,4 +1,6 @@
-// 版本流水號: r29 (2026-10-29) 補償 = 機頭角度曲線 + 側傾曲線(翼軸仰角),相加後再夾上下限(GG 2026-10-29,飛手回報斜上方升力不足)
+// 版本流水號: r30 (2026-10-29) 線軸 G 回授(GG:任何方位相同的外甩手感):線軸 G = |加速度計 y 軸| 低通,微調 = (目標 − 線軸 G) × 增益 夾 ±上限;
+//   補償方式 曲線 / 曲線+回授 / 只回授. 回授與曲線同一個啟用條件(感測器正常且過了不補償秒數),降落中不補償
+// 舊: r29 (2026-10-29) 補償 = 機頭角度曲線 + 側傾曲線(翼軸仰角),相加後再夾上下限(GG 2026-10-29,飛手回報斜上方升力不足)
 // 舊: r28 (2026-10-07) 長按安全開關停機成功也回報確認音,同次按壓封鎖重新起飛
 // 舊: r27 (2026-10-07) 起飛等待/倒數長按安全開關 2 秒取消;按住時倒數歸零不啟動馬達
 // 舊: r26 (2026-09-25) 狀態快照加 phaseRamp(往第二段爬),landingWarn(降落減力中)給帶螢幕板顯示
@@ -180,6 +182,7 @@ static float gyroLpfMag = 0;
 static float landStillS = 0;
 static float landAccRef[3] = {0, 0, 1};
 static float lastBase = 0, lastComp = 0, lastOut = 0;
+static float lineGLpf = 0, lastGTrim = 0;   // 線軸 G 低通值(每拍更新,待機也算),這一拍的回授微調
 static uint8_t phase = 0;
 static bool lastGearUp = false;
 
@@ -740,6 +743,13 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
     }
   }
 
+  // --- 線軸 G 低通:翼軸方向比力的絕對值(順逆時針,正飛倒飛都是正值). 待機時也更新,網頁才看得到目前讀值.
+  // 球面運動沿線方向的加速度永遠是 V²/R,所以這個值 = V²/R − g·sin(翼軸仰角),就是線拉力手感(扣掉空氣外甩分量).
+  if (in.imuOk) {
+    const float tau = max(fp.gFilterSec, 0.1f);
+    lineGLpf += (fabsf(in.accG[1]) - lineGLpf) * min(1.0f, dt / tau);
+  }
+
   // --- 馬達運轉中的油門 ---
   if (motorState(state)) {
     const float t = (now - motorStartMs) / 1000.0f;
@@ -759,7 +769,15 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
         // 感測器故障時不補償,只照時間軸(規格第 5 節)
         // 兩段飛行共用同一條補償曲線(第二段只是基本油門較高,補償後可能被上限夾住)
         // 側傾補償(GG 2026-10-29):飛到斜上方時翼軸往下指向飛手,升力分量變小,依翼軸仰角再加一條曲線,兩條相加
-        if (in.imuOk && t >= fp.noCompSec) comp = curveCompPct(fp, in.pitchDeg) + curveSideCompPct(fp, in.sideDeg);
+        // 線軸 G 回授(GG 2026-10-29):拉力手感比目標小就加油門,比例控制夾在 ±幅度上限;方式 2 不用曲線只用回授
+        if (in.imuOk && t >= fp.noCompSec) {
+          if (fp.compMode != COMP_G_ONLY) comp = curveCompPct(fp, in.pitchDeg) + curveSideCompPct(fp, in.sideDeg);
+          if (fp.compMode != COMP_CURVE) {
+            const float lim = (float)fp.gLimitPct;
+            lastGTrim = constrain((fp.gTargetG - lineGLpf) * fp.gGainPctPerG, -lim, lim);
+            comp += lastGTrim;
+          }
+        }
         // 下限至少 THROTTLE_FLOOR_PCT(安全審查 B4):設定範圍已經擋住,這裡再保底一次,補償再怎麼減也不會掉到沒動力
         const float floorPct = max((float)fp.minPct, (float)THROTTLE_FLOOR_PCT);
         pct = constrain(base + comp, floorPct, max(floorPct, (float)fp.maxPct));
@@ -767,6 +785,7 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
       lastBase = base;
       lastComp = comp;
       lastOut = pct;
+      if (t < fp.takeoffRampSec || !in.imuOk || t < fp.noCompSec || fp.compMode == COMP_CURVE) lastGTrim = 0;
       out.speedMps = v * min(1.0f, t / max(SPEED_RAMP_MIN_S, fp.takeoffRampSec));
 
       // 開始降落:總時間到,或觸地提早降落(正飛水平 + Z 軸持續抖動)
@@ -810,6 +829,7 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
       }
       lastBase = pct;
       lastComp = 0;   // 降落中不補償
+      lastGTrim = 0;
       lastOut = pct;
       out.speedMps = landingStartPct > 1 ? v * speedPct / landingStartPct : 0;
 
@@ -868,6 +888,8 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
   status.basePct = motorState(state) ? lastBase : 0;
   status.compPct = motorState(state) ? lastComp : 0;
   status.outPct = motorState(state) ? lastOut : 0;
+  status.lineG = lineGLpf;
+  status.gTrimPct = motorState(state) ? lastGTrim : 0;
   status.phase = phase;
   {
     const float tm = (now - motorStartMs) / 1000.0f;

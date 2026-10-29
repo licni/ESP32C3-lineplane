@@ -1,4 +1,6 @@
-// 版本流水號: r27 (2026-10-29) 版面 v12:風格尾端加側傾補償曲線 side(參數 sdDb/sdN/sd1a~sd4p,翼軸仰角 0~90 一側);
+// 版本流水號: r28 (2026-10-29) 版面 v13:風格尾端加補償方式 compMode 與線軸 G 回授 gTarget/gGain/gLimit/gFilter(出廠 曲線,3.0g,10%/g,±15%,0.5s);
+//   讀 v12 以前風格尾端補出廠值
+// 舊: r27 (2026-10-29) 版面 v12:風格尾端加側傾補償曲線 side(參數 sdDb/sdN/sd1a~sd4p,翼軸仰角 0~90 一側);
 //   出廠值與各組的朝上曲線相同,讀 v11 以前風格尾端複製朝上曲線;交叉驗證同朝上側
 // 舊: r26 (2026-09-24) 版面 v11:風格加減力方式 landingMode,蜂鳴器提醒 landingBuzz,忽高忽低低/高油門 pulseLow/pulseHigh 與週期 pulsePeriod;
 //   共用設定加搖擺機尾強制停機 wagStop(0 或 15~90 度). 讀 v10 以前風格尾端補出廠值,共用設定 v9/v10 的 wagStop 補出廠值
@@ -67,7 +69,10 @@ static_assert(PROFILE_V10_SIZE == PROFILE_V9_SIZE + 8, "ProfileSettings v10 size
 // v12 在尾端加側傾補償曲線(一個 CurveSide,12 位元組)
 static const size_t PROFILE_V11_SIZE = offsetof(ProfileSettings, side);
 static_assert(PROFILE_V11_SIZE == PROFILE_V10_SIZE + 8, "ProfileSettings v11 size");
-static_assert(sizeof(ProfileSettings) == PROFILE_V11_SIZE + sizeof(CurveSide), "ProfileSettings v12 size");
+static const size_t PROFILE_V12_SIZE = offsetof(ProfileSettings, compMode);
+static_assert(PROFILE_V12_SIZE == PROFILE_V11_SIZE + sizeof(CurveSide), "ProfileSettings v12 size");
+// v13 在尾端加補償方式與線軸 G 回授 16 位元組
+static_assert(sizeof(ProfileSettings) == PROFILE_V12_SIZE + 16, "ProfileSettings v13 size");
 // landingMode/landingBuzz 占用原本 reserved0[2],wagStopDeg 占用 reserved9[0]:位置不可移動
 static_assert(offsetof(ProfileSettings, landingMode) == offsetof(ProfileSettings, phaseMode) + 1, "ProfileSettings landingMode");
 static_assert(offsetof(SharedSettings, wagStopDeg) == offsetof(SharedSettings, armSwitchOff) + 1, "SharedSettings wagStopDeg");
@@ -137,6 +142,16 @@ static void setSide(CurveSide &s, int8_t deadband, uint8_t count, const CurvePoi
   s.count = count;
   for (uint8_t i = 0; i < 4; ++i) s.pts[i] = pts[i];
   s.pts[4] = pts[3];   // 第 5 格不再使用
+}
+
+// 線軸 G 回授出廠值:方式 = 曲線(飛法和加這個功能之前一樣);目標 3.0 g,增益 10 %/g,幅度 ±15%,低通 0.5 秒
+static void defaultGFeedback(ProfileSettings &p) {
+  p.compMode = COMP_CURVE;
+  p.gLimitPct = 15;
+  memset(p.reserved13, 0, sizeof(p.reserved13));
+  p.gTargetG = 3.0f;
+  p.gGainPctPerG = 10.0f;
+  p.gFilterSec = 0.5f;
 }
 
 static void defaultPulse(ProfileSettings &p) {
@@ -211,6 +226,7 @@ static void defaultProfile(ProfileSettings &p, uint8_t index) {
   p.landingMode = LANDING_RAMP;
   p.landingBuzz = 0;
   defaultPulse(p);
+  defaultGFeedback(p);
 }
 
 // --- 參數表 ----------------------------------------------------------------------
@@ -293,6 +309,12 @@ static const ParamDef PROFILE_PARAMS[] = {
     PP("pulseHigh", PARAM_U8, pulseHighPct, THROTTLE_FLOOR_PCT, 100, 1, 5),
     PP("pulsePeriod", PARAM_F32, pulsePeriodSec, 0.4f, 4, 0.1f, 0.5f),
     PP("phaseMode", PARAM_U8, phaseMode, 0, 2, 1, 1),
+    // 補償方式與線軸 G 回授(v13)
+    PP("compMode", PARAM_U8, compMode, 0, 2, 1, 1),            // CompMode
+    PP("gTarget", PARAM_F32, gTargetG, 0.5f, 10, 0.1f, 0.5f),
+    PP("gGain", PARAM_F32, gGainPctPerG, 0, 50, 0.5f, 2),
+    PP("gLimit", PARAM_U8, gLimitPct, 0, 100, 1, 5),
+    PP("gFilter", PARAM_F32, gFilterSec, 0.1f, 3, 0.1f, 0.5f),
     PP("upDb", PARAM_I8, up.deadband, 0, 89, 1, 5),
     PP("upN", PARAM_U8, up.count, CURVE_MIN_POINTS, CURVE_MAX_POINTS, 1, 1),
     PP("up1a", PARAM_I8, up.pts[0].angle, 1, 90, 1, 5), PP("up1p", PARAM_I8, up.pts[0].pct, -100, 100, 1, 5),
@@ -487,6 +509,7 @@ static bool loadBlobAny(Preferences &prefs, const char *key, uint8_t *data, size
 //   v10:風格尾端加起飛油門(油門 + 3 預留 + 持續時間);共用設定不變
 //   v11:風格尾端加忽高忽低減力(低,高,2 預留,週期),減力方式與蜂鳴器提醒用 reserved0;共用設定大小不變,wagStopDeg 用 reserved9[0]
 //   v12:風格尾端加側傾補償曲線 side(一個 CurveSide);共用設定不變. 舊風格讀進來複製朝上曲線當側傾曲線(出廠值也是這樣)
+//   v13:風格尾端加補償方式與線軸 G 回授 16 位元組;共用設定不變. 舊風格讀進來補出廠值(方式 = 曲線)
 // 所以風格 v4/v6~v9 原樣沿用後尾端補「不使用」,v5 取前段;共用設定 v4~v6 較短,尾端補預設. GG 已經在板子上調好參數,改版不可洗掉.
 static const size_t CURVE_SIDE_SIZE = sizeof(CurveSide);
 
@@ -495,7 +518,7 @@ static bool loadShared(Preferences &prefs, SharedSettings &out) {
   defaultShared(s);   // v6 以前的存檔比較短,尾端新欄位保留預設值
   uint16_t ver = 0, size = 0;
   if (!loadBlobAny(prefs, "shared", (uint8_t *)&s, sizeof(s), ver, size)) return false;
-  const bool current = (ver == SETTINGS_LAYOUT_VERSION || ver == 11 || ver == 10 || ver == 9) && size == sizeof(s);   // v9~v12 大小相同
+  const bool current = (ver == SETTINGS_LAYOUT_VERSION || ver == 12 || ver == 11 || ver == 10 || ver == 9) && size == sizeof(s);   // v9~v13 大小相同
   const bool old6 = ver >= 4 && ver <= 6 && size == SHARED_V6_SIZE;
   const bool old7 = ver == 7 && size == SHARED_V7_SIZE;
   const bool old8 = ver == 8 && size == SHARED_V8_SIZE;
@@ -523,17 +546,20 @@ static bool loadProfile(Preferences &prefs, const char *key, ProfileSettings &ou
   uint8_t raw[512];
   uint16_t ver = 0, size = 0;
   if (!loadBlobAny(prefs, key, raw, sizeof(raw), ver, size)) return false;
-  // 風格結構 v4,v6~v9 版面相同(v7~v9 只改了共用設定),v10 尾端多了起飛油門,v11 再多忽高忽低減力,v12 再多側傾曲線
+  // 風格結構 v4,v6~v9 版面相同(v7~v9 只改了共用設定),v10 尾端多了起飛油門,v11 再多忽高忽低減力,v12 再多側傾曲線,v13 再多線軸 G 回授
   const bool current = ver == SETTINGS_LAYOUT_VERSION && size == sizeof(ProfileSettings);
+  const bool old12 = ver == 12 && size == PROFILE_V12_SIZE;
   const bool old11 = ver == 11 && size == PROFILE_V11_SIZE;
   const bool old10 = ver == 10 && size == PROFILE_V10_SIZE;
   const bool old9 = (ver == 9 || ver == 8 || ver == 7 || ver == 6 || ver == 4) && size == PROFILE_V9_SIZE;
   const bool v5 = ver == 5 && size == PROFILE_V9_SIZE + 2 * CURVE_SIDE_SIZE;
-  if (!current && !old11 && !old10 && !old9 && !v5) return false;
+  if (!current && !old12 && !old11 && !old10 && !old9 && !v5) return false;
   ProfileSettings p;
   memset(&p, 0, sizeof(p));
-  memcpy(&p, raw, current ? sizeof(p) : old11 ? PROFILE_V11_SIZE : old10 ? PROFILE_V10_SIZE : PROFILE_V9_SIZE);   // v5 多出來的第二段曲線在尾端,直接不取
-  if (!current && !old11) {
+  memcpy(&p, raw, current ? sizeof(p) : old12 ? PROFILE_V12_SIZE : old11 ? PROFILE_V11_SIZE : old10 ? PROFILE_V10_SIZE : PROFILE_V9_SIZE);   // v5 多出來的第二段曲線在尾端,直接不取
+  if (!current) defaultGFeedback(p);   // 加線軸 G 回授之前的存檔:補出廠值(方式 = 曲線,飛法不變)
+  if (p.compMode > COMP_G_ONLY) p.compMode = COMP_CURVE;
+  if (!current && !old12 && !old11) {
     // 加忽高忽低之前的存檔:減力方式與蜂鳴器是預留的 0(逐漸減力,不響),尾端補出廠值
     p.landingMode = LANDING_RAMP;
     p.landingBuzz = 0;
@@ -550,7 +576,7 @@ static bool loadProfile(Preferences &prefs, const char *key, ProfileSettings &ou
   if (p.takeoffPct < THROTTLE_FLOOR_PCT || p.takeoffPct > 100) p.takeoffPct = max(p.phase1Pct, THROTTLE_FLOOR_PCT);
   const bool trimmed = trimSide(p.up, true) | trimSide(p.down, false);   // 用 | 兩側都要做
   // 加側傾曲線之前的存檔:複製朝上曲線(與出廠值一致,GG 2026-10-29). 要放在 trimSide 之後,複製到的一定是 1~4 點
-  if (!current) p.side = p.up;
+  if (!current && !old12) p.side = p.up;
   if (trimmed) Serial.printf("settings %s curve trimmed to %u points max\n", key, CURVE_MAX_POINTS);
   // 飛行中油門下限改成最低 10% 之前的存檔可能是 0~9:補到 10,其他設定照舊(不可因此整組回預設)
   if (p.minPct < THROTTLE_FLOOR_PCT) {

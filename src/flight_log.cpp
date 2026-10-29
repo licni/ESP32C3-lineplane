@@ -1,4 +1,5 @@
-// 版本流水號: r2 (2026-09-13) 修正每筆實際 105ms(區間起點改走固定 100ms 格點)
+// 版本流水號: r3 (2026-10-29) 每筆加線軸 G(區間最後的低通值)
+// 舊: r2 (2026-09-13) 修正每筆實際 105ms(區間起點改走固定 100ms 格點)
 // 舊: r1 (2026-09-13) 初版:0.1 秒一筆的環形紀錄(角度,油門,G 力,Z 抖動,短尖峰,手勢推力,狀態)
 #include "flight_log.h"
 
@@ -15,7 +16,7 @@ static uint8_t clampU8(float v) { return v <= 0 ? 0 : (v >= 255 ? 255 : (uint8_t
 static int8_t clampI8(float v) { return v <= -127 ? -127 : (v >= 127 ? 127 : (int8_t)lroundf(v)); }
 
 void flightLogFeed(float pitchDeg, float throttlePct, float accMagG, float vibG, float spikeG, float pushG,
-                   uint8_t state, uint8_t flags, uint32_t nowMs) {
+                   float lineG, uint8_t state, uint8_t flags, uint32_t nowMs) {
   if (!slotOpen) {
     slotOpen = true;
     // 區間起點走固定 100ms 格點. r1 用「這一拍」當起點:收尾那一拍算進上一區,下一區從再下一拍才開,
@@ -33,6 +34,7 @@ void flightLogFeed(float pitchDeg, float throttlePct, float accMagG, float vibG,
   // 角度,油門,狀態取區間最後一個值
   slot.pitchDeg = clampI8(pitchDeg);
   slot.throttlePct = clampU8(throttlePct);
+  slot.lineDg = clampU8(lineG * 10);
   slot.state = state;
 
   if (nowMs - slotStartMs < FLIGHT_LOG_SAMPLE_MS) return;

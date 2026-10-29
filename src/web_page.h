@@ -1,4 +1,6 @@
-// 版本流水號: r96 (2026-10-29) 側傾補償曲線(GG,飛手回報斜上方升力不足):角度補償頁加第二張圖 sdSvg(直軸翼軸仰角 0~90),點與補速起點可拖,
+// 版本流水號: r97 (2026-10-29) 補償方式與線軸 G 回授(GG):角度補償頁新卡「補償方式」(曲線 / 曲線+回授 / 只回授)與目標 G,增益,幅度,低通,
+//   即時顯示線軸 G 與微調量,只回授時曲線卡變淡;監看頁加線軸 G 讀數,補償預覽與飛行中面板含 G 微調;紀錄頁 G 力面板加線軸 G(藍),游標與統計加線軸 G
+// 舊: r96 (2026-10-29) 側傾補償曲線(GG,飛手回報斜上方升力不足):角度補償頁加第二張圖 sdSvg(直軸翼軸仰角 0~90),點與補速起點可拖,
 //   撞牆檢查加側傾兩段,全部點的數值與點數選單加側傾;監看頁顯示翼軸仰角,補償預覽改成 機頭 + 側傾 = 合計;備份碼項目名稱加側傾
 // 舊: r95 (2026-10-07) 事件區分長按安全開關取消倒數;手勢封鎖提示依取消原因顯示
 // 舊: r75 (2026-09-15) 安全審查:油門 0% 脈寬要先勾「螺旋槳已拆除」才能改並加警語;起飛油門超出上下限時時間軸文字提示;
@@ -484,6 +486,7 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
     <span class="sub rd">機頭角度<br>朝上為正</span>
     <span class="rd2">滾轉 <b id="roll">--</b></span>
     <span class="rd2">翼軸仰角 <b id="side">--</b></span>
+    <span class="rd2">線軸 G <b id="lineG">--</b></span>
     <span class="pill ok" id="attMode">--</span>
    </div>
   </div>
@@ -532,6 +535,13 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
 
 <section id="comp" hidden>
  <div class="card">
+  <h2>補償方式</h2>
+  <div class="cnote">「線軸 G」是加速度計沿翼軸(線的方向)量到的 G 值,等於離心力減掉重力順著線的分量,就是飛手手上的拉力手感,任何動作中都成立.
+   回授方式:線軸 G 比目標小就加油門,比目標大就減,微調量 = (目標 − 線軸 G) × 增益,夾在 ±幅度上限內. 先用「曲線」飛幾趟,在紀錄頁看低空平飛的線軸 G 是幾 g,把目標設成那個值.</div>
+  <div id="compModeCards"></div>
+  <div class="sub" id="gfbLive" style="margin-top:4px"></div>
+ </div>
+ <div class="card" id="curveMainCard">
   <h2>角度補償曲線</h2>
   <div class="cnote">直軸是機頭角度,橫軸是實際輸出油門. 補償值加在當段的基本油門上,兩段共用同一條曲線;切到「第二段」只換基本油門,看加力後哪裡會撞到上限.
    點選或拖曳曲線上的點;邊框的三角形也能拖:左邊是補速/減速起點,下方是油門下限 / 基本油門 / 上限. 改完按上方的儲存.</div>
@@ -797,6 +807,10 @@ const L={
  pulseLow:['忽高忽低:低油門','pct','忽高忽低時的低油門. 至少比高油門低 10%.'],
  pulseHigh:['忽高忽低:高油門','pct','忽高忽低時的高油門. 先高後低.'],
  pulsePeriod:['忽高忽低週期','sec','一高一低合起來的秒數. 1 秒 = 高半秒,低半秒.'],
+ gTarget:['目標線軸 G','g','飛手喜歡的拉力手感. 低空平飛時紀錄頁或監看頁讀到的線軸 G 是幾 g 就設幾 g;線軸 G 等於這個值時不微調.'],
+ gGain:['回授增益','%/g','線軸 G 每比目標少 1 g 就加多少 % 油門(多 1 g 就減). 0 = 回授不作用.'],
+ gLimit:['回授幅度上限','pct','回授微調最多加減多少 % 油門. 先設小一點(±10~15%)飛看看.'],
+ gFilter:['線軸 G 平滑秒數','sec','線軸 G 低通的時間常數,濾掉螺旋槳震動. 越大越穩但反應越慢.'],
  wagStop:['搖擺機尾停機角度','deg','馬達運轉中抓著機尾左右搖擺,每次從一邊擺到另一邊超過這個角度,連續 3 個來回就關馬達. 0 = 關閉.'],
  upDb:['補速開始角度','deg','機頭朝上超過這個角度才開始補速.'],
  dnDb:['減速開始角度','deg','機頭朝下超過這個角度才開始減速.'],
@@ -1155,6 +1169,31 @@ function cvWallTextG(w,p){
 }
 function cvWallText(p,base){return cvWallTextG(cvWalls(p,base),p)}
 function cvSideWallText(p,base){return cvWallTextG(cvSideWalls(p,base),p)}
+// --- 補償方式與線軸 G 回授(GG 2026-10-29) ---
+const COMP_NAMES=['曲線(機頭 + 側傾)','曲線 + 線軸 G 回授微調','只用線軸 G 回授(不拉曲線)'];
+let compModeSig='';
+function buildCompMode(){
+ if(!VALS||!META)return;
+ const p=VALS.profile,sig=String(editP);
+ if(sig!==compModeSig||!$('compModeCards').childElementCount){compModeSig=sig;
+  const box=$('compModeCards');box.innerHTML='';
+  box.appendChild(makeSelect('p','compMode','補償方式',COMP_NAMES,'曲線:照角度曲線補償(原本的做法). 曲線 + 回授:曲線之外再依線軸 G 微調,讓每個方位的拉力一樣. 只回授:不用曲線,基本油門 + 回授微調,幅度上限就是它能加減的範圍.'));
+  for(const k of ['gTarget','gGain','gLimit','gFilter'])box.appendChild(makeParam('p',k));
+ }
+ // 只回授時曲線用不到:曲線卡變淡並提示(仍可編輯,切回去就生效);回授參數在「曲線」方式下變淡
+ const m=p.compMode|0,cc=$('curveMainCard');
+ if(cc){cc.style.opacity=m===2?'.45':'';cc.title=m===2?'補償方式是「只用線軸 G 回授」,這些曲線飛行時不會用到':''}
+ for(const w of WIDGETS)if(['gTarget','gGain','gLimit','gFilter'].includes(w.key)&&w.scope==='p')w.el.style.opacity=m===0?'.45':'';
+ if(STATUS)updateGfbLive(STATUS);
+}
+// 即時:目前線軸 G 與依目前參數算出的微調量(與韌體同一個算式)
+function gfbTrim(p,lg){const lim=p.gLimit||0;return Math.max(-lim,Math.min(lim,(p.gTarget-lg)*p.gGain))}
+function updateGfbLive(s){
+ const e=$('gfbLive');if(!e||!VALS||!s.f||typeof s.f.lg!=='number')return;
+ const p=VALS.profile,m=p.compMode|0,lg=s.f.lg;
+ e.textContent=m===0?`目前線軸 G ${lg.toFixed(2)} g(補償方式是曲線,回授不作用;要設目標值就參考低空平飛時這個數字)`
+  :`目前線軸 G ${lg.toFixed(2)} g,目標 ${p.gTarget} g → 微調 ${sgn(gfbTrim(p,lg),1)}%(飛行中才作用,起飛後不補償秒數內與降落中不作用)`;
+}
 let curveSig='';
 function buildCurve(){
  const p=VALS.profile,sig=cvPhase+'/'+p[ck('upN')]+'/'+p[ck('dnN')]+'/'+p[ck('sdN')];
@@ -1561,6 +1600,7 @@ function render(){
   (VALS.shared.gearEnable?(VALS.shared.earlyLand?'. 收輪:觸地提早降落開啟中,輪子不收':`. 收輪:${mmss(VALS.shared.gearRetractSec)} 收起,降落開始時放下`):'');
  for(const w of WIDGETS)if(w.key==='phaseRamp')w.el.hidden=pm!==1;   // 只有「有過渡」用得到加力秒數
  for(const w of WIDGETS)if(['pulseLow','pulseHigh','pulsePeriod'].includes(w.key)&&w.scope==='p')w.el.hidden=p.landingMode!==1;   // 忽高忽低才用得到
+ buildCompMode();
  buildCurve();
  buildCurvePanel();drawCurve();
  // 共用設定
@@ -1721,6 +1761,7 @@ function renderStatus(s){
  $('pitch').textContent=sgn(s.p,1)+'°';
  $('roll').textContent=sgn(s.r,0)+'°';
  if(typeof s.sd==='number')$('side').textContent=s.sd.toFixed(0)+'°';
+ if(s.f&&typeof s.f.lg==='number')$('lineG').textContent=s.f.lg.toFixed(2)+' g';
  // 倒飛判斷:滾轉超過 100° 算倒飛,回到 80° 內才算正飛(中間保持,不來回跳).
  // 機頭接近垂直時滾轉角沒有意義(數學上的奇異點),保持前一刻的判斷.
  if(Math.abs(s.p)<70){if(Math.abs(s.r)>100)inverted=true;else if(Math.abs(s.r)<80)inverted=false}
@@ -1760,8 +1801,10 @@ function renderStatus(s){
  escRender(s);
  if(VALS){
   const name=VALS.names[s.act],act=VALS.edit===s.act?VALS.profile:null;
-  // 補償 = 機頭角度曲線 + 側傾曲線(翼軸仰角),相加後再夾上下限(GG 2026-10-29)
-  const sc=typeof s.scmp==='number'?s.scmp:0,tot=s.cmp+sc,sum=`補償 機頭 ${sgn(s.cmp,1)}% + 側傾 ${sgn(sc,1)}% = ${sgn(tot,1)}%`;
+  // 補償 = 機頭角度曲線 + 側傾曲線(翼軸仰角)+ 線軸 G 回授微調,相加後再夾上下限(GG 2026-10-29). 預覽依編輯中風格的補償方式算
+  const sc=typeof s.scmp==='number'?s.scmp:0,m=act?act.compMode|0:0,lg=s.f&&typeof s.f.lg==='number'?s.f.lg:null;
+  const cur=m===2?0:s.cmp,sd=m===2?0:sc,gt=act&&m!==0&&lg!==null?gfbTrim(act,lg):0,tot=cur+sd+gt;
+  const sum=(m===2?`補償(只回授)`:`補償 機頭 ${sgn(cur,1)}% + 側傾 ${sgn(sd,1)}%`)+(m!==0?` + 線軸 G 微調 ${sgn(gt,1)}%`:'')+` = ${sgn(tot,1)}%`;
   $('compPreview').textContent=act?`飛行風格「${name}」${sum}:第一段實際 ${Math.min(act.maxPct,Math.max(act.minPct,act.phase1Pct+tot)).toFixed(0)}%,第二段實際 ${Math.min(act.maxPct,Math.max(act.minPct,act.phase2Pct+tot)).toFixed(0)}%`
    :`飛行風格「${name}」${sum}`;
  }
@@ -1779,7 +1822,7 @@ function renderStatus(s){
  $('heap').textContent=Math.round(s.heap/1024)+' KB';
  renderFlight(s.f);
  evSync(s);
- if(pane==='comp')updateCurveNow(s);
+ if(pane==='comp'){updateCurveNow(s);updateGfbLive(s)}
  // 別的裝置或序列埠存檔後,這裡的未儲存提示要跟著消失
  if(VALS){if(valsDirty()!==!!s.dirty)loadVals()}
  if(pane==='bak')bkRender();   // 起飛程序鎖定時不能套用
@@ -1922,7 +1965,7 @@ function renderFlight(f){
  switch(f.s){
   case 4:cls='fly';badge='馬達運轉';title=`緩啟動 ${f.out.toFixed(0)}%`;detail=`${tm(f.t)},${us(f.out)}`;break;
   case 5:cls='fly';badge='馬達運轉';title=f.tb?`飛行中 起飛油門 ${tm(f.t)}`:`飛行中 第${f.ph===1?'一':'二'}段 ${tm(f.t)}`;
-   detail=`油門 ${f.out.toFixed(0)}%(基本 ${f.base.toFixed(0)} ${f.comp>=0?'+':''}${f.comp.toFixed(0)}),${us(f.out)}`;break;
+   detail=`油門 ${f.out.toFixed(0)}%(基本 ${f.base.toFixed(0)} ${f.comp>=0?'+':''}${f.comp.toFixed(0)}${f.gt?`,含線軸 G 微調 ${f.gt>=0?'+':''}${f.gt.toFixed(0)}`:''}),${us(f.out)}`;break;
   case 6:cls='land';badge='馬達運轉';title=`降落中(${f.lc===2?'觸地提早降落':'時間到'})`;detail=(f.lp?'忽高忽低提醒中,':'')+`油門 ${f.out.toFixed(0)}%,${tm(f.t)}`;break;
   case 7:cls=f.er===5?'crash':'done';badge='已結束';title=`已結束:${END_TEXT[f.er]||''}`;
    detail=(f.t>0?`飛行 ${tm(f.t)},`:'')+(f.ge?(f.er===5?'撞擊斷電後推飛機不會啟動;要再飛請按「開始起飛程序」或拔電再接電':'推一下或按「開始起飛程序」可再飛'):'要再飛請重新上電');break;
@@ -2178,7 +2221,7 @@ function instDraw(s){
 }
 
 // --- 紀錄圖表 ---
-const LOGK=['pitch','thr','acc','vib','spike','push','state','flags'];
+const LOGK=['pitch','thr','acc','vib','spike','push','state','flags','lineG'];
 const LOG={next:0,ms:100};LOGK.forEach(k=>LOG[k]=[]);
 let logWinS=180,logPaused=false,logEnd=0,logCursor=-1,logBusy=false;
 function logReset(start){LOGK.forEach(k=>LOG[k]=[]);LOG.next=start}
@@ -2194,7 +2237,7 @@ async function logFetch(force){
   for(let i=0;i<count&&12+(i+1)*size<=buf.byteLength;i++){const o=12+i*size;
    LOG.pitch.push(dv.getInt8(o));LOG.thr.push(dv.getUint8(o+1));LOG.acc.push(dv.getUint8(o+2)/10);
    LOG.vib.push(dv.getUint8(o+3)*0.02);LOG.spike.push(dv.getUint8(o+4)/10);LOG.push.push(dv.getInt8(o+5)/10);
-   LOG.state.push(dv.getUint8(o+6));LOG.flags.push(dv.getUint8(o+7))}
+   LOG.state.push(dv.getUint8(o+6));LOG.flags.push(dv.getUint8(o+7));LOG.lineG.push(size>8?dv.getUint8(o+8)/10:0)}   // 第 9 位元組 r2 才有
   LOG.next=start+count;
   const extra=LOG.pitch.length-6000;if(extra>0){LOGK.forEach(k=>LOG[k].splice(0,extra));if(logPaused)logEnd=Math.max(0,logEnd-extra)}
   drawLog();
@@ -2213,10 +2256,10 @@ function drawLog(){
  const Lm=38,Rm=38,plotW=W-Lm-Rm,xOf=i=>Lm+(i-(end-winN))/(winN-1)*plotW;
  const sh=VALS?VALS.shared:{gestureG:2,touchdownG:3,earlyLandVib:0.8};
  const range=(arr)=>{let m=0;for(let i=begin;i<end;i++)if(arr[i]>m)m=arr[i];return m};
- const gMax=Math.max(4,Math.ceil(Math.max(range(LOG.acc),range(LOG.spike),sh.gestureG,sh.touchdownG)+0.5));
+ const gMax=Math.max(4,Math.ceil(Math.max(range(LOG.acc),range(LOG.spike),range(LOG.lineG),sh.gestureG,sh.touchdownG)+0.5));
  const vMax=Math.max(1.5,Math.ceil(Math.max(range(LOG.vib),sh.earlyLandVib*1.3)*2)/2);
  const top0=4,axisH=18,gap=10,ph=(H-top0-axisH-gap*2)/3;
- const panels=[{y:top0,t:'機頭角度(紅,°)/ 油門(橘,%)'},{y:top0+ph+gap,t:`G 力:總 G(灰)/ 短尖峰(紅)/ 手勢推力(綠),0~${gMax} g`},{y:top0+2*(ph+gap),t:`Z 軸抖動(棕),0~${vMax} g;綠底=正飛水平,橘條=抖動持續達標`}];
+ const panels=[{y:top0,t:'機頭角度(紅,°)/ 油門(橘,%)'},{y:top0+ph+gap,t:`G 力:總 G(灰)/ 線軸 G(藍)/ 短尖峰(紅)/ 手勢推力(綠),0~${gMax} g`},{y:top0+2*(ph+gap),t:`Z 軸抖動(棕),0~${vMax} g;綠底=正飛水平,橘條=抖動持續達標`}];
  g.font='11px system-ui,sans-serif';g.lineJoin='round';
  for(const p of panels){g.strokeStyle=LINE;g.lineWidth=1;g.strokeRect(Lm+.5,p.y+.5,plotW,ph);g.fillStyle=MUTE;g.fillText(p.t,Lm+4,p.y+12)}
  const yOf=(p,v,lo,hi)=>p.y+ph-(Math.min(hi,Math.max(lo,v))-lo)/(hi-lo)*ph;
@@ -2233,6 +2276,8 @@ function drawLog(){
  const p2=panels[1];
  for(let v=0;v<=gMax;v+=gMax>8?4:2){g.fillStyle=MUTE;g.textAlign='right';g.fillText(v,Lm-3,yOf(p2,v,0,gMax)+4);g.textAlign='left'}
  series(p2,LOG.acc,0,gMax,'#64748b',1.2);
+ series(p2,LOG.lineG,0,gMax,'#2563eb',1.6);   // 線軸 G:拉力手感,看各方位掉多少,訂回授目標用
+ if(ACTP&&ACTP.compMode)hline(p2,ACTP.gTarget,0,gMax,'#2563eb','目標',false);
  g.strokeStyle='#ef4444';g.lineWidth=2;
  for(let i=begin;i<end;i++)if(LOG.spike[i]>0){const x=xOf(i);g.beginPath();g.moveTo(x,p2.y+ph);g.lineTo(x,yOf(p2,LOG.spike[i],0,gMax));g.stroke()}
  series(p2,LOG.push.map(v=>Math.max(0,v)),0,gMax,'#22c55e',1.5);
@@ -2256,13 +2301,14 @@ function drawLog(){
  if(logCursor>=begin&&logCursor<end){const x=xOf(logCursor),i=logCursor;
   g.strokeStyle=INK;g.lineWidth=1;g.beginPath();g.moveTo(x,top0);g.lineTo(x,H-axisH);g.stroke();
   const ago=(N-1-i)*LOG.ms/1000;
-  $('logCursor').innerHTML=`<b>${fmtT(-ago)}</b> 角度 ${LOG.pitch[i]}°,油門 ${LOG.thr[i]}%,總 G ${LOG.acc[i].toFixed(1)},短尖峰 ${LOG.spike[i]?LOG.spike[i].toFixed(1)+' g':'無'},推力 ${Math.max(0,LOG.push[i]).toFixed(1)} g,抖動 ${LOG.vib[i].toFixed(2)} g${LOG.flags[i]&1?'(正飛水平)':''}${LOG.flags[i]&2?',抖動持續達標':''}`;
+  $('logCursor').innerHTML=`<b>${fmtT(-ago)}</b> 角度 ${LOG.pitch[i]}°,油門 ${LOG.thr[i]}%,總 G ${LOG.acc[i].toFixed(1)},線軸 G ${LOG.lineG[i].toFixed(1)},短尖峰 ${LOG.spike[i]?LOG.spike[i].toFixed(1)+' g':'無'},推力 ${Math.max(0,LOG.push[i]).toFixed(1)} g,抖動 ${LOG.vib[i].toFixed(2)} g${LOG.flags[i]&1?'(正飛水平)':''}${LOG.flags[i]&2?',抖動持續達標':''}`;
  }else $('logCursor').textContent='點或拖曳圖表查看某一時刻的數值.';
  // 統計(目前視窗)
- let aM=0,sM=0,vM=0,vL=0,pM=0;
- for(let i=begin;i<end;i++){aM=Math.max(aM,LOG.acc[i]);sM=Math.max(sM,LOG.spike[i]);vM=Math.max(vM,LOG.vib[i]);if(LOG.flags[i]&1)vL=Math.max(vL,LOG.vib[i]);pM=Math.max(pM,LOG.push[i])}
+ let aM=0,sM=0,vM=0,vL=0,pM=0,lgMin=99,lgMax=0;
+ for(let i=begin;i<end;i++){aM=Math.max(aM,LOG.acc[i]);sM=Math.max(sM,LOG.spike[i]);vM=Math.max(vM,LOG.vib[i]);if(LOG.flags[i]&1)vL=Math.max(vL,LOG.vib[i]);pM=Math.max(pM,LOG.push[i]);
+  if(LOG.state[i]===5){lgMin=Math.min(lgMin,LOG.lineG[i]);lgMax=Math.max(lgMax,LOG.lineG[i])}}   // 線軸 G 只統計飛行中(狀態 5)
  const tile=(k,v)=>`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`;
- $('logStats').innerHTML=tile('最大總 G',aM.toFixed(1)+' g')+tile('最大短尖峰',sM?sM.toFixed(1)+' g':'無')+tile('最大手勢推力',Math.max(0,pM).toFixed(1)+' g')+tile('最大 Z 抖動',vM.toFixed(2)+' g')+tile('水平時最大抖動',vL.toFixed(2)+' g');
+ $('logStats').innerHTML=tile('最大總 G',aM.toFixed(1)+' g')+tile('飛行中線軸 G',lgMax?`${lgMin.toFixed(1)}~${lgMax.toFixed(1)} g`:'--')+tile('最大短尖峰',sM?sM.toFixed(1)+' g':'無')+tile('最大手勢推力',Math.max(0,pM).toFixed(1)+' g')+tile('最大 Z 抖動',vM.toFixed(2)+' g')+tile('水平時最大抖動',vL.toFixed(2)+' g');
  $('logInfo').textContent=`板上共 ${fmtT(N*LOG.ms/1000).replace('−','')} 紀錄`+(logPaused?',已暫停':'');
 }
 (function(){
@@ -2296,7 +2342,7 @@ $('btnRevert').onclick=async()=>{try{const r=await post('/api/revert');toast(COD
 // --- 設定備份碼(GG 2026-09-14,設計見 docs/設定備份碼設計_2026-09-14.md) ---
 // 有未儲存變更時整張卡不能用. 貼上當下就送板子檢查;不是 LP 開頭或檢查碼錯就提示並清空.
 const BK_NAMES={noseAxis:'朝機頭的軸',upAxis:'朝機背的軸',noseRight:'圖示機頭方向',escProtocol:'輸出協定',gestureEnable:'啟動手勢',
- earlyLand:'觸地提早降落',escRpm:'轉速回傳',gearEnable:'機輪收腳',gearReverse:'舵機反轉',buzzerLow:'蜂鳴器類型',armSwitchOff:'停用安全開關',phaseMode:'換段方式',landingMode:'減力方式',landingBuzz:'降落蜂鳴器提醒',upN:'補速曲線點數',dnN:'減速曲線點數',sdN:'側傾曲線點數'};
+ earlyLand:'觸地提早降落',escRpm:'轉速回傳',gearEnable:'機輪收腳',gearReverse:'舵機反轉',buzzerLow:'蜂鳴器類型',armSwitchOff:'停用安全開關',phaseMode:'換段方式',landingMode:'減力方式',landingBuzz:'降落蜂鳴器提醒',upN:'補速曲線點數',dnN:'減速曲線點數',sdN:'側傾曲線點數',compMode:'補償方式'};
 const BK_SHARED_ERR=['axis','escrange','pwmhz','twistdeg','gearrange','wagdeg'];
 function bkLabel(item){
  if(item==='act')return '飛行使用的風格';

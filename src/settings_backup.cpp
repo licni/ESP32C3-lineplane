@@ -1,4 +1,5 @@
-// 版本流水號: r11 (2026-10-29) 世代 7:側傾補償曲線 sdDb/sdN/sd1a~sd4p
+// 版本流水號: r12 (2026-10-29) 世代 8:補償方式 compMode 與線軸 G 回授 gTarget/gGain/gLimit/gFilter
+// 舊: r11 (2026-10-29) 世代 7:側傾補償曲線 sdDb/sdN/sd1a~sd4p
 // 舊: r10 (2026-09-24) 世代 6:搖擺機尾強制停機 wagStop;降落減力方式 landingMode,蜂鳴器提醒 landingBuzz,忽高忽低 pulseLow/pulseHigh/pulsePeriod
 // 舊: r9 (2026-09-15) 安全審查:解碼從板上目前值起算(碼裡沒有的欄位一律保持,舊碼不再把新功能洗回出廠);含 WiFi 時先存 WiFi 再套飛行設定
 // 舊: r8 (2026-09-15) 套用時可取消碼裡的項目(GG:對方多複製了不要的設定):取消的項目照樣讀掉位元但寫進 scratch,保持目前的值;
@@ -120,6 +121,11 @@ const CodecField GEN7_PROFILE[] = {
     {"sd3a", -128, 1, 8},     {"sd3p", -128, 1, 8},        {"sd4a", -128, 1, 8},       {"sd4p", -128, 1, 8},
 };
 
+// --- 世代 8(2026-10-29):補償方式與線軸 G 回授 ---------------------------------------------------
+const CodecField GEN8_PROFILE[] = {
+    {"compMode", 0, 1, 2}, {"gTarget", 0.5f, 0.1f, 7}, {"gGain", 0, 0.5f, 7}, {"gLimit", 0, 1, 7}, {"gFilter", 0.1f, 0.1f, 5},
+};
+
 // --- 共用參數的分區(與網頁分頁一致;★ 登記後永遠不改,參數刪掉也保留) -----------------------------
 struct KeySection {
   const char *key;
@@ -169,6 +175,7 @@ const Generation GENERATIONS[] = {
     {GEN5_SHARED, COUNT_OF(GEN5_SHARED), nullptr, 0},
     {GEN6_SHARED, COUNT_OF(GEN6_SHARED), GEN6_PROFILE, COUNT_OF(GEN6_PROFILE)},
     {nullptr, 0, GEN7_PROFILE, COUNT_OF(GEN7_PROFILE)},
+    {nullptr, 0, GEN8_PROFILE, COUNT_OF(GEN8_PROFILE)},
 };
 const uint8_t MY_GENERATION = COUNT_OF(GENERATIONS);
 
