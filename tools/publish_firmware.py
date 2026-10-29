@@ -1,4 +1,6 @@
-# 版本流水號: r9 (2026-10-07) GitHub Release 多行說明改用 UTF-8 檔案傳入,保留換行
+# 版本流水號: r10 (2026-10-29) 不再維護帶螢幕板(GG):只編普通版,manifest-oled.json 與舊 oled 檔留著不動;Release 說明不再提螢幕板.
+#   pio 路徑跨平台(Windows 用 penv 的 pio.exe,其他用 python -m platformio);--no-release 只推韌體檔與 manifest,Release 之後再補
+# 舊: r9 (2026-10-07) GitHub Release 多行說明改用 UTF-8 檔案傳入,保留換行
 # 舊: r8 (2026-09-25) 全新板子用的完整燒錄檔(GG):平台每次編譯產生 firmware.factory.bin(開機程式+分割表+韌體,從 0x0 燒),
 #   存成 lineplane-full-版本.bin / lineplane-full-版本-oled.bin,只附在 Release(不進 firmware/,首頁與資料夾不變長)
 # 舊: r7 (2026-09-25) 兩種板子(GG):每次發布各編一次普通版與帶螢幕板(PLATFORMIO_BUILD_FLAGS=-DBOARD_C3_OLED=0/1),
@@ -49,11 +51,12 @@ KEEP_DAYS = 3
 # (種類,manifest 檔名,韌體檔名後綴,編譯旗標)
 VARIANTS = [
     ("MINI", "manifest.json", "", "-DBOARD_C3_OLED=0"),
-    ("OLED", "manifest-oled.json", "-oled", "-DBOARD_C3_OLED=1"),
+    # ("OLED", "manifest-oled.json", "-oled", "-DBOARD_C3_OLED=1"),   # 2026-10-29 起不再維護帶螢幕板(GG),manifest-oled.json 停在最後一版
 ]
 FULL_PREFIX = "lineplane-full"   # 完整燒錄檔名 lineplane-full-版本[-oled].bin,放 firmware_release/full/(不進 git)
 BIN_RE = re.compile(r"^firmware-(\d{4}\.\d{2}\.\d{2}\.\d+)(-oled)?\.bin$")
-PIO = os.path.join(os.environ.get("USERPROFILE", ""), ".platformio", "penv", "Scripts", "pio.exe")
+_PIO_WIN = os.path.join(os.environ.get("USERPROFILE", ""), ".platformio", "penv", "Scripts", "pio.exe")
+PIO = [_PIO_WIN] if os.path.exists(_PIO_WIN) else [sys.executable, "-m", "platformio"]   # GG 的 Windows 用 penv;雲端/Linux 用目前的 python
 VER_RE = re.compile(r"^(\d{4})\.(\d{2})\.(\d{2})\.(\d+)$")
 
 
@@ -140,10 +143,11 @@ def merged_day_text(ver, notes, day_notes_file):
 def release(ver, day_text, assets):
     """GitHub Release「韌體 版本」,說明 = 當天合併的修改,附兩種板子的韌體檔. 已存在就更新說明並補上檔案."""
     tag = f"v{ver}"
-    body = (day_text + "\n\n---\n板子網頁「系統 → 韌體更新 → 檢查更新」即可更新(兩種板子各自抓對應的檔案).\n"
-            "手動更新:下載下面的 .bin,到「手動上傳韌體檔」上傳. 普通版用 firmware-版本.bin,帶螢幕板用 firmware-版本-oled.bin(裝錯板子會被擋下).\n\n"
-            f"全新開發板第一次燒錄:用 {FULL_PREFIX}-版本.bin(普通版)或 {FULL_PREFIX}-版本-oled.bin(帶螢幕板),從位址 0x0 燒入整片,"
-            "做法見專案首頁 README「全新開發板第一次燒錄」. 已在用的板子不要用這個檔,用上面的檢查更新.")
+    body = (day_text + "\n\n---\n板子網頁「系統 → 韌體更新 → 檢查更新」即可更新.\n"
+            "手動更新:下載下面的 firmware-版本.bin,到「手動上傳韌體檔」上傳(裝錯板子會被擋下).\n\n"
+            f"全新開發板第一次燒錄:用 {FULL_PREFIX}-版本.bin 從位址 0x0 燒入整片(或用免安裝燒錄工具 LineplaneFlasher.exe),"
+            "做法見專案首頁 README「全新開發板第一次燒錄」. 已在用的板子不要用這個檔,用上面的檢查更新.\n\n"
+            "帶螢幕板(OLED)自 2026-10-29 起不再維護,停在 2026.10.07.1.")
     files = [a if os.path.isabs(a) else os.path.join(REL, a) for a in assets]
     # 多行說明以 UTF-8 檔案交給 gh,保留原始換行與文字.
     with tempfile.TemporaryDirectory(prefix="lineplane-release-") as tmp:
@@ -200,6 +204,8 @@ def main():
     ap.add_argument("--day-notes-file")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--cleanup-only", action="store_true", help="不重新發布,只對目前公開的版本套用每天一版與合併說明")
+    ap.add_argument("--no-release", action="store_true", help="只推韌體檔,manifest 與 CHANGELOG,不建 GitHub Release(gh 不能用時;之後用 --release-only 補)")
+    ap.add_argument("--release-only", action="store_true", help="只用公開專案目前的版本建/更新 GitHub Release(完整燒錄檔要在 firmware_release/full/)")
     a = ap.parse_args()
     notes = a.notes.replace("\\n", "\n").strip()
     check_notes(notes)
@@ -213,6 +219,17 @@ def main():
     if os.path.exists(mpath):
         with open(mpath, encoding="utf-8") as f:
             old = json.load(f)
+
+    if a.release_only:
+        ver = old.get("version", "")
+        if not day_of(ver):
+            sys.exit(f"公開版本號格式不對:{ver}")
+        day_text = merged_day_text(ver, notes, a.day_notes_file)
+        fulls_here = glob.glob(os.path.join(REL, "full", f"{FULL_PREFIX}-{ver}*.bin"))
+        release(ver, day_text, [old["file"]] + fulls_here)
+        prune_releases(ver)
+        print(f"== Release {ver} 已建立/更新")
+        return
 
     if a.cleanup_only:
         ver = old.get("version", "")
@@ -255,7 +272,7 @@ def main():
     fulls = []    # [(完整燒錄檔名, 內容)]
     for board, mname, suffix, flag in VARIANTS:
         print(f"  -- 編譯 {board}")
-        run([PIO, "run", "-e", ENV], cwd=ROOT, env={"PLATFORMIO_BUILD_FLAGS": flag})
+        run([*PIO, "run", "-e", ENV], cwd=ROOT, env={"PLATFORMIO_BUILD_FLAGS": flag})
         with open(src, "rb") as f:
             data = f.read()
         if not os.path.exists(fsrc) or os.path.getmtime(fsrc) < os.path.getmtime(src):
@@ -312,6 +329,9 @@ def main():
     run(["git", "add", "-A"], cwd=REL)
     run(["git", "commit", "-m", f"韌體 {ver}\n\n{day_text}"], cwd=REL)
     run(["git", "push"], cwd=REL)
+    if a.no_release:
+        print(f"== 已推送 {ver} 的韌體檔與 manifest(--no-release:GitHub Release 之後用 --release-only 補,完整燒錄檔在 firmware_release/full/)")
+        return
     release(ver, day_text, [man["file"] for _, _, _, man in builds] + [os.path.join(fdir, n) for n, _ in fulls])
     prune_releases(ver)
     print(f"== 已發布 {ver}(當天只留這一版,說明已合併). raw 快取可能要幾分鐘才更新,板子暫時看到舊版屬正常.")
