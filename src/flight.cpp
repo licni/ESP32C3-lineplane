@@ -1,4 +1,6 @@
-// 版本流水號: r30 (2026-10-29) 線軸 G 回授(GG:任何方位相同的外甩手感):線軸 G = |加速度計 y 軸| 低通,微調 = (目標 − 線軸 G) × 增益 夾 ±上限;
+// 版本流水號: r31 (2026-10-29) 審查修正:側傾補償 × flightSideCompFactor(俯衝淡出,快滾關閉);線軸 G 先低通帶號值再取絕對值(震動不整流,線鬆不翻號);
+//   待機低通固定 0.5 秒(fp 是上一趟的快照),感測器故障歸零;回授微調過了不補償秒數後 2 秒線性漸入(模擬發現起飛加速慢時會一次跳 +20%)
+// 舊: r30 (2026-10-29) 線軸 G 回授(GG:任何方位相同的外甩手感):線軸 G = |加速度計 y 軸| 低通,微調 = (目標 − 線軸 G) × 增益 夾 ±上限;
 //   補償方式 曲線 / 曲線+回授 / 只回授. 回授與曲線同一個啟用條件(感測器正常且過了不補償秒數),降落中不補償
 // 舊: r29 (2026-10-29) 補償 = 機頭角度曲線 + 側傾曲線(翼軸仰角),相加後再夾上下限(GG 2026-10-29,飛手回報斜上方升力不足)
 // 舊: r28 (2026-10-07) 長按安全開關停機成功也回報確認音,同次按壓封鎖重新起飛
@@ -182,7 +184,9 @@ static float gyroLpfMag = 0;
 static float landStillS = 0;
 static float landAccRef[3] = {0, 0, 1};
 static float lastBase = 0, lastComp = 0, lastOut = 0;
-static float lineGLpf = 0, lastGTrim = 0;   // 線軸 G 低通值(每拍更新,待機也算),這一拍的回授微調
+static float lineGLpf = 0, lastGTrim = 0;   // 線軸 G 低通值(帶號,取絕對值才是線軸 G;每拍更新,待機也算),這一拍的回授微調
+static const float LINE_G_IDLE_TAU_S = 0.5f;   // 待機時的低通時間常數(fp 是上一趟飛行的快照,不能用)
+static const float G_TRIM_RAMP_S = 2.0f;       // 回授微調過了不補償秒數後幾秒內線性漸入
 static uint8_t phase = 0;
 static bool lastGearUp = false;
 
@@ -351,6 +355,14 @@ static float baseThrottle(float t, uint8_t &phaseOut) {
   const float holdEnd = fp.takeoffRampSec + fp.takeoffHoldSec;
   if (t < holdEnd) return fp.takeoffPct;
   return fp.takeoffPct + (b - fp.takeoffPct) * (t - holdEnd) / TAKEOFF_BLEND_S;
+}
+
+float flightSideCompFactor(float pitchDeg, float rollRateDps) {
+  // 機頭朝下淡出:0° 全額,−45° 以下 0(俯衝由朝下曲線減速,側傾補償不再抵銷它)
+  const float pitchF = pitchDeg >= 0 ? 1.0f : max(0.0f, 1.0f + pitchDeg / 45.0f);
+  // 快滾關閉:|滾轉率| 90 °/s 以下全額,180 °/s 以上 0(平常飛行被線拉著幾乎不滾,半滾進倒飛約 180~360 °/s)
+  const float rollF = constrain((180.0f - fabsf(rollRateDps)) / 90.0f, 0.0f, 1.0f);
+  return pitchF * rollF;
 }
 
 void flightBegin() {
@@ -743,12 +755,16 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
     }
   }
 
-  // --- 線軸 G 低通:翼軸方向比力的絕對值(順逆時針,正飛倒飛都是正值). 待機時也更新,網頁才看得到目前讀值.
+  // --- 線軸 G 低通:翼軸方向比力(順逆時針符號相反,取絕對值後正飛倒飛都是正值). 待機時也更新,網頁才看得到目前讀值.
   // 球面運動沿線方向的加速度永遠是 V²/R,所以這個值 = V²/R − g·sin(翼軸仰角),就是線拉力手感(扣掉空氣外甩分量).
+  // 先低通帶號值再取絕對值(r31):先取絕對值會把震動整流成正偏差,線鬆到比力翻號時也會變成正回授.
   if (in.imuOk) {
-    const float tau = max(fp.gFilterSec, 0.1f);
-    lineGLpf += (fabsf(in.accG[1]) - lineGLpf) * min(1.0f, dt / tau);
+    const float tau = motorState(state) ? max(fp.gFilterSec, 0.1f) : LINE_G_IDLE_TAU_S;
+    lineGLpf += (in.accG[1] - lineGLpf) * min(1.0f, dt / tau);
+  } else {
+    lineGLpf = 0;   // 故障時不留凍結值(紀錄與監看頁才不會畫一條假線;油門路徑本來就被 imuOk 擋住)
   }
+  const float lineG = fabsf(lineGLpf);
 
   // --- 馬達運轉中的油門 ---
   if (motorState(state)) {
@@ -771,10 +787,14 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
         // 側傾補償(GG 2026-10-29):飛到斜上方時翼軸往下指向飛手,升力分量變小,依翼軸仰角再加一條曲線,兩條相加
         // 線軸 G 回授(GG 2026-10-29):拉力手感比目標小就加油門,比例控制夾在 ±幅度上限;方式 2 不用曲線只用回授
         if (in.imuOk && t >= fp.noCompSec) {
-          if (fp.compMode != COMP_G_ONLY) comp = curveCompPct(fp, in.pitchDeg) + curveSideCompPct(fp, in.sideDeg);
+          if (fp.compMode != COMP_G_ONLY)
+            comp = curveCompPct(fp, in.pitchDeg) +
+                   curveSideCompPct(fp, in.sideDeg) * flightSideCompFactor(in.pitchDeg, in.gyroDps[0]);
           if (fp.compMode != COMP_CURVE) {
             const float lim = (float)fp.gLimitPct;
-            lastGTrim = constrain((fp.gTargetG - lineGLpf) * fp.gGainPctPerG, -lim, lim);
+            // 2 秒線性漸入:起飛加速慢時過了不補償秒數速度還沒到,線軸 G 遠低於目標,不漸入會一次跳 +20~30%
+            const float ramp = min(1.0f, (t - fp.noCompSec) / G_TRIM_RAMP_S);
+            lastGTrim = constrain((fp.gTargetG - lineG) * fp.gGainPctPerG, -lim, lim) * ramp;
             comp += lastGTrim;
           }
         }
@@ -888,7 +908,7 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
   status.basePct = motorState(state) ? lastBase : 0;
   status.compPct = motorState(state) ? lastComp : 0;
   status.outPct = motorState(state) ? lastOut : 0;
-  status.lineG = lineGLpf;
+  status.lineG = fabsf(lineGLpf);
   status.gTrimPct = motorState(state) ? lastGTrim : 0;
   status.phase = phase;
   {

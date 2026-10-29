@@ -1,4 +1,6 @@
-// 版本流水號: r28 (2026-10-29) 版面 v13:風格尾端加補償方式 compMode 與線軸 G 回授 gTarget/gGain/gLimit/gFilter(出廠 曲線,3.0g,10%/g,±30%,0.5s);
+// 版本流水號: r29 (2026-10-29) 側傾曲線出廠值改成全部 0%(死區 20°,3 點 45/70/90),v12 以前的存檔升級也補 0%(GG 2026-10-29:
+//   審查發現「等於朝上曲線」會讓舊飛法在斜上方多補 8~16%,改成飛手自己拉)
+// 舊: r28 (2026-10-29) 版面 v13:風格尾端加補償方式 compMode 與線軸 G 回授 gTarget/gGain/gLimit/gFilter(出廠 曲線,3.0g,10%/g,±30%,0.5s);
 //   讀 v12 以前風格尾端補出廠值
 // 舊: r27 (2026-10-29) 版面 v12:風格尾端加側傾補償曲線 side(參數 sdDb/sdN/sd1a~sd4p,翼軸仰角 0~90 一側);
 //   出廠值與各組的朝上曲線相同,讀 v11 以前風格尾端複製朝上曲線;交叉驗證同朝上側
@@ -144,6 +146,12 @@ static void setSide(CurveSide &s, int8_t deadband, uint8_t count, const CurvePoi
   s.pts[4] = pts[3];   // 第 5 格不再使用
 }
 
+// 側傾曲線出廠值:全部 0%(不補償),點放在 45/70/90 讓人直接拉. GG 2026-10-29 從「等於朝上曲線」改過來,升級時飛法才真的不變.
+static void defaultSide(CurveSide &s) {
+  const CurvePoint pts[4] = {{45, 0}, {70, 0}, {90, 0}, {90, 0}};
+  setSide(s, 20, 3, pts);
+}
+
 // 線軸 G 回授出廠值:方式 = 曲線(飛法和加這個功能之前一樣);目標 3.0 g,增益 10 %/g,幅度 ±30%(GG 2026-10-29:大飛機 ±10% 無感),低通 0.5 秒
 static void defaultGFeedback(ProfileSettings &p) {
   p.compMode = COMP_CURVE;
@@ -217,8 +225,7 @@ static void defaultProfile(ProfileSettings &p, uint8_t index) {
     setSide(p.up, 29, 1, up);
     setSide(p.down, -30, 1, dn);
   }
-  // 側傾補償曲線出廠值 = 這組的朝上曲線(GG 2026-10-29)
-  p.side = p.up;
+  defaultSide(p.side);   // 側傾補償曲線出廠 0%(GG 2026-10-29)
   // 起飛油門出廠不使用(持續時間 0),飛法和加這個功能之前一樣;油門值先放第一段油門,開啟時從這裡調
   p.takeoffPct = p.phase1Pct;
   p.takeoffHoldSec = 0;
@@ -508,7 +515,7 @@ static bool loadBlobAny(Preferences &prefs, const char *key, uint8_t *data, size
 //   v9:共用設定尾端加蜂鳴器電位 + 3 預留;風格不變
 //   v10:風格尾端加起飛油門(油門 + 3 預留 + 持續時間);共用設定不變
 //   v11:風格尾端加忽高忽低減力(低,高,2 預留,週期),減力方式與蜂鳴器提醒用 reserved0;共用設定大小不變,wagStopDeg 用 reserved9[0]
-//   v12:風格尾端加側傾補償曲線 side(一個 CurveSide);共用設定不變. 舊風格讀進來複製朝上曲線當側傾曲線(出廠值也是這樣)
+//   v12:風格尾端加側傾補償曲線 side(一個 CurveSide);共用設定不變. 舊風格讀進來側傾曲線補 0%(出廠值也是 0%;10.29.1 曾複製朝上曲線)
 //   v13:風格尾端加補償方式與線軸 G 回授 16 位元組;共用設定不變. 舊風格讀進來補出廠值(方式 = 曲線)
 // 所以風格 v4/v6~v9 原樣沿用後尾端補「不使用」,v5 取前段;共用設定 v4~v6 較短,尾端補預設. GG 已經在板子上調好參數,改版不可洗掉.
 static const size_t CURVE_SIDE_SIZE = sizeof(CurveSide);
@@ -575,8 +582,8 @@ static bool loadProfile(Preferences &prefs, const char *key, ProfileSettings &ou
   }
   if (p.takeoffPct < THROTTLE_FLOOR_PCT || p.takeoffPct > 100) p.takeoffPct = max(p.phase1Pct, THROTTLE_FLOOR_PCT);
   const bool trimmed = trimSide(p.up, true) | trimSide(p.down, false);   // 用 | 兩側都要做
-  // 加側傾曲線之前的存檔:複製朝上曲線(與出廠值一致,GG 2026-10-29). 要放在 trimSide 之後,複製到的一定是 1~4 點
-  if (!current && !old12) p.side = p.up;
+  // 加側傾曲線之前的存檔:側傾曲線補 0%(與出廠值一致,GG 2026-10-29;r28 曾複製朝上曲線,會讓舊飛法在斜上方多補)
+  if (!current && !old12) defaultSide(p.side);
   if (trimmed) Serial.printf("settings %s curve trimmed to %u points max\n", key, CURVE_MAX_POINTS);
   // 飛行中油門下限改成最低 10% 之前的存檔可能是 0~9:補到 10,其他設定照舊(不可因此整組回預設)
   if (p.minPct < THROTTLE_FLOOR_PCT) {

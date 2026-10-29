@@ -1,4 +1,5 @@
-// 版本流水號: r23 (2026-10-29) 飛行紀錄加線軸 G(來自狀態機的低通值)
+// 版本流水號: r24 (2026-10-29) 方位角積分(attitudeYawRateDps,馬達啟動歸零)送遙測與飛行紀錄,紀錄加翼軸仰角;3D 半球位置用
+// 舊: r23 (2026-10-29) 飛行紀錄加線軸 G(來自狀態機的低通值)
 // 舊: r22 (2026-10-29) 翼軸仰角送進飛行狀態機與遙測(側傾補償曲線)
 // 舊: r21 (2026-09-15) 控制工作加入任務看門狗(5 秒沒餵 panic 重開);飛行輸入加電變輸出掛載失敗
 // 舊: r20 (2026-09-14) 蜂鳴器每拍依飛行狀態與設定的電位更新(buzzerUpdate)
@@ -96,6 +97,7 @@ static void controlTask(void *) {
   FlightOutputs flightOut = {false, 0, 0, false};
   bool ledOn = false;
   FlightState lastFlightState = FS_ARMING;
+  float azimuthDeg = 0;   // 半球方位角(陀螺儀繞鉛直軸積分),馬達啟動時歸零
   bool manualWas = false;
   uint32_t lastLateEventMs = 0;
   uint32_t lastSatEventMs = 0;
@@ -190,6 +192,11 @@ static void controlTask(void *) {
     const float pitch = constrain(rawPitch + cfg.pitchTrimDeg, -90.0f, 90.0f);
     const float roll = attitudeRollDeg();
     const float side = attitudeSideDeg();
+    if (imuOk) {
+      // 方位角:角速度投影到世界鉛直軸後積分. 零點飄移會讓整張軌跡圖慢慢轉,幾秒內的動作形狀不受影響
+      azimuthDeg += attitudeYawRateDps(reading.gyroDps) * DT;
+      azimuthDeg = fmodf(azimuthDeg + 360.0f, 360.0f);
+    }
 
     bool gestureLevel = false;
     if (imuOk) {
@@ -303,6 +310,8 @@ static void controlTask(void *) {
     const bool gestureLamp = gestureHitMs && nowMs - gestureHitMs <= GESTURE_LAMP_MS;
     FlightStatus fst;
     flightGetStatus(fst);
+    // 馬達啟動那一拍方位角歸零:軌跡從 0° 開始,地面轉動飛機累積的飄移不帶進飛行
+    if (fst.state == FS_TAKEOFF && lastFlightState != FS_TAKEOFF) azimuthDeg = 0;
     lastFlightState = fst.state;
     buzzerUpdate(nowMs, fst, cfg.buzzerActiveLow);
     uint8_t flags = 0;
@@ -310,7 +319,7 @@ static void controlTask(void *) {
     if (groundRoll.holdSeconds() >= cfg.earlyLandHoldSec) flags |= LOG_FLAG_ROLL_HOLD;
     if (imuFault) flags |= LOG_FLAG_IMU_FAULT;
     if (gestureLamp) flags |= LOG_FLAG_GESTURE;
-    flightLogFeed(pitch, pct, reading.accMagG, groundRoll.vibG(), spikeThisTick, pushG, fst.lineG, fst.state, flags, nowMs);
+    flightLogFeed(pitch, pct, reading.accMagG, groundRoll.vibG(), spikeThisTick, pushG, fst.lineG, side, azimuthDeg, fst.state, flags, nowMs);
 
     const uint32_t execUs = micros() - startUs;
     if (execUs > maxExecUs) maxExecUs = execUs;
@@ -320,6 +329,7 @@ static void controlTask(void *) {
     telemetry.pitchDeg = pitch;
     telemetry.rollDeg = roll;
     telemetry.sideDeg = side;
+    telemetry.azimuthDeg = azimuthDeg;
     telemetry.vibG = groundRoll.vibG();
     telemetry.levelOk = groundRoll.level();
     telemetry.rollHoldS = groundRoll.holdSeconds();

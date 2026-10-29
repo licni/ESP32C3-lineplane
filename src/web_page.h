@@ -1,4 +1,6 @@
-// 版本流水號: r97 (2026-10-29) 補償方式與線軸 G 回授(GG):角度補償頁新卡「補償方式」(曲線 / 曲線+回授 / 只回授)與目標 G,增益,幅度,低通,
+// 版本流水號: r98 (2026-10-29) 3D 半球(GG):監看頁「3D 半球位置」(高度角 = 翼軸仰角,方位角 = 陀螺儀積分,箭頭為飛行方向,顏色/文字為曲線補償;拖曳旋轉),
+//   紀錄頁 3D 飛行軌跡(油門著色,游標白點);補償預覽不再在地上顯示回授預測;側傾說明加俯衝淡出;撞牆檢查加兩條同時作用的最壞情況;回授增益提示
+// 舊: r97 (2026-10-29) 補償方式與線軸 G 回授(GG):角度補償頁新卡「補償方式」(曲線 / 曲線+回授 / 只回授)與目標 G,增益,幅度,低通,
 //   即時顯示線軸 G 與微調量,只回授時曲線卡變淡;監看頁加線軸 G 讀數,補償預覽與飛行中面板含 G 微調;紀錄頁 G 力面板加線軸 G(藍),游標與統計加線軸 G
 // 舊: r96 (2026-10-29) 側傾補償曲線(GG,飛手回報斜上方升力不足):角度補償頁加第二張圖 sdSvg(直軸翼軸仰角 0~90),點與補速起點可拖,
 //   撞牆檢查加側傾兩段,全部點的數值與點數選單加側傾;監看頁顯示翼軸仰角,補償預覽改成 機頭 + 側傾 = 合計;備份碼項目名稱加側傾
@@ -493,6 +495,13 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
   <div class="sub" id="compPreview" style="margin-top:4px"></div>
  </div>
  <div class="card">
+  <h2>3D 半球位置 <span class="sub">(拿著飛機轉動就會動)</span></h2>
+  <div class="cnote">飛手在中心,飛機在半球面上. 高度角 = 翼軸仰角(翼軸往下指向飛手幾度);方位角由陀螺儀繞鉛直軸積分,會慢慢飄,馬達啟動時歸零.
+   箭頭是機頭方向沿球面的飛行方向(機頭朝上 = 往頭頂爬). 點的顏色與文字是這個姿態下兩條曲線的補償:綠加速,紅減速. 回授微調看線軸 G,在地上沒有意義,不預測. 拖曳可旋轉視角.</div>
+  <canvas id="h3Mon" style="width:100%;max-width:560px;height:300px;display:block;touch-action:none;border-radius:4px"></canvas>
+  <div class="sub" id="h3MonText" style="margin-top:4px"></div>
+ </div>
+ <div class="card">
   <h2>事件紀錄 <span class="sub">(這次通電)</span></h2>
   <div class="cnote">降落,馬達停止,感測器異常等事件與原因,時間是通電後幾秒. 斷電或重新開機才清除;第一行是這次為什麼開機.</div>
   <div class="evbox" id="evBox"><div class="sub">讀取中…</div></div>
@@ -560,7 +569,8 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
   </div>
   <h2 style="margin-top:14px">側傾補償曲線 <span class="sub">(翼軸仰角)</span></h2>
   <div class="cnote">飛機飛到斜上方時,翼軸(線的方向)往下指向飛手,升力分量變小. 直軸是翼軸對地平線的仰角:低空平飛 0°,45° 高度平飛約 45°,正頭頂 90°,正飛與倒飛算法相同;橫軸同上.
-   這條曲線的補償與上圖機頭角度的補償<b>相加</b>,再夾在上下限之間. 點選或拖曳曲線上的點;左邊三角形是補速起點;油門上下限與基本油門在上圖調整.</div>
+   這條曲線的補償與上圖機頭角度的補償<b>相加</b>,再夾在上下限之間. <b>機頭朝下時這條曲線淡出</b>(0° 全額,往下到 −45° 以下為 0,俯衝交給朝下曲線減速),快速滾轉時關閉.
+   出廠全部 0%(不補償),要用的人自己拉. 點選或拖曳曲線上的點;左邊三角形是補速起點;油門上下限與基本油門在上圖調整.</div>
   <div class="cvchart" style="max-width:640px"><svg id="sdSvg" viewBox="0 0 440 236" role="img" aria-label="側傾補償曲線"></svg></div>
  </div>
  <details class="card"><summary><b>全部點的數值</b>(不方便拖曳時用)</summary><div id="curveCard"></div></details>
@@ -577,6 +587,10 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
  <div class="card" style="padding:6px 6px">
   <div class="sub" id="logCursor" style="min-height:2.8em;padding:0 6px"></div>
   <canvas id="logCanvas" style="width:100%;height:520px;display:block;touch-action:pan-y"></canvas>
+ </div>
+ <div class="card" style="padding:6px 6px">
+  <div class="sub" style="padding:0 6px">3D 飛行軌跡(目前視窗,只畫馬達運轉中):顏色 = 油門,藍低紅高;白點 = 游標時刻. 方位角由陀螺儀積分,馬達啟動時歸零,久了會慢慢轉偏,看幾秒內的動作形狀. 拖曳可旋轉.</div>
+  <canvas id="h3Log" style="width:100%;height:340px;display:block;touch-action:none"></canvas>
  </div>
 </section>
 
@@ -1179,6 +1193,7 @@ function buildCompMode(){
   const box=$('compModeCards');box.innerHTML='';
   box.appendChild(makeSelect('p','compMode','補償方式',COMP_NAMES,'曲線:照角度曲線補償(原本的做法). 曲線 + 回授:曲線之外再依線軸 G 微調,讓每個方位的拉力一樣. 只回授:不用曲線,基本油門 + 回授微調,幅度上限就是它能加減的範圍.'));
   for(const k of ['gTarget','gGain','gLimit','gFilter'])box.appendChild(makeParam('p',k));
+  box.insertAdjacentHTML('beforeend','<div class="sub" style="margin:2px 0 4px">增益 × 平滑秒數太大(例如 30 %/g 配 2 秒以上)可能來回抽油門,先用出廠值飛,看紀錄頁線軸 G 的藍線再調. 只回授方式分不出爬升與俯衝,要等速度掉了才補,快速動作仍建議保留曲線(曲線 + 回授). 微調過了「起飛後不補償」秒數後 2 秒內漸入.</div>');
  }
  // 只回授時曲線用不到:曲線卡變淡並提示(仍可編輯,切回去就生效);回授參數在「曲線」方式下變淡
  const m=p.compMode|0,cc=$('curveMainCard');
@@ -1242,6 +1257,8 @@ function cvSideComp(p,deg){
  for(let i=1;i<=p[ck('sdN')];i++){const a=p[ck(`sd${i}a`)],c=p[ck(`sd${i}p`)];if(x<=a)return a>pa?pp+(c-pp)*(x-pa)/(a-pa):c;pa=a;pp=c}
  return pp;
 }
+// 兩條曲線同時作用的最壞情況:機頭朝上 d 度時翼軸仰角最多 90−d(翼軸沿徑向,機頭沿切線的幾何限制),取合計最大值
+function cvWorst(p){let w=0;for(let d=0;d<=90;d+=3){let ms=0;for(let e=0;e<=90-d;e+=3)ms=Math.max(ms,cvSideComp(p,e));w=Math.max(w,cvComp(p,d)+ms)}return w}
 // 側傾曲線圖的直軸:0(下)~90(上),高度只有主圖的一半(每度的尺寸相同);橫軸與主圖共用 cvX/cvPct
 const SD={H:236,T:22,B:84};
 const SD_Y0=SD.T,SD_Y1=SD.H-SD.B;
@@ -1480,7 +1497,8 @@ function buildCurvePanel(){
   wb.innerHTML=`<h3 style="color:var(--ink)">撞牆檢查 <span class="sub" style="font-weight:400">補償後被上下限卡住的角度</span></h3>`+
    `<div class="wl"><span class="sub">第一段 ${p.phase1Pct}%</span><div>${cvWallText(p,p.phase1Pct)}</div></div><div class="wl"><span class="sub">第二段 ${p.phase2Pct}%</span><div>${cvWallText(p,p.phase2Pct)}</div></div>`+
    `<div class="wl"><span class="sub">側傾 第一段</span><div>${cvSideWallText(p,p.phase1Pct)}</div></div><div class="wl"><span class="sub">側傾 第二段</span><div>${cvSideWallText(p,p.phase2Pct)}</div></div>`+
-   `<div class="sub" style="margin-top:2px">兩條曲線分開檢查;飛行時兩者相加,同時斜上方又抬頭時更容易撞上限.</div>`;
+   (()=>{const w=cvWorst(p),h1=p.phase1Pct+w,h2=p.phase2Pct+w,over=h1>p.maxPct||h2>p.maxPct;
+    return `<div class="sub" style="margin-top:2px">兩條同時作用(機頭朝上爬,翼軸仰角 ≤ 90° − 機頭角度)最壞情況:第一段 ${h1.toFixed(0)}%,第二段 ${h2.toFixed(0)}%${over?'<b style="color:var(--bad)">,超過上限會被夾住</b>':''}. 機頭朝下時側傾補償淡出.</div>`})();
   return wb};
  // 油門上下限(GG 2026-09-14 從計時器頁搬來):放在撞牆檢查下面,預設收起,點標題展開. 面板重建時保留展開狀態.
  const limBox=()=>{let d=$('cvLim');
@@ -1641,6 +1659,75 @@ async function loadVals(){
  g.insertAdjacentHTML('beforeend',`<text x="-128" y="${y+3}">${d>0?'+':''}${d}°</text><line x1="-124" y1="${y}" x2="-116" y2="${y}" stroke="var(--mute)"/>`)}})();
 function fmtUp(s){const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?`${h} 時 ${m} 分`:`${m} 分 ${s%60} 秒`}
 function sgn(v,d){return (v>0?'+':'')+v.toFixed(d)}
+// --- 3D 半球(GG 2026-10-29):飛手在原點,飛機在單位球面上,位置 = (高度角 eps = 翼軸仰角,方位角 az = 陀螺儀積分). 正交投影,拖曳改視角.
+// 監看頁即時位置(h3DrawMon)與紀錄頁軌跡(h3DrawLog)共用同一組畫法與視角. 不用外部函式庫,網頁離線(熱點)也能看. ---
+const H3={yaw:-30,tilt:28};
+function h3Proj(eps,az,W,H,R){
+ // 世界座標 x 東 y 北 z 上;先繞 z 轉 yaw,再從 tilt 俯視. 回 [螢幕 x,螢幕 y,深度](深度 > 0 在後半球,畫淡一點)
+ const e=eps*Math.PI/180,a=az*Math.PI/180,x=Math.cos(e)*Math.cos(a),y=Math.cos(e)*Math.sin(a),z=Math.sin(e);
+ const cy=Math.cos(H3.yaw*Math.PI/180),sy=Math.sin(H3.yaw*Math.PI/180),x1=x*cy-y*sy,y1=x*sy+y*cy;
+ const ct=Math.cos(H3.tilt*Math.PI/180),st=Math.sin(H3.tilt*Math.PI/180);
+ return [W/2+x1*R,H*0.78-(z*ct-y1*st)*R,y1*ct+z*st];
+}
+function h3Setup(id){
+ const cv=$(id);if(!cv)return null;const dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;if(!W||!H)return null;
+ if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+ const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
+ const css=getComputedStyle(document.documentElement),v=n=>css.getPropertyValue(n).trim();
+ return {g,W,H,R:Math.min(W/2-20,H*0.72),INK:v('--ink'),MUTE:v('--mute'),LINE:v('--line')};
+}
+function h3Frame(c){
+ const {g,W,H,R}=c;g.clearRect(0,0,W,H);
+ const seg=(p,q,col,w)=>{g.strokeStyle=col;g.lineWidth=w;g.beginPath();g.moveTo(p[0],p[1]);g.lineTo(q[0],q[1]);g.stroke()};
+ const arc=(f,n,col)=>{let prev=null;for(let i=0;i<=n;i++){const p=f(i/n);if(prev)seg(prev,p,col,p[2]>0?0.7:1.3);prev=p}};
+ // 地平圈,高度 30°/60° 圈,子午線每 30°
+ arc(t=>h3Proj(0,t*360,W,H,R),120,c.MUTE);
+ for(const e of [30,60])arc(t=>h3Proj(e,t*360,W,H,R),90,c.LINE);
+ for(let a=0;a<360;a+=30)arc(t=>h3Proj(t*90,a,W,H,R),30,c.LINE);
+ g.font='11px system-ui,sans-serif';g.fillStyle=c.MUTE;
+ const cx=W/2,cz=H*0.78;g.fillStyle=c.INK;g.beginPath();g.arc(cx,cz,3.5,0,7);g.fill();g.fillStyle=c.MUTE;g.fillText('飛手',cx+6,cz+4);
+ const zt=h3Proj(90,0,W,H,R);g.fillText('頭頂 90°',zt[0]+6,zt[1]-4);
+ for(const [e,t] of [[0,'0°'],[30,'30°'],[60,'60°']]){const p=h3Proj(e,0,W,H,R);g.fillText(t,p[0]+4,p[1]+(e?0:12))}
+}
+function h3Color(pct){return `hsl(${Math.round(220-220*Math.min(100,Math.max(0,pct))/100)},80%,50%)`}
+let h3MonLast=null;
+function h3DrawMon(s){
+ if(pane!=='mon'||!s||typeof s.sd!=='number')return;h3MonLast=s;
+ const c=h3Setup('h3Mon');if(!c)return;const {g,W,H,R}=c;h3Frame(c);
+ const eps=Math.max(0,Math.min(90,s.sd)),az=typeof s.az==='number'?s.az:0,right=VALS&&VALS.shared.noseRight===1;
+ const act=VALS?(VALS.edit===s.act?VALS.profile:null):null,m=act?act.compMode|0:0,sc=typeof s.scmp==='number'?s.scmp:0;
+ const comp=m===2?null:s.cmp+sc;   // 只回授方式不預測(GG)
+ // 飛行方向:機頭角度 p 沿球面,cos p 走方位(逆時針方位增加,機頭朝右時反向),sin p 往頭頂
+ const p=s.p*Math.PI/180,dir=right?-1:1,step=12;
+ const e2=Math.min(90,eps+Math.sin(p)*step),a2=az+dir*Math.cos(p)*step/Math.max(0.2,Math.cos(eps*Math.PI/180));
+ const P=h3Proj(eps,az,W,H,R),Q=h3Proj(e2,a2,W,H,R),col=comp===null?'#2563eb':(comp>=0.5?'#16a34a':comp<=-0.5?'#dc2626':c.MUTE);
+ g.setLineDash([3,4]);g.strokeStyle=c.MUTE;g.lineWidth=1;g.beginPath();g.moveTo(W/2,H*0.78);g.lineTo(P[0],P[1]);g.stroke();g.setLineDash([]);   // 線
+ g.strokeStyle=col;g.lineWidth=3;g.beginPath();g.moveTo(P[0],P[1]);g.lineTo(Q[0],Q[1]);g.stroke();
+ g.fillStyle=col;g.beginPath();g.arc(P[0],P[1],6,0,7);g.fill();g.strokeStyle='#fff';g.lineWidth=1.5;g.stroke();
+ const txt=comp===null?'只回授:依線軸 G,地上不預測':`補償 ${sgn(comp,1)}%(${comp>=0.5?'加速':comp<=-0.5?'減速':'不變'})`;
+ g.fillStyle=col;g.font='bold 12px system-ui,sans-serif';g.fillText(txt,P[0]+10,P[1]-8);
+ const sf=typeof s.sf==='number'?s.sf:1;
+ $('h3MonText').textContent=`高度角 ${eps.toFixed(0)}°,方位 ${az.toFixed(0)}°,機頭 ${sgn(s.p,0)}°`+(comp===null?'':`;機頭曲線 ${sgn(s.cmp,1)}% + 側傾 ${sgn(sc,1)}%(側傾倍率 ${sf.toFixed(2)}:機頭朝下淡出,快滾關閉)`);
+}
+function h3DrawLog(begin,end){
+ const c=h3Setup('h3Log');if(!c)return;const {g,W,H,R}=c;h3Frame(c);
+ if(!LOG.side.length)return;
+ let prev=null;g.lineWidth=2;
+ for(let i=begin;i<end;i++){const P=h3Proj(LOG.side[i],LOG.az[i],W,H,R);
+  if(prev&&LOG.state[i]>=4&&LOG.state[i]<=6){g.strokeStyle=h3Color(LOG.thr[i]);g.globalAlpha=P[2]>0?0.45:1;g.beginPath();g.moveTo(prev[0],prev[1]);g.lineTo(P[0],P[1]);g.stroke()}
+  prev=P}
+ g.globalAlpha=1;
+ if(logCursor>=begin&&logCursor<end){const P=h3Proj(LOG.side[logCursor],LOG.az[logCursor],W,H,R);g.fillStyle='#fff';g.strokeStyle=c.INK;g.lineWidth=1.5;g.beginPath();g.arc(P[0],P[1],5,0,7);g.fill();g.stroke()}
+ for(let i=0;i<=10;i++){g.fillStyle=h3Color(i*10);g.fillRect(W-110+i*9,10,9,8)}   // 色標
+ g.fillStyle=c.MUTE;g.font='10px system-ui,sans-serif';g.fillText('油門 0%',W-112,30);g.fillText('100%',W-32,30);
+}
+// 拖曳旋轉視角(兩張圖共用視角);touch-action:none 讓單指拖曳不捲頁
+for(const id of ['h3Mon','h3Log']){const cv=$(id);if(!cv)continue;let d=null;
+ cv.addEventListener('pointerdown',e=>{d={x:e.clientX,y:e.clientY,yaw:H3.yaw,tilt:H3.tilt};cv.setPointerCapture(e.pointerId)});
+ cv.addEventListener('pointermove',e=>{if(!d)return;H3.yaw=d.yaw+(e.clientX-d.x)*0.5;H3.tilt=Math.max(5,Math.min(85,d.tilt+(e.clientY-d.y)*0.3));
+  if(id==='h3Mon'&&h3MonLast)h3DrawMon(h3MonLast);else if(id==='h3Log')drawLog()});
+ const up=()=>{d=null};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+}
 
 // --- 監看頁:背景油門曲線與目前角度紅線(與角度補償頁同一套座標概念) ---
 // 圖的直軸本來就是機頭角度(-90 上緣 ~ +90... 以 y=-角度×100/90),橫軸拿來放油門 0~100%.
@@ -1755,6 +1842,7 @@ function renderStatus(s){
  ensureActiveProfile(s.act);
  drawMonitorCurve(s);
  STATUS=s;
+ h3DrawMon(s);
  renderWifiTrial(s);
  renderFw(s);
  const right=VALS&&VALS.shared.noseRight===1;
@@ -1801,10 +1889,11 @@ function renderStatus(s){
  escRender(s);
  if(VALS){
   const name=VALS.names[s.act],act=VALS.edit===s.act?VALS.profile:null;
-  // 補償 = 機頭角度曲線 + 側傾曲線(翼軸仰角)+ 線軸 G 回授微調,相加後再夾上下限(GG 2026-10-29). 預覽依編輯中風格的補償方式算
-  const sc=typeof s.scmp==='number'?s.scmp:0,m=act?act.compMode|0:0,lg=s.f&&typeof s.f.lg==='number'?s.f.lg:null;
-  const cur=m===2?0:s.cmp,sd=m===2?0:sc,gt=act&&m!==0&&lg!==null?gfbTrim(act,lg):0,tot=cur+sd+gt;
-  const sum=(m===2?`補償(只回授)`:`補償 機頭 ${sgn(cur,1)}% + 側傾 ${sgn(sd,1)}%`)+(m!==0?` + 線軸 G 微調 ${sgn(gt,1)}%`:'')+` = ${sgn(tot,1)}%`;
+  // 補償 = 機頭角度曲線 + 側傾曲線(scmp 已乘俯衝/快滾倍率)+ 線軸 G 回授微調,相加後再夾上下限(GG 2026-10-29).
+  // 回授微調只在飛行中顯示實際值(f.gt);地上的線軸 G 沒有意義,不做預測(GG 2026-10-29)
+  const sc=typeof s.scmp==='number'?s.scmp:0,m=act?act.compMode|0:0,lg=s.f&&typeof s.f.lg==='number'?s.f.lg:null,flying=s.f&&s.f.s===5;
+  const cur=m===2?0:s.cmp,sd=m===2?0:sc,gt=flying&&m!==0&&typeof s.f.gt==='number'?s.f.gt:0,tot=cur+sd+gt;
+  const sum=(m===2?`補償(只回授)`:`補償 機頭 ${sgn(cur,1)}% + 側傾 ${sgn(sd,1)}%`)+(m!==0?(flying?` + 線軸 G 微調 ${sgn(gt,1)}%`:`(回授微調飛行中才作用;目前線軸 G ${lg===null?'--':lg.toFixed(2)} g)`):'')+` = ${sgn(tot,1)}%`;
   $('compPreview').textContent=act?`飛行風格「${name}」${sum}:第一段實際 ${Math.min(act.maxPct,Math.max(act.minPct,act.phase1Pct+tot)).toFixed(0)}%,第二段實際 ${Math.min(act.maxPct,Math.max(act.minPct,act.phase2Pct+tot)).toFixed(0)}%`
    :`飛行風格「${name}」${sum}`;
  }
@@ -2221,7 +2310,7 @@ function instDraw(s){
 }
 
 // --- 紀錄圖表 ---
-const LOGK=['pitch','thr','acc','vib','spike','push','state','flags','lineG'];
+const LOGK=['pitch','thr','acc','vib','spike','push','state','flags','lineG','side','az'];
 const LOG={next:0,ms:100};LOGK.forEach(k=>LOG[k]=[]);
 let logWinS=180,logPaused=false,logEnd=0,logCursor=-1,logBusy=false;
 function logReset(start){LOGK.forEach(k=>LOG[k]=[]);LOG.next=start}
@@ -2237,7 +2326,8 @@ async function logFetch(force){
   for(let i=0;i<count&&12+(i+1)*size<=buf.byteLength;i++){const o=12+i*size;
    LOG.pitch.push(dv.getInt8(o));LOG.thr.push(dv.getUint8(o+1));LOG.acc.push(dv.getUint8(o+2)/10);
    LOG.vib.push(dv.getUint8(o+3)*0.02);LOG.spike.push(dv.getUint8(o+4)/10);LOG.push.push(dv.getInt8(o+5)/10);
-   LOG.state.push(dv.getUint8(o+6));LOG.flags.push(dv.getUint8(o+7));LOG.lineG.push(size>8?dv.getUint8(o+8)/10:0)}   // 第 9 位元組 r2 才有
+   LOG.state.push(dv.getUint8(o+6));LOG.flags.push(dv.getUint8(o+7));LOG.lineG.push(size>8?dv.getUint8(o+8)/10:0);   // 第 9 位元組 r2 才有
+   LOG.side.push(size>10?dv.getUint8(o+9):0);LOG.az.push(size>10?dv.getUint8(o+10)*360/256:0)}   // 第 10,11 位元組 r3 才有(3D 半球位置)
   LOG.next=start+count;
   const extra=LOG.pitch.length-6000;if(extra>0){LOGK.forEach(k=>LOG[k].splice(0,extra));if(logPaused)logEnd=Math.max(0,logEnd-extra)}
   drawLog();
@@ -2308,6 +2398,7 @@ function drawLog(){
  for(let i=begin;i<end;i++){aM=Math.max(aM,LOG.acc[i]);sM=Math.max(sM,LOG.spike[i]);vM=Math.max(vM,LOG.vib[i]);if(LOG.flags[i]&1)vL=Math.max(vL,LOG.vib[i]);pM=Math.max(pM,LOG.push[i]);
   if(LOG.state[i]===5){lgMin=Math.min(lgMin,LOG.lineG[i]);lgMax=Math.max(lgMax,LOG.lineG[i])}}   // 線軸 G 只統計飛行中(狀態 5)
  const tile=(k,v)=>`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+ h3DrawLog(begin,end);
  $('logStats').innerHTML=tile('最大總 G',aM.toFixed(1)+' g')+tile('飛行中線軸 G',lgMax?`${lgMin.toFixed(1)}~${lgMax.toFixed(1)} g`:'--')+tile('最大短尖峰',sM?sM.toFixed(1)+' g':'無')+tile('最大手勢推力',Math.max(0,pM).toFixed(1)+' g')+tile('最大 Z 抖動',vM.toFixed(2)+' g')+tile('水平時最大抖動',vL.toFixed(2)+' g');
  $('logInfo').textContent=`板上共 ${fmtT(N*LOG.ms/1000).replace('−','')} 紀錄`+(logPaused?',已暫停':'');
 }

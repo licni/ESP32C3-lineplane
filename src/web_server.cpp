@@ -1,4 +1,5 @@
-// 版本流水號: r34 (2026-10-29) 狀態 f 加 lg(線軸 G 低通值)與 gt(線軸 G 回授微調 %)
+// 版本流水號: r35 (2026-10-29) 狀態加 az(方位角)與 sf(側傾補償倍率);scmp 已乘倍率
+// 舊: r34 (2026-10-29) 狀態 f 加 lg(線軸 G 低通值)與 gt(線軸 G 回授微調 %)
 // 舊: r33 (2026-10-29) 狀態加 sd(翼軸仰角)與 scmp(目前風格在這個翼軸仰角的側傾補償);cmp 仍是機頭角度補償
 // 舊: r32 (2026-09-25) 狀態加 swp(安全開關腳位);GET /api/buzz;/api/fw 加 board;網頁上傳另一種板子的韌體擋下(fwboard)
 // 舊: r31 (2026-09-24) 搜尋附近 WiFi:POST /api/wifi/scan 開始,GET /api/wifi/scan 取結果
@@ -99,7 +100,8 @@ static void handleStatus() {
   controlGetTelemetry(t);
   const uint8_t imu = !t.imuPresent ? 0 : (t.imuFault ? 2 : 1);
   const float comp = curveCompPct(profiles[activeProfile], t.pitchDeg);
-  const float sideComp = curveSideCompPct(profiles[activeProfile], t.sideDeg);
+  const float sideFactor = flightSideCompFactor(t.pitchDeg, t.gyroDps[0]);
+  const float sideComp = curveSideCompPct(profiles[activeProfile], t.sideDeg) * sideFactor;
   FlightStatus f;
   flightGetStatus(f);
   EscRpmStats rs;
@@ -113,7 +115,7 @@ static void handleStatus() {
   fwUpdateGetStatus(fw);
   char buf[2100];
   snprintf(buf, sizeof(buf),
-           "{\"p\":%.2f,\"rp\":%.2f,\"r\":%.1f,\"sd\":%.1f,\"scmp\":%.1f,\"a\":%.3f,\"g\":[%.1f,%.1f,%.1f],\"b\":[%.2f,%.2f,%.2f],"
+           "{\"p\":%.2f,\"rp\":%.2f,\"r\":%.1f,\"sd\":%.1f,\"scmp\":%.1f,\"az\":%.1f,\"sf\":%.2f,\"a\":%.3f,\"g\":[%.1f,%.1f,%.1f],\"b\":[%.2f,%.2f,%.2f],"
            "\"st\":%d,\"sts\":%.1f,\"imu\":%u,\"esc\":%u,\"ex\":%lu,\"late\":%lu,\"up\":%lu,"
            "\"heap\":%lu,\"ws\":%u,\"ip\":\"%s\",\"rssi\":%d,\"cd\":%u,\"ota\":%d,"
            "\"act\":%u,\"dirty\":%d,\"lock\":%d,\"cmp\":%.1f,\"imp\":[%.2f,%u,%ld],"
@@ -122,7 +124,7 @@ static void handleStatus() {
            "\"lc\":%u,\"er\":%u,\"rj\":%u,\"rja\":%ld,\"da\":%u,\"dg\":%.2f,\"dga\":%ld,\"ge\":%d,\"au\":%d,\"fp\":%u,\"set\":%.1f,\"tw\":%.0f,\"gb\":%.1f,\"aw\":%d,\"arm\":%d,\"al\":%d,\"awl\":%ld,\"lp\":%d},"
            "\"man\":%d,\"cal\":[%u,%.1f,%d,%d,%.0f],\"dsh\":%ld,\"proto\":%u,\"hz\":%u,\"evn\":%lu,\"rpm\":[%d,%lu,%lu,%lu,%lu,%lu,%lu,%ld],"
            "\"sim\":%d,\"cap\":[%d,%lu,%lu,%lu,%lu,%lu,%ld],\"gear\":[%.0f,%u,%d],\"wt\":[%.0f,%d,%.0f,%u],\"fw\":[%d,%d,%.0f,%u,%u,%d],\"asoff\":%d,\"swp\":%u}",
-           t.pitchDeg, t.rawPitchDeg, t.rollDeg, t.sideDeg, sideComp, t.accMagG, t.gyroDps[0], t.gyroDps[1], t.gyroDps[2], t.biasDps[0],
+           t.pitchDeg, t.rawPitchDeg, t.rollDeg, t.sideDeg, sideComp, t.azimuthDeg, sideFactor, t.accMagG, t.gyroDps[0], t.gyroDps[1], t.gyroDps[2], t.biasDps[0],
            t.biasDps[1], t.biasDps[2], t.still ? 1 : 0, t.stillSeconds, imu, t.escUs, (unsigned long)t.maxExecUs,
            (unsigned long)t.maxLateMs, (unsigned long)(millis() / 1000), (unsigned long)ESP.getFreeHeap(),
            (unsigned)wifiState(), wifiIpText().c_str(), (int)wifiRssi(), (unsigned)wifiStaCountdownSeconds(),
