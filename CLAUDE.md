@@ -38,6 +38,8 @@
   **無線燒錄/網頁上傳/板子下載後,新韌體是「待確認」**(2026-09-14 起):開網頁會自動確認,或 `POST /api/fw/confirm`;
   WiFi 就緒後 **1 分鐘**沒確認會自動退回舊版(GG 2026-09-14 從 5 分鐘縮短),確認前不能起飛. USB 燒錄不會待確認.
   無線燒錄後要馬上確認(測試腳本裡燒完就 POST /api/fw/confirm).
+- **不再維護帶螢幕板韌體**(GG 2026-10-29):不再編譯 `-DBOARD_C3_OLED=1`,不再發布 oled 版韌體,改程式時不用顧慮螢幕板.
+  display.cpp,manifest-oled,publish_firmware/flasher 的 oled 分支暫時留著沒刪,GG 說要清再清.
 - **開發階段只有一塊板子**(GG 2026-09-14):就是接在電腦上的開發板. 發布,改腳位,改設定時不用顧慮其他使用者更新會不會出問題.
 - 發布韌體給使用者(板子「檢查更新」):先改 `src/version.h` 的 FW_VERSION(要比公開專案上的新:板子逐段比數字,只裝比較新的版本),再 `tools/publish_firmware.py --notes "說明"`,
   推到公開專案 licni/ESP32lineplane-firmware(本機複本 firmware_release/,不進主版本庫). 公開專案只放韌體檔,不放原始碼.

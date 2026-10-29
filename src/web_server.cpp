@@ -1,4 +1,6 @@
-// 版本流水號: r32 (2026-09-25) 狀態加 swp(安全開關腳位);GET /api/buzz;/api/fw 加 board;網頁上傳另一種板子的韌體擋下(fwboard)
+// 版本流水號: r34 (2026-10-29) 狀態 f 加 lg(線軸 G 低通值)與 gt(線軸 G 回授微調 %)
+// 舊: r33 (2026-10-29) 狀態加 sd(翼軸仰角)與 scmp(目前風格在這個翼軸仰角的側傾補償);cmp 仍是機頭角度補償
+// 舊: r32 (2026-09-25) 狀態加 swp(安全開關腳位);GET /api/buzz;/api/fw 加 board;網頁上傳另一種板子的韌體擋下(fwboard)
 // 舊: r31 (2026-09-24) 搜尋附近 WiFi:POST /api/wifi/scan 開始,GET /api/wifi/scan 取結果
 // 舊: r30 (2026-09-24) 狀態 f.lp:降落忽高忽低提醒中
 // 舊: r29 (2026-09-15) 安全審查:/api/start 手動輸出/校正中回 startbusy;/api/cancel 不在等待放穩/倒數回 cancelstate
@@ -97,6 +99,7 @@ static void handleStatus() {
   controlGetTelemetry(t);
   const uint8_t imu = !t.imuPresent ? 0 : (t.imuFault ? 2 : 1);
   const float comp = curveCompPct(profiles[activeProfile], t.pitchDeg);
+  const float sideComp = curveSideCompPct(profiles[activeProfile], t.sideDeg);
   FlightStatus f;
   flightGetStatus(f);
   EscRpmStats rs;
@@ -108,18 +111,18 @@ static void handleStatus() {
   wifiTrialStatus(wtTxp, wtBoot, wtBootRemain);
   FwStatus fw;
   fwUpdateGetStatus(fw);
-  char buf[1900];
+  char buf[2100];
   snprintf(buf, sizeof(buf),
-           "{\"p\":%.2f,\"rp\":%.2f,\"r\":%.1f,\"a\":%.3f,\"g\":[%.1f,%.1f,%.1f],\"b\":[%.2f,%.2f,%.2f],"
+           "{\"p\":%.2f,\"rp\":%.2f,\"r\":%.1f,\"sd\":%.1f,\"scmp\":%.1f,\"a\":%.3f,\"g\":[%.1f,%.1f,%.1f],\"b\":[%.2f,%.2f,%.2f],"
            "\"st\":%d,\"sts\":%.1f,\"imu\":%u,\"esc\":%u,\"ex\":%lu,\"late\":%lu,\"up\":%lu,"
            "\"heap\":%lu,\"ws\":%u,\"ip\":\"%s\",\"rssi\":%d,\"cd\":%u,\"ota\":%d,"
            "\"act\":%u,\"dirty\":%d,\"lock\":%d,\"cmp\":%.1f,\"imp\":[%.2f,%u,%ld],"
            "\"vib\":%.2f,\"lvl\":%d,\"hold\":%.1f,\"push\":%.2f,\"glamp\":%d,\"gpeak\":%.2f,\"push3\":%.2f,\"dist\":[%.3f,%.3f,%ld],"
-           "\"f\":{\"s\":%u,\"ss\":%.1f,\"cd\":%.1f,\"t\":%.1f,\"base\":%.1f,\"comp\":%.1f,\"out\":%.1f,\"ph\":%u,\"tb\":%d,"
+           "\"f\":{\"s\":%u,\"ss\":%.1f,\"cd\":%.1f,\"t\":%.1f,\"base\":%.1f,\"comp\":%.1f,\"out\":%.1f,\"lg\":%.2f,\"gt\":%.1f,\"ph\":%u,\"tb\":%d,"
            "\"lc\":%u,\"er\":%u,\"rj\":%u,\"rja\":%ld,\"da\":%u,\"dg\":%.2f,\"dga\":%ld,\"ge\":%d,\"au\":%d,\"fp\":%u,\"set\":%.1f,\"tw\":%.0f,\"gb\":%.1f,\"aw\":%d,\"arm\":%d,\"al\":%d,\"awl\":%ld,\"lp\":%d},"
            "\"man\":%d,\"cal\":[%u,%.1f,%d,%d,%.0f],\"dsh\":%ld,\"proto\":%u,\"hz\":%u,\"evn\":%lu,\"rpm\":[%d,%lu,%lu,%lu,%lu,%lu,%lu,%ld],"
            "\"sim\":%d,\"cap\":[%d,%lu,%lu,%lu,%lu,%lu,%ld],\"gear\":[%.0f,%u,%d],\"wt\":[%.0f,%d,%.0f,%u],\"fw\":[%d,%d,%.0f,%u,%u,%d],\"asoff\":%d,\"swp\":%u}",
-           t.pitchDeg, t.rawPitchDeg, t.rollDeg, t.accMagG, t.gyroDps[0], t.gyroDps[1], t.gyroDps[2], t.biasDps[0],
+           t.pitchDeg, t.rawPitchDeg, t.rollDeg, t.sideDeg, sideComp, t.accMagG, t.gyroDps[0], t.gyroDps[1], t.gyroDps[2], t.biasDps[0],
            t.biasDps[1], t.biasDps[2], t.still ? 1 : 0, t.stillSeconds, imu, t.escUs, (unsigned long)t.maxExecUs,
            (unsigned long)t.maxLateMs, (unsigned long)(millis() / 1000), (unsigned long)ESP.getFreeHeap(),
            (unsigned)wifiState(), wifiIpText().c_str(), (int)wifiRssi(), (unsigned)wifiStaCountdownSeconds(),
@@ -128,7 +131,7 @@ static void handleStatus() {
            t.impactAgeMs == UINT32_MAX ? -1L : (long)(t.impactAgeMs / 1000), t.vibG, t.levelOk ? 1 : 0, t.rollHoldS,
            t.pushG, t.gestureLamp ? 1 : 0, t.gesturePeakG, t.pushPeak3sG, f.distG, f.distPeakG,
            f.distOverAgeMs == UINT32_MAX ? -1L : (long)(f.distOverAgeMs / 100), (unsigned)f.state, f.stateSeconds, f.countdownRemainS,
-           f.flightSeconds, f.basePct, f.compPct, f.outPct, (unsigned)f.phase, f.takeoffBoost ? 1 : 0, (unsigned)f.landingCause,
+           f.flightSeconds, f.basePct, f.compPct, f.outPct, f.lineG, f.gTrimPct, (unsigned)f.phase, f.takeoffBoost ? 1 : 0, (unsigned)f.landingCause,
            (unsigned)f.endReason, (unsigned)f.rejectReason, f.rejectAgeMs == UINT32_MAX ? -1L : (long)(f.rejectAgeMs / 100),
            (unsigned)f.disturbAction, f.disturbG, f.disturbAgeMs == UINT32_MAX ? -1L : (long)(f.disturbAgeMs / 100),
            f.gestureEnabled ? 1 : 0, f.autoStartUsed ? 1 : 0, (unsigned)f.flightProfile, f.settleSeconds, f.twistDeg, f.gestureBlockS, f.autoWaitLevel ? 1 : 0, f.armSwitch ? 1 : 0, f.armLatched ? 1 : 0,

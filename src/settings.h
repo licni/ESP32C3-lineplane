@@ -1,4 +1,7 @@
-// 版本流水號: r22 (2026-09-24) 版面 v11:風格加降落減力方式 landingMode(逐漸減力/忽高忽低)與蜂鳴器提醒 landingBuzz(用 reserved0),
+// 版本流水號: r24 (2026-10-29) 版面 v13:風格尾端加補償方式 compMode(曲線 / 曲線+線軸 G 回授 / 只用線軸 G 回授)與線軸 G 回授參數
+//   gTarget/gGain/gLimit/gFilter(GG:飛手要的是任何方位相同的外甩手感,加速度計 y 軸量到的就是線拉力手感)
+// 舊: r23 (2026-10-29) 版面 v12:風格尾端加側傾補償曲線 side(翼軸仰角 0~90 一側,與 up 同格式),出廠值同朝上曲線
+// 舊: r22 (2026-09-24) 版面 v11:風格加降落減力方式 landingMode(逐漸減力/忽高忽低)與蜂鳴器提醒 landingBuzz(用 reserved0),
 //   尾端加忽高忽低的低/高油門與週期;共用設定加搖擺機尾強制停機角度 wagStopDeg(用 reserved9[0])
 // 舊: r21 (2026-09-15) PROFILE_TEST_INDEX:「測試」組名稱鎖定
 // 舊: r20 (2026-09-15) 版面 v10:風格尾端加起飛油門 takeoffPct 與持續時間 takeoffHoldSec(舊存檔補「不使用」)
@@ -46,7 +49,7 @@ const uint8_t CURVE_STORE_POINTS = 5;
 const uint8_t CURVE_MAX_POINTS = 4;
 const uint8_t CURVE_MIN_POINTS = 1;
 const uint8_t PROFILE_NAME_BUFFER = 24;   // UTF-8,中文一字 3 位元組,約 7 個中文字
-const uint16_t SETTINGS_LAYOUT_VERSION = 11;
+const uint16_t SETTINGS_LAYOUT_VERSION = 13;
 // 起飛油門持續時間走完後,用這麼多秒平順換到時間軸的基本油門(不直接跳,免得剛離地推力突然掉)
 const float TAKEOFF_BLEND_S = 1.0f;
 const uint8_t ARM_WAIT_DEFAULT_MIN = 2;   // 安全開關等待上限出廠值(GG 2026-09-14 基準設定:2 分鐘,可調)
@@ -61,6 +64,10 @@ enum PhaseMode : uint8_t { PHASE_STEP = 0, PHASE_STEP_RAMP = 1, PHASE_SPREAD = 2
 // DShot 只做 150 與 300(GG:600 太高用不到). ESC_PROTO_PWM50 的名稱沿用,實際頻率看 escPwmHz.
 // 降落減力方式(GG 2026-09-24):逐漸減到降落油門 / 在低高兩個油門之間規律切換,提醒飛手動力快停了
 enum LandingMode : uint8_t { LANDING_RAMP = 0, LANDING_PULSE = 1 };
+// 補償方式(GG 2026-10-29):曲線(機頭 + 側傾)/ 曲線 + 線軸 G 回授微調 / 只用線軸 G 回授(不拉曲線).
+// 線軸 G = 加速度計翼軸方向比力的絕對值 = V²/R − g·sin(翼軸仰角),就是飛手手上的拉力手感(扣掉空氣外甩分量);
+// 回授 = (目標 G − 低通後的線軸 G) × 增益,夾在 ±幅度上限,加在基本油門(與曲線)上.
+enum CompMode : uint8_t { COMP_CURVE = 0, COMP_CURVE_G = 1, COMP_G_ONLY = 2 };
 const uint8_t WAG_STOP_DEFAULT_DEG = 30;   // 搖擺機尾強制停機的角度出廠值
 enum EscProtocol : uint8_t { ESC_PROTO_PWM50 = 0, ESC_PROTO_DSHOT150 = 1, ESC_PROTO_DSHOT300 = 2 };
 
@@ -157,6 +164,17 @@ struct ProfileSettings {
   uint8_t pulseHighPct;      // 忽高忽低的高油門
   uint8_t reserved11[2];
   float pulsePeriodSec;      // 一高一低合起來的秒數
+  // --- v12 起加在尾端:側傾補償曲線(GG 2026-10-29;v11 以前的存檔讀進來時複製朝上曲線) ---
+  // 輸入是翼軸仰角 0~90(飛到斜上方翼軸往下指向飛手,升力分量變小),只有一側,格式與 up 相同(死區與角度都是正值).
+  // 補償與機頭角度曲線相加後再夾上下限.
+  CurveSide side;
+  // --- v13 起加在尾端:補償方式與線軸 G 回授(GG 2026-10-29;v12 以前的存檔讀進來時補出廠值 = 曲線,飛法不變) ---
+  uint8_t compMode;          // CompMode
+  uint8_t gLimitPct;         // 回授微調幅度上限 ±%
+  uint8_t reserved13[2];
+  float gTargetG;            // 目標線軸 G(飛手喜歡的低空平飛拉力,照紀錄頁/監看頭的讀值設)
+  float gGainPctPerG;        // 增益:線軸 G 每少 1 g 加多少 % 油門
+  float gFilterSec;          // 線軸 G 低通時間常數(濾螺旋槳震動)
 };
 
 // --- 目前生效的設定(RAM) -----------------------------------------------------
@@ -213,5 +231,7 @@ void settingsCopyShared(SharedSettings &out);
 
 // 補償曲線:回傳某個機頭角度的補償百分比(兩段飛行共用).
 float curveCompPct(const ProfileSettings &p, float pitchDeg);
+// 側傾補償曲線:回傳某個翼軸仰角(0~90)的補償百分比. 飛行時與 curveCompPct 相加.
+float curveSideCompPct(const ProfileSettings &p, float sideDeg);
 // 百分比換脈寬.
 uint16_t pctToUs(float pct);

@@ -1,4 +1,6 @@
-// 版本流水號: r18 (2026-10-07) armCancelHeld 涵蓋安全開關長按停機成功
+// 版本流水號: r20 (2026-10-29) 狀態加線軸 G(低通)lineG 與回授微調 gTrimPct
+// 舊: r19 (2026-10-29) 輸入加翼軸仰角 sideDeg(側傾補償曲線)
+// 舊: r18 (2026-10-07) armCancelHeld 涵蓋安全開關長按停機成功
 // 舊: r17 (2026-10-07) 狀態加 armCancelHeld,供蜂鳴器確認安全開關已取消起飛
 // 舊: r16 (2026-09-25) 狀態加 phaseRamp(往第二段爬),landingWarn(降落減力中)給螢幕顯示
 // 舊: r15 (2026-09-24) 強制停機結束原因 END_FORCE_SWITCH(長按安全開關)/ END_FORCE_WAG(搖擺機尾);狀態加 landPulse,landBuzz
@@ -78,6 +80,7 @@ struct FlightInputs {
   bool imuOk;
   float pitchDeg;        // 已含角度修正
   float rollDeg;
+  float sideDeg;         // 翼軸仰角 0~90(飛到斜上方時變大,側傾補償用)
   float accG[3];         // 機身座標
   float accMagG;
   float gyroDps[3];
@@ -107,8 +110,10 @@ struct FlightStatus {
   float countdownRemainS;
   float flightSeconds;       // 從馬達啟動算
   float basePct;
-  float compPct;
+  float compPct;             // 曲線補償 + 線軸 G 回授微調(合計)
   float outPct;
+  float lineG;               // 線軸 G(翼軸方向比力的絕對值,低通後),待機時也更新,網頁與紀錄顯示用
+  float gTrimPct;            // 線軸 G 回授的微調量(含在 compPct 裡)
   uint8_t phase;             // 1 = 第一段,2 = 第二段(換段過渡中也算 2)
   bool takeoffBoost;         // 在起飛油門階段(維持中或換回第一段的過渡中)
   bool phaseRamp;            // 油門正從第一段往第二段爬(漸進換段的過渡中,或分散換段的第一段)
