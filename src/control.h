@@ -1,4 +1,5 @@
-// 版本流水號: r3 (2026-10-29) 遙測加翼軸仰角 sideDeg(側傾補償)
+// 版本流水號: r4 (2026-10-29) 遙測加方位角 azimuthDeg(繞飛手的角度,陀螺儀積分,馬達啟動時歸零;3D 半球位置用)
+// 舊: r3 (2026-10-29) 遙測加翼軸仰角 sideDeg(側傾補償)
 // 舊: r2 (2026-09-13) 電變校正(開機保持最高油門後回最低)與網頁手動輸出(心跳逾時回最低)
 // 舊: r1 (2026-09-13) 由 main.cpp 拆出:控制工作與遙測快照
 #pragma once
@@ -15,6 +16,7 @@ struct Telemetry {
   float rawPitchDeg;      // 晶片量到的原始值(安裝方位設定畫面用)
   float rollDeg;
   float sideDeg;          // 翼軸仰角 0~90(側傾補償曲線的輸入)
+  float azimuthDeg;       // 半球上的方位角 0~360:陀螺儀繞世界鉛直軸的角速度積分,馬達啟動時歸零;會慢慢飄,看形狀用
   float accMagG;
   float gyroDps[3];
   float biasDps[3];

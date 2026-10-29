@@ -1,4 +1,5 @@
-// 版本流水號: r3 (2026-10-29) 加翼軸仰角 attitudeSideDeg:重力在機身 y 軸的分量取 asin,正飛倒飛同值
+// 版本流水號: r4 (2026-10-29) 加 attitudeYawRateDps(角速度點乘機身座標的「上」向量)
+// 舊: r3 (2026-10-29) 加翼軸仰角 attitudeSideDeg:重力在機身 y 軸的分量取 asin,正飛倒飛同值
 // 舊: r2 (2026-09-13) 靜止判斷的 1g 容許範圍放寬到 ±0.3g(副廠晶片實測靜止讀 1.12g)
 #include "imu.h"
 #include <Wire.h>
@@ -251,6 +252,12 @@ float attitudePitchDeg() {
 
 float attitudeRollDeg() {
   return atan2f(2 * (q0 * q1 + q2 * q3), q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3) * DEG_PER_RAD;
+}
+
+float attitudeYawRateDps(const float gyroDps[3]) {
+  // 世界「上」在機身座標的分量(與 pitch/roll 用同一組算式)
+  const float ux = 2 * (q1 * q3 - q0 * q2), uy = 2 * (q0 * q1 + q2 * q3), uz = q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3;
+  return gyroDps[0] * ux + gyroDps[1] * uy + gyroDps[2] * uz;
 }
 
 float attitudeSideDeg() {

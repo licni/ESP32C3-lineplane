@@ -1,4 +1,5 @@
-// 版本流水號: r2 (2026-10-29) 每筆加線軸 G(0.1g 單位,區間最後的低通值);一筆 9 位元組,網頁依 /api/log 標頭的每筆大小解碼
+// 版本流水號: r3 (2026-10-29) 每筆加翼軸仰角 sideDeg(0~90)與方位角 azim(0~255 = 0~360°);一筆 11 位元組,3D 半球軌跡用
+// 舊: r2 (2026-10-29) 每筆加線軸 G(0.1g 單位,區間最後的低通值);一筆 9 位元組,網頁依 /api/log 標頭的每筆大小解碼
 // 舊: r1 (2026-09-13) 初版:0.1 秒一筆的環形紀錄(角度,油門,G 力,Z 抖動,短尖峰,手勢推力,狀態)
 #pragma once
 #include <Arduino.h>
@@ -8,7 +9,7 @@
 // 為什麼記在板子上:飛行中手機在飛手口袋裡,不可能即時接收. 降落後再打開紀錄頁看.
 // 用途(GG 第三輪回饋):先關掉提早降落飛幾個特技,看特技的最高 G 力與地面滑行的抖動各是多少,再訂門檻.
 //
-// 記憶體:一筆 9 位元組 × 6000 筆 = 54KB,開機時靜態配置,不碎片化.
+// 記憶體:一筆 11 位元組 × 6000 筆 = 66KB,開機時靜態配置,不碎片化.
 // 讀取端(網頁)不上鎖直接讀:寫入是「先寫資料再推進計數」,讀到的一定是完整的舊資料;
 // 唯一的風險是環形覆寫時最舊那一筆被改寫,讀取端丟掉最舊一筆即可.
 // ============================================================================
@@ -32,11 +33,13 @@ struct __attribute__((packed)) FlightLogSample {
   uint8_t state;        // 飛行狀態(第 4 階段)
   uint8_t flags;
   uint8_t lineDg;       // 線軸 G(低通後)區間最後的值,單位 0.1g(r2 加在尾端,舊網頁照每筆大小跳過)
+  uint8_t sideDeg;      // 翼軸仰角 0~90(r3):半球上的高度角
+  uint8_t azim;         // 方位角 0~255 = 0~360°(r3):半球上繞飛手的角度,馬達啟動時歸零
 };
 
 // 控制工作呼叫. 各值取區間最大,時間到自動收成一筆.
 void flightLogFeed(float pitchDeg, float throttlePct, float accMagG, float vibG, float spikeG, float pushG,
-                   float lineG, uint8_t state, uint8_t flags, uint32_t nowMs);
+                   float lineG, float sideDeg, float azimuthDeg, uint8_t state, uint8_t flags, uint32_t nowMs);
 // 已寫入的總筆數(單調遞增,讀取端拿來做增量更新).
 uint32_t flightLogTotal();
 // 取第 index 筆(以總筆數編號). 不在保留範圍內回 false.

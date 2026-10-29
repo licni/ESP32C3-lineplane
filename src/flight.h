@@ -1,4 +1,5 @@
-// 版本流水號: r20 (2026-10-29) 狀態加線軸 G(低通)lineG 與回授微調 gTrimPct
+// 版本流水號: r21 (2026-10-29) 加 flightSideCompFactor(側傾補償在機頭朝下時淡出,滾轉快時關閉),網頁預覽與韌體共用
+// 舊: r20 (2026-10-29) 狀態加線軸 G(低通)lineG 與回授微調 gTrimPct
 // 舊: r19 (2026-10-29) 輸入加翼軸仰角 sideDeg(側傾補償曲線)
 // 舊: r18 (2026-10-07) armCancelHeld 涵蓋安全開關長按停機成功
 // 舊: r17 (2026-10-07) 狀態加 armCancelHeld,供蜂鳴器確認安全開關已取消起飛
@@ -143,6 +144,9 @@ struct FlightStatus {
   bool landBuzz;             // 這一拍蜂鳴器要響(降落提醒)
 };
 
+// 側傾補償的倍率 0~1(GG 2026-10-29,審查發現斜向俯衝時側傾補償會抵銷朝下曲線):
+// 機頭 ≥ 0° 全額,往下到 −45° 線性淡到 0;滾轉角速度 90→180 °/s 線性淡到 0(半滾進倒飛時翼軸掃過鉛直,翼軸仰角會短暫衝到 90°).
+float flightSideCompFactor(float pitchDeg, float rollRateDps);
 void flightBegin();
 // 每拍呼叫. 回傳這一拍的輸出.
 FlightOutputs flightUpdate(const FlightInputs &in, float dt);
