@@ -1,8 +1,10 @@
-# 版本流水號: r1 (2026-10-21) 初版:免安裝燒錄工具(GG:給不想裝開發環境的使用者)
+# 版本流水號: r2 (2026-10-29) 韌體版本讓使用者選(GG:不要只下載最新版):版本清單,版本說明,保留設定選項;APP_VERSION 1.1.0
+# 舊: r1 (2026-10-21) 初版:免安裝燒錄工具(GG:給不想裝開發環境的使用者)
 # ============================================================================
 # 線控飛機韌體燒錄工具. 打包成單一 exe(PyInstaller,見 build_exe.bat 與 .github/workflows/flasher.yml).
 #  - 序列埠:自動偵測 ESP32-C3 原生 USB(VID 303A),也可以手動選.
-#  - 韌體檔:選本機 .bin,或從公開韌體專案下載最新版完整燒錄檔(普通版/帶螢幕板,下載後驗證檢查碼).
+#  - 韌體檔:從公開韌體專案的版本清單選一版下載(普通版/帶螢幕板,下載後驗證),或選本機 .bin.
+#    預設下載完整燒錄檔(全新板子可用);勾「保留板上設定」只下載韌體更新檔.
 #  - 燒錄:用 esptool(當成函式庫呼叫,不另外安裝). 完整燒錄檔從 0x0 燒(可先清除整片);
 #    韌體更新檔燒 0x10000 並把 otadata 寫成 boot_app0(設定保留,和 PlatformIO USB 燒錄相同,不待確認).
 #  - 檢查:esptool 寫完逐段校驗檢查碼;重新開機後送序列指令 fw / mpu / net,確認版本,感測器與 WiFi.
@@ -28,7 +30,7 @@ import serial.tools.list_ports
 
 import fw_image
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 TITLE = f"線控飛機韌體燒錄工具 v{APP_VERSION}"
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
 BAUD_MONITOR = 115200
@@ -221,11 +223,14 @@ class App:
         self.ports = []              # [(裝置, 顯示文字, 分數)]
         self.listeners = []          # 檢查流程用:收板子訊息的佇列
         self.image = None            # (路徑, 內容, 分析結果)
+        self.releases = []           # fw_image.list_releases() 的結果
+        self.shown = []              # 版本下拉選單目前列出的 release(和選單順序相同)
         self.monitor = Monitor(lambda line: self.q.put(("board", line)),
                                lambda ok, msg: self.q.put(("mon_state", (ok, msg))))
         self._build()
         self._scan_ports(force=True)
         self.root.after(1500, self._port_loop)
+        self._load_releases()
         path = self.prefs.get("file")
         if path and os.path.isfile(path):
             self._load_file(path, quiet=True)
@@ -260,25 +265,41 @@ class App:
         f2 = ttk.LabelFrame(main, text=" 2. 韌體檔 ", padding=6)
         f2.grid(row=1, column=0, sticky="ew", **pad)
         f2.columnconfigure(1, weight=1)
-        ttk.Label(f2, text="檔案").grid(row=0, column=0, sticky="w")
-        self.file_var = tk.StringVar()
-        e = ttk.Entry(f2, textvariable=self.file_var)
-        e.grid(row=0, column=1, sticky="ew", padx=6)
-        e.bind("<Return>", lambda ev: self._load_file(self.file_var.get().strip().strip('"')))
-        ttk.Button(f2, text="瀏覽…", command=self._browse).grid(row=0, column=2)
+        ttk.Label(f2, text="板子種類").grid(row=0, column=0, sticky="w")
         row = ttk.Frame(f2)
-        row.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
-        ttk.Label(row, text="或下載最新版:").pack(side="left")
+        row.grid(row=0, column=1, columnspan=2, sticky="w", padx=6)
         self.board_var = tk.StringVar(value=self.prefs.get("board", "MINI"))
         for code, name in fw_image.BOARDS.items():
-            ttk.Radiobutton(row, text=name, value=code, variable=self.board_var).pack(side="left", padx=4)
-        self.dl_btn = ttk.Button(row, text="下載最新版完整燒錄檔", command=self._download)
-        self.dl_btn.pack(side="left", padx=8)
-        self.file_info = ttk.Label(f2, text="尚未選擇檔案", foreground="#555", wraplength=700, justify="left")
-        self.file_info.grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))
+            ttk.Radiobutton(row, text=name + ("(0.42 吋 OLED)" if code == "OLED" else ""), value=code, variable=self.board_var,
+                            command=self._fill_versions).pack(side="left", padx=(0, 12))
+        ttk.Label(f2, text="韌體版本").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        self.ver_var = tk.StringVar()
+        self.ver_cb = ttk.Combobox(f2, textvariable=self.ver_var, state="readonly")
+        self.ver_cb.grid(row=1, column=1, sticky="ew", padx=6, pady=(6, 0))
+        self.ver_cb.bind("<<ComboboxSelected>>", lambda e: self._show_notes())
+        vb = ttk.Frame(f2)
+        vb.grid(row=1, column=2, pady=(6, 0))
+        self.reload_btn = ttk.Button(vb, text="重新整理", command=self._load_releases)
+        self.reload_btn.pack(side="left")
+        self.dl_btn = ttk.Button(vb, text="下載這個版本", command=self._download)
+        self.dl_btn.pack(side="left", padx=(4, 0))
+        self.notes = ttk.Label(f2, text="讀取版本清單中 …", foreground="#555", wraplength=700, justify="left")
+        self.notes.grid(row=2, column=1, columnspan=2, sticky="w", padx=6, pady=(4, 0))
+        self.keep_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(f2, text="保留板上設定(只換韌體;已經燒過、正常使用中的板子才能勾)", variable=self.keep_var,
+                        command=self._show_notes).grid(row=3, column=1, columnspan=2, sticky="w", padx=6, pady=(4, 0))
+        ttk.Separator(f2).grid(row=4, column=0, columnspan=3, sticky="ew", pady=8)
+        ttk.Label(f2, text="要燒的檔案").grid(row=5, column=0, sticky="w")
+        self.file_var = tk.StringVar()
+        e = ttk.Entry(f2, textvariable=self.file_var)
+        e.grid(row=5, column=1, sticky="ew", padx=6)
+        e.bind("<Return>", lambda ev: self._load_file(self.file_var.get().strip().strip('"')))
+        ttk.Button(f2, text="選電腦裡的檔案…", command=self._browse).grid(row=5, column=2)
+        self.file_info = ttk.Label(f2, text="尚未選擇檔案:先選版本按「下載這個版本」,或選電腦裡的 .bin", foreground="#555", wraplength=700, justify="left")
+        self.file_info.grid(row=6, column=1, columnspan=2, sticky="w", padx=6, pady=(4, 0))
         self.erase_var = tk.BooleanVar(value=True)
         self.erase_cb = ttk.Checkbutton(f2, text="燒錄前先清除整片(全新板子建議勾選)", variable=self.erase_var)
-        self.erase_cb.grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        self.erase_cb.grid(row=7, column=1, columnspan=2, sticky="w", padx=6, pady=(4, 0))
 
         # 3. 燒錄與檢查
         f3 = ttk.LabelFrame(main, text=" 3. 燒錄與檢查 ", padding=6)
@@ -325,7 +346,7 @@ class App:
         txt.columnconfigure(0, weight=1)
         txt.rowconfigure(0, weight=1)
         mono = ("Consolas", 10) if sys.platform == "win32" else ("Monospace", 10)
-        self.log = tk.Text(txt, height=12, wrap="word", font=mono, background="#111", foreground="#ddd", insertbackground="#ddd")
+        self.log = tk.Text(txt, height=8, wrap="word", font=mono, background="#111", foreground="#ddd", insertbackground="#ddd")
         self.log.grid(row=0, column=0, sticky="nsew")
         sb = ttk.Scrollbar(txt, command=self.log.yview)
         sb.grid(row=0, column=1, sticky="ns")
@@ -369,9 +390,10 @@ class App:
     def _set_busy(self, busy):
         self.busy = busy
         st = "disabled" if busy else "normal"
-        for w in (self.flash_btn, self.check_btn, self.dl_btn, self.mon_btn):
+        for w in (self.flash_btn, self.check_btn, self.dl_btn, self.reload_btn, self.mon_btn):
             w.configure(state=st)
         self.port_cb.configure(state="disabled" if busy else "readonly")
+        self.ver_cb.configure(state="disabled" if busy else "readonly")
 
     def _port(self):
         label = self.port_var.get()
@@ -419,6 +441,11 @@ class App:
                     self.mon_btn.configure(text="停止監看" if self.monitor.want else "開始監看")
                 elif kind == "file":
                     self._load_file(val)
+                elif kind == "releases":
+                    self.releases = val
+                    self._fill_versions()
+                elif kind == "releases_err":
+                    self.notes.configure(text=f"讀不到版本清單:{val}\n請確認電腦能上網後按「重新整理」;也可以選電腦裡的檔案.", foreground="#cf222e")
                 elif kind == "dialog":
                     title, msg, err = val
                     (messagebox.showerror if err else messagebox.showinfo)(title, msg, parent=self.root)
@@ -495,47 +522,104 @@ class App:
         lines += ["! " + w for w in a["warnings"]]
         self.file_info.configure(text="\n".join(lines), foreground="#cf222e" if a["problems"] else ("#9a6700" if a["warnings"] else "#1a7f37"))
         self.erase_cb.configure(state="normal" if a["kind"] == "full" else "disabled")
-        if a["board"] in fw_image.BOARDS:
+        if a["board"] in fw_image.BOARDS and a["board"] != self.board_var.get():
             self.board_var.set(a["board"])
+            self._fill_versions()
         self.prefs["file"] = path
         save_prefs(self.prefs)
         if not quiet:
             self._log(f"選擇韌體檔:{path}({kind},版本 {a['version'] or '不明'})", "tool")
 
-    def _download(self):
+    def _load_releases(self):
+        self.notes.configure(text="讀取版本清單中 …", foreground="#555")
+
+        def job():
+            try:
+                self.q.put(("releases", fw_image.list_releases()))
+            except Exception as e:
+                self.q.put(("releases_err", str(e)))
+
+        threading.Thread(target=job, daemon=True).start()
+
+    def _fill_versions(self):
+        """依板子種類列出有韌體檔的版本(帶螢幕板 2026.09.25.1 起才有)."""
         board = self.board_var.get()
         self.prefs["board"] = board
         save_prefs(self.prefs)
-        self._set_busy(True)
-        threading.Thread(target=self._download_job, args=(board,), daemon=True).start()
+        old = self._selected_release()
+        self.shown = [r for r in self.releases if fw_image.release_offers(r, board)[1] or fw_image.release_offers(r, board)[0]]
+        labels = []
+        for r in self.shown:
+            tags = [t for t in ("最新" if r["latest"] else "", r["date"]) if t]
+            labels.append(r["version"] + (f"({','.join(tags)})" if tags else ""))
+        self.ver_cb.configure(values=labels)
+        keep = [i for i, r in enumerate(self.shown) if old and r["version"] == old["version"]]
+        if labels:
+            self.ver_cb.current(keep[0] if keep else 0)
+        else:
+            self.ver_var.set("")
+        self._show_notes()
 
-    def _download_job(self, board):
+    def _selected_release(self):
+        i = self.ver_cb.current()
+        return self.shown[i] if 0 <= i < len(self.shown) else None
+
+    def _show_notes(self):
+        r = self._selected_release()
+        if not r:
+            if self.releases:
+                self.notes.configure(text=f"沒有{fw_image.board_name(self.board_var.get())}可以下載的版本", foreground="#cf222e")
+            return
+        board = self.board_var.get()
+        has_full, has_app = fw_image.release_offers(r, board)
+        body = r["notes"].split("\n---")[0].strip()   # Release 說明後段是「怎麼更新」的固定文字
+        lines = [x.strip() for x in body.splitlines() if x.strip()]
+        text = "\n".join(lines[:8]) + (" …" if len(lines) > 8 else "")
+        if len(text) > 600:
+            text = text[:600] + " …"
+        extra = []
+        if self.keep_var.get():
+            if not has_app:
+                extra.append("! 這版沒有韌體更新檔,不能保留設定,請取消勾選")
+            elif not r["latest"]:
+                extra.append("! 換成較舊的版本時,新版存的設定舊版可能讀不懂而回出廠值")
+        elif not has_full:
+            extra.append("這版沒有完整燒錄檔:下載時會用最新完整燒錄檔的開機程式與分割表組合,一樣可以燒全新板子.")
+        self.notes.configure(text="\n".join([text or "(這版沒有說明)"] + extra),
+                             foreground="#9a6700" if any(x.startswith("!") for x in extra) else "#333")
+
+    def _download(self):
+        r = self._selected_release()
+        if not r:
+            messagebox.showwarning("沒有版本", "版本清單還沒讀到,請確認電腦能上網後按「重新整理」.", parent=self.root)
+            return
+        self._set_busy(True)
+        threading.Thread(target=self._download_job, args=(r, self.board_var.get(), self.keep_var.get()), daemon=True).start()
+
+    def _download_job(self, rel, board, keep):
         q = self.q
+        ver = rel["version"]
         try:
-            q.put(("stage", f"下載最新版({fw_image.board_name(board)})…"))
-            q.put(("tool", f"讀取 {fw_image.RAW_BASE}{fw_image.VARIANTS[board][0]}"))
+            q.put(("stage", f"下載 {ver}({fw_image.board_name(board)})…"))
 
             def prog(got, total):
                 q.put(("progress", got * 100 / total if total else None))
 
-            data, man = fw_image.download_latest_full(board, progress=prog)
-            ver = man["version"]
-            name = f"lineplane-full-{ver}{fw_image.VARIANTS[board][1]}.bin"
+            name, data = fw_image.download_version(rel, board, keep, self.releases, progress=prog,
+                                                    log=lambda m: q.put(("tool", m)))
             path = os.path.join(data_dir(), "firmware", name)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "wb") as f:
                 f.write(data)
             q.put(("okmsg", f"已下載並驗證 {name}({len(data):,} 位元組,檢查碼正確)"))
-            if man.get("notes"):
-                q.put(("tool", f"這版說明:{man['notes']}"))
             q.put(("file", path))
             q.put(("progress", 100))
-            q.put(("stage", f"已下載 {ver}"))
+            q.put(("stage", f"已下載 {ver},可以開始燒錄"))
         except Exception as e:
             q.put(("err", f"下載失敗:{e}"))
             q.put(("progress", 0))
             q.put(("stage", "下載失敗"))
-            q.put(("dialog", ("下載失敗", f"{e}\n\n請確認電腦能上網;也可以到 https://github.com/{fw_image.FW_REPO}/releases 手動下載 lineplane-full-*.bin.", True)))
+            q.put(("dialog", ("下載失敗", f"{e}\n\n請確認電腦能上網;也可以到 https://github.com/{fw_image.FW_REPO}/releases 手動下載後用「選電腦裡的檔案」.", True)))
         q.put(("done", None))
 
     # ---------------- 燒錄 ----------------
