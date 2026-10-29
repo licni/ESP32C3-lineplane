@@ -1,4 +1,6 @@
-# 版本流水號: r10 (2026-10-29) 不再維護帶螢幕板(GG):只編普通版,manifest-oled.json 與舊 oled 檔留著不動;Release 說明不再提螢幕板.
+# 版本流水號: r11 (2026-10-29) --release-only 補強:說明預設取 CHANGELOG 當版條目;full/ 沒有這版的完整燒錄檔時,用 full/ 裡任一舊完整檔的前 64KB
+#   (開機程式 + 分割表 + boot_app0,各版相同,已比對 10.07.1 與 10.29.1)接上 firmware/ 的韌體檔組出來. 雲端發布後 GG 在自己電腦補 Release 用
+# 舊: r10 (2026-10-29) 不再維護帶螢幕板(GG):只編普通版,manifest-oled.json 與舊 oled 檔留著不動;Release 說明不再提螢幕板.
 #   pio 路徑跨平台(Windows 用 penv 的 pio.exe,其他用 python -m platformio);--no-release 只推韌體檔與 manifest,Release 之後再補
 # 舊: r9 (2026-10-07) GitHub Release 多行說明改用 UTF-8 檔案傳入,保留換行
 # 舊: r8 (2026-09-25) 全新板子用的完整燒錄檔(GG):平台每次編譯產生 firmware.factory.bin(開機程式+分割表+韌體,從 0x0 燒),
@@ -224,9 +226,26 @@ def main():
         ver = old.get("version", "")
         if not day_of(ver):
             sys.exit(f"公開版本號格式不對:{ver}")
-        day_text = merged_day_text(ver, notes, a.day_notes_file)
-        fulls_here = glob.glob(os.path.join(REL, "full", f"{FULL_PREFIX}-{ver}*.bin"))
-        release(ver, day_text, [old["file"]] + fulls_here)
+        # 說明:指定檔 > CHANGELOG 當版條目(雲端發布時已合併好)> --notes 合併
+        cl = dict(changelog_read()).get(ver, "").strip()
+        day_text = merged_day_text(ver, notes, a.day_notes_file) if (a.day_notes_file or not cl) else cl
+        fdir = os.path.join(REL, "full")
+        want = os.path.join(fdir, f"{FULL_PREFIX}-{ver}.bin")
+        if not os.path.exists(want):
+            # 雲端發布的版本本機沒有完整燒錄檔:前 64KB 開機區各版相同,拿舊完整檔的開機區接上這版韌體
+            olds = sorted(glob.glob(os.path.join(fdir, f"{FULL_PREFIX}-*.bin")))
+            if not olds:
+                sys.exit(f"{fdir} 沒有任何完整燒錄檔可借開機區,無法組 {os.path.basename(want)}")
+            with open(olds[-1], "rb") as f:
+                boot = f.read(0x10000)
+            with open(os.path.join(REL, old["file"]), "rb") as f:
+                fw = f.read()
+            if len(fw) != old.get("size") or hashlib.sha256(fw).hexdigest() != old.get("sha256"):
+                sys.exit(f"{old['file']} 與 manifest.json 的大小/SHA-256 不符")
+            with open(want, "wb") as f:
+                f.write(boot + fw)
+            print(f"  用 {os.path.basename(olds[-1])} 的開機區組出 {os.path.basename(want)}")
+        release(ver, day_text, [old["file"], want])
         prune_releases(ver)
         print(f"== Release {ver} 已建立/更新")
         return
