@@ -1,4 +1,4 @@
-// 版本流水號: r28 (2026-10-29) 版面 v13:風格尾端加補償方式 compMode 與線軸 G 回授 gTarget/gGain/gLimit/gFilter(出廠 曲線,3.0g,10%/g,±15%,0.5s);
+// 版本流水號: r28 (2026-10-29) 版面 v13:風格尾端加補償方式 compMode 與線軸 G 回授 gTarget/gGain/gLimit/gFilter(出廠 曲線,3.0g,10%/g,±30%,0.5s);
 //   讀 v12 以前風格尾端補出廠值
 // 舊: r27 (2026-10-29) 版面 v12:風格尾端加側傾補償曲線 side(參數 sdDb/sdN/sd1a~sd4p,翼軸仰角 0~90 一側);
 //   出廠值與各組的朝上曲線相同,讀 v11 以前風格尾端複製朝上曲線;交叉驗證同朝上側
@@ -144,10 +144,10 @@ static void setSide(CurveSide &s, int8_t deadband, uint8_t count, const CurvePoi
   s.pts[4] = pts[3];   // 第 5 格不再使用
 }
 
-// 線軸 G 回授出廠值:方式 = 曲線(飛法和加這個功能之前一樣);目標 3.0 g,增益 10 %/g,幅度 ±15%,低通 0.5 秒
+// 線軸 G 回授出廠值:方式 = 曲線(飛法和加這個功能之前一樣);目標 3.0 g,增益 10 %/g,幅度 ±30%(GG 2026-10-29:大飛機 ±10% 無感),低通 0.5 秒
 static void defaultGFeedback(ProfileSettings &p) {
   p.compMode = COMP_CURVE;
-  p.gLimitPct = 15;
+  p.gLimitPct = 30;
   memset(p.reserved13, 0, sizeof(p.reserved13));
   p.gTargetG = 3.0f;
   p.gGainPctPerG = 10.0f;
