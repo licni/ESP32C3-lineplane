@@ -21,6 +21,10 @@
   2026-09-14 GG 刪除了舊的公開韌體專案(舊韌體檔含使用者名稱),用原名重建,只有 2026.09.14.11 起的乾淨紀錄,板子更新網址不變.
   firmware_release/ 是重建後重新 clone 的;以後重新 clone 要記得設本機身分(SuperGG + noreply),否則發布工具 commit 會失敗.
 - `test_logs/`(測試紀錄與板上設定備份)與 Python 暫存不進版本庫. GG 要求時才提交/推送.
+- **GG 授權 Claude 全權操作 GitHub**(GG 2026-10-29):合併 PR,發布韌體,建 Release 等都直接做,不用請 GG 手動補. 雲端 session 推不了標籤也不能直接建 Release,
+  所以韌體專案 licni/ESP32lineplane-firmware 有 `.github/workflows/release.yml`:manifest.json 推上 main 就自動組完整燒錄檔
+  (`firmware/boot-0x0-0x10000.bin` 開機區 + 韌體檔)並建/更新 Release,刪同一天舊版;也可用 workflow_dispatch 手動觸發.
+  本機發布工具建不了 Release 時會印提示交給 Actions,不算失敗.
 
 ## 工作方式
 - **目前是「只改程式碼」模式(GG 2026-09-14,優先於下面的檢查規則)**:在 GG 說【恢復全部檢查】之前,不跑回歸/全功能/瀏覽器測試,

@@ -1,4 +1,5 @@
-# 版本流水號: r11 (2026-10-29) --release-only 補強:說明預設取 CHANGELOG 當版條目;full/ 沒有這版的完整燒錄檔時,用 full/ 裡任一舊完整檔的前 64KB
+# 版本流水號: r12 (2026-10-29) 建 Release 失敗(雲端 session 403)不中止:韌體專案的 Actions release.yml 會在 manifest.json 推上 main 後自動建,只印提示
+# 舊: r11 (2026-10-29) --release-only 補強:說明預設取 CHANGELOG 當版條目;full/ 沒有這版的完整燒錄檔時,用 full/ 裡任一舊完整檔的前 64KB
 #   (開機程式 + 分割表 + boot_app0,各版相同,已比對 10.07.1 與 10.29.1)接上 firmware/ 的韌體檔組出來. 雲端發布後 GG 在自己電腦補 Release 用
 # 舊: r10 (2026-10-29) 不再維護帶螢幕板(GG):只編普通版,manifest-oled.json 與舊 oled 檔留著不動;Release 說明不再提螢幕板.
 #   pio 路徑跨平台(Windows 用 penv 的 pio.exe,其他用 python -m platformio);--no-release 只推韌體檔與 manifest,Release 之後再補
@@ -157,10 +158,14 @@ def release(ver, day_text, assets):
         with open(notes_path, "w", encoding="utf-8", newline="\n") as f:
             f.write(body)
         if run(["gh", "release", "view", tag, "-R", REPO], check=False).returncode == 0:
-            run(["gh", "release", "edit", tag, "-R", REPO, "--title", f"韌體 {ver}", "--notes-file", notes_path, "--latest"])
-            run(["gh", "release", "upload", tag, *files, "-R", REPO, "--clobber"])
+            ok = run(["gh", "release", "edit", tag, "-R", REPO, "--title", f"韌體 {ver}", "--notes-file", notes_path, "--latest"], check=False).returncode == 0
+            ok = ok and run(["gh", "release", "upload", tag, *files, "-R", REPO, "--clobber"], check=False).returncode == 0
         else:
-            run(["gh", "release", "create", tag, *files, "-R", REPO, "--title", f"韌體 {ver}", "--notes-file", notes_path, "--latest"])
+            ok = run(["gh", "release", "create", tag, *files, "-R", REPO, "--title", f"韌體 {ver}", "--notes-file", notes_path, "--latest"], check=False).returncode == 0
+    if not ok:
+        # 雲端 session 的 gh 不允許建 Release(403):韌體專案的 Actions(.github/workflows/release.yml)在 manifest.json 推上 main 後會自動建
+        print("  gh 建不了 Release(雲端 session 不允許):交給韌體專案的 Actions release.yml 自動建,幾分鐘後到 Releases 確認")
+    return ok
 
 
 def prune_releases(ver):
@@ -351,8 +356,8 @@ def main():
     if a.no_release:
         print(f"== 已推送 {ver} 的韌體檔與 manifest(--no-release:GitHub Release 之後用 --release-only 補,完整燒錄檔在 firmware_release/full/)")
         return
-    release(ver, day_text, [man["file"] for _, _, _, man in builds] + [os.path.join(fdir, n) for n, _ in fulls])
-    prune_releases(ver)
+    if release(ver, day_text, [man["file"] for _, _, _, man in builds] + [os.path.join(fdir, n) for n, _ in fulls]):
+        prune_releases(ver)
     print(f"== 已發布 {ver}(當天只留這一版,說明已合併). raw 快取可能要幾分鐘才更新,板子暫時看到舊版屬正常.")
 
 
