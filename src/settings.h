@@ -1,4 +1,5 @@
-// 版本流水號: r22 (2026-09-24) 版面 v11:風格加降落減力方式 landingMode(逐漸減力/忽高忽低)與蜂鳴器提醒 landingBuzz(用 reserved0),
+// 版本流水號: r23 (2026-10-29) 版面 v12:風格尾端加側傾補償曲線 side(翼軸仰角 0~90 一側,與 up 同格式),出廠值同朝上曲線
+// 舊: r22 (2026-09-24) 版面 v11:風格加降落減力方式 landingMode(逐漸減力/忽高忽低)與蜂鳴器提醒 landingBuzz(用 reserved0),
 //   尾端加忽高忽低的低/高油門與週期;共用設定加搖擺機尾強制停機角度 wagStopDeg(用 reserved9[0])
 // 舊: r21 (2026-09-15) PROFILE_TEST_INDEX:「測試」組名稱鎖定
 // 舊: r20 (2026-09-15) 版面 v10:風格尾端加起飛油門 takeoffPct 與持續時間 takeoffHoldSec(舊存檔補「不使用」)
@@ -46,7 +47,7 @@ const uint8_t CURVE_STORE_POINTS = 5;
 const uint8_t CURVE_MAX_POINTS = 4;
 const uint8_t CURVE_MIN_POINTS = 1;
 const uint8_t PROFILE_NAME_BUFFER = 24;   // UTF-8,中文一字 3 位元組,約 7 個中文字
-const uint16_t SETTINGS_LAYOUT_VERSION = 11;
+const uint16_t SETTINGS_LAYOUT_VERSION = 12;
 // 起飛油門持續時間走完後,用這麼多秒平順換到時間軸的基本油門(不直接跳,免得剛離地推力突然掉)
 const float TAKEOFF_BLEND_S = 1.0f;
 const uint8_t ARM_WAIT_DEFAULT_MIN = 2;   // 安全開關等待上限出廠值(GG 2026-09-14 基準設定:2 分鐘,可調)
@@ -157,6 +158,10 @@ struct ProfileSettings {
   uint8_t pulseHighPct;      // 忽高忽低的高油門
   uint8_t reserved11[2];
   float pulsePeriodSec;      // 一高一低合起來的秒數
+  // --- v12 起加在尾端:側傾補償曲線(GG 2026-10-29;v11 以前的存檔讀進來時複製朝上曲線) ---
+  // 輸入是翼軸仰角 0~90(飛到斜上方翼軸往下指向飛手,升力分量變小),只有一側,格式與 up 相同(死區與角度都是正值).
+  // 補償與機頭角度曲線相加後再夾上下限.
+  CurveSide side;
 };
 
 // --- 目前生效的設定(RAM) -----------------------------------------------------
@@ -213,5 +218,7 @@ void settingsCopyShared(SharedSettings &out);
 
 // 補償曲線:回傳某個機頭角度的補償百分比(兩段飛行共用).
 float curveCompPct(const ProfileSettings &p, float pitchDeg);
+// 側傾補償曲線:回傳某個翼軸仰角(0~90)的補償百分比. 飛行時與 curveCompPct 相加.
+float curveSideCompPct(const ProfileSettings &p, float sideDeg);
 // 百分比換脈寬.
 uint16_t pctToUs(float pct);

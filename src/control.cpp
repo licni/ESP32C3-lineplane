@@ -1,4 +1,5 @@
-// 版本流水號: r21 (2026-09-15) 控制工作加入任務看門狗(5 秒沒餵 panic 重開);飛行輸入加電變輸出掛載失敗
+// 版本流水號: r22 (2026-10-29) 翼軸仰角送進飛行狀態機與遙測(側傾補償曲線)
+// 舊: r21 (2026-09-15) 控制工作加入任務看門狗(5 秒沒餵 panic 重開);飛行輸入加電變輸出掛載失敗
 // 舊: r20 (2026-09-14) 蜂鳴器每拍依飛行狀態與設定的電位更新(buzzerUpdate)
 // 舊: r19 (2026-09-14) 飛行輸入加安全開關等待上限的測試覆寫秒數(序列指令 armwait)
 // 舊: r18 (2026-09-14) 安全開關 GPIO21 讀取與去抖(50ms),測試指令可覆寫
@@ -187,6 +188,7 @@ static void controlTask(void *) {
     const float rawPitch = attitudePitchDeg();
     const float pitch = constrain(rawPitch + cfg.pitchTrimDeg, -90.0f, 90.0f);
     const float roll = attitudeRollDeg();
+    const float side = attitudeSideDeg();
 
     bool gestureLevel = false;
     if (imuOk) {
@@ -239,6 +241,7 @@ static void controlTask(void *) {
     fin.imuOk = imuOk;
     fin.pitchDeg = pitch;
     fin.rollDeg = roll;
+    fin.sideDeg = side;
     for (uint8_t i = 0; i < 3; ++i) {
       fin.accG[i] = reading.accG[i];
       fin.gyroDps[i] = reading.gyroDps[i];
@@ -315,6 +318,7 @@ static void controlTask(void *) {
     telemetry.rawPitchDeg = rawPitch;
     telemetry.pitchDeg = pitch;
     telemetry.rollDeg = roll;
+    telemetry.sideDeg = side;
     telemetry.vibG = groundRoll.vibG();
     telemetry.levelOk = groundRoll.level();
     telemetry.rollHoldS = groundRoll.holdSeconds();

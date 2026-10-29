@@ -1,4 +1,5 @@
-// 版本流水號: r28 (2026-10-07) 長按安全開關停機成功也回報確認音,同次按壓封鎖重新起飛
+// 版本流水號: r29 (2026-10-29) 補償 = 機頭角度曲線 + 側傾曲線(翼軸仰角),相加後再夾上下限(GG 2026-10-29,飛手回報斜上方升力不足)
+// 舊: r28 (2026-10-07) 長按安全開關停機成功也回報確認音,同次按壓封鎖重新起飛
 // 舊: r27 (2026-10-07) 起飛等待/倒數長按安全開關 2 秒取消;按住時倒數歸零不啟動馬達
 // 舊: r26 (2026-09-25) 狀態快照加 phaseRamp(往第二段爬),landingWarn(降落減力中)給帶螢幕板顯示
 // 舊: r25 (2026-09-24) 強制停機(GG):馬達運轉中長按安全開關 2 秒(馬達啟動後要先看到放開過),或左右搖擺機尾 3 個來回
@@ -757,7 +758,8 @@ FlightOutputs flightUpdate(const FlightInputs &in, float dt) {
         if (state == FS_TAKEOFF) enter(FS_FLYING);
         // 感測器故障時不補償,只照時間軸(規格第 5 節)
         // 兩段飛行共用同一條補償曲線(第二段只是基本油門較高,補償後可能被上限夾住)
-        if (in.imuOk && t >= fp.noCompSec) comp = curveCompPct(fp, in.pitchDeg);
+        // 側傾補償(GG 2026-10-29):飛到斜上方時翼軸往下指向飛手,升力分量變小,依翼軸仰角再加一條曲線,兩條相加
+        if (in.imuOk && t >= fp.noCompSec) comp = curveCompPct(fp, in.pitchDeg) + curveSideCompPct(fp, in.sideDeg);
         // 下限至少 THROTTLE_FLOOR_PCT(安全審查 B4):設定範圍已經擋住,這裡再保底一次,補償再怎麼減也不會掉到沒動力
         const float floorPct = max((float)fp.minPct, (float)THROTTLE_FLOOR_PCT);
         pct = constrain(base + comp, floorPct, max(floorPct, (float)fp.maxPct));

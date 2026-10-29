@@ -1,4 +1,6 @@
-// 版本流水號: r95 (2026-10-07) 事件區分長按安全開關取消倒數;手勢封鎖提示依取消原因顯示
+// 版本流水號: r96 (2026-10-29) 側傾補償曲線(GG,飛手回報斜上方升力不足):角度補償頁加第二張圖 sdSvg(直軸翼軸仰角 0~90),點與補速起點可拖,
+//   撞牆檢查加側傾兩段,全部點的數值與點數選單加側傾;監看頁顯示翼軸仰角,補償預覽改成 機頭 + 側傾 = 合計;備份碼項目名稱加側傾
+// 舊: r95 (2026-10-07) 事件區分長按安全開關取消倒數;手勢封鎖提示依取消原因顯示
 // 舊: r75 (2026-09-15) 安全審查:油門 0% 脈寬要先勾「螺旋槳已拆除」才能改並加警語;起飛油門超出上下限時時間軸文字提示;
 //   新錯誤碼 startbusy/cancelstate,startblock 文字改成「剛取消或剛停止馬達」;拒絕原因 10 電變輸出沒訊號;事件 28/6
 // 舊: r74 (2026-09-15) 頁尾 SuperGG 七彩霓虹動畫(GG):字母各一段彩虹漸層,色相輪轉光暈,波浪跳動,兩側星星閃爍;減少動態效果時停止;
@@ -481,6 +483,7 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
     <span class="big" id="pitch">--</span>
     <span class="sub rd">機頭角度<br>朝上為正</span>
     <span class="rd2">滾轉 <b id="roll">--</b></span>
+    <span class="rd2">翼軸仰角 <b id="side">--</b></span>
     <span class="pill ok" id="attMode">--</span>
    </div>
   </div>
@@ -545,6 +548,10 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
     <div class="cvpanel" id="curvePanel"></div>
    </div>
   </div>
+  <h2 style="margin-top:14px">側傾補償曲線 <span class="sub">(翼軸仰角)</span></h2>
+  <div class="cnote">飛機飛到斜上方時,翼軸(線的方向)往下指向飛手,升力分量變小. 直軸是翼軸對地平線的仰角:低空平飛 0°,45° 高度平飛約 45°,正頭頂 90°,正飛與倒飛算法相同;橫軸同上.
+   這條曲線的補償與上圖機頭角度的補償<b>相加</b>,再夾在上下限之間. 點選或拖曳曲線上的點;左邊三角形是補速起點;油門上下限與基本油門在上圖調整.</div>
+  <div class="cvchart" style="max-width:640px"><svg id="sdSvg" viewBox="0 0 440 236" role="img" aria-label="側傾補償曲線"></svg></div>
  </div>
  <details class="card"><summary><b>全部點的數值</b>(不方便拖曳時用)</summary><div id="curveCard"></div></details>
 </section>
@@ -793,6 +800,7 @@ const L={
  wagStop:['搖擺機尾停機角度','deg','馬達運轉中抓著機尾左右搖擺,每次從一邊擺到另一邊超過這個角度,連續 3 個來回就關馬達. 0 = 關閉.'],
  upDb:['補速開始角度','deg','機頭朝上超過這個角度才開始補速.'],
  dnDb:['減速開始角度','deg','機頭朝下超過這個角度才開始減速.'],
+ sdDb:['側傾補速開始角度','deg','翼軸仰角超過這個角度才開始補速(飛到斜上方,翼軸往下指向飛手).'],
  pitchTrim:['角度修正','deg','加到量到的角度上. 平飛姿勢讀到 +2° 就設 −2. 出廠 0.'],
  gestureG:['啟動手勢力道','g','機身水平時往機頭推超過這個力道才算啟動. 推一下看下方試推燈調整.'],
  armWait:['安全開關等待上限','min','起飛程序開始後這麼久沒按安全開關就取消,回到待機(飛機被碰到誤觸發時不會一直鎖著設定). 上電直接倒數模式取消後,要飛請拔電再接電.'],
@@ -1127,30 +1135,33 @@ const TL_KIND={
 // (曾經做過第二段獨立曲線,GG 認為不好設定且易混淆,已刪除.)
 let cvPhase=1;
 const ck=name=>name;   // 曲線參數鍵名(保留這層,日後若再分段只要改這裡)
-// 撞牆檢查:掃 -90~+90 度,找出「基本油門 + 補償」超過上限或低於下限的角度區間
-function cvWalls(p,base){
+// 撞牆檢查:掃一段角度,找出「基本油門 + 補償」超過上限或低於下限的角度區間. 機頭曲線掃 -90~+90,側傾曲線掃 0~90
+function cvWallsG(p,base,comp,from,to){
  const out=[];let cur=null;
- for(let d=-90;d<=90;d++){
-  const want=base+cvComp(p,d),kind=want>p.maxPct?'max':(want<p.minPct?'min':null);
+ for(let d=from;d<=to;d++){
+  const want=base+comp(d),kind=want>p.maxPct?'max':(want<p.minPct?'min':null);
   if(kind&&cur&&cur.kind===kind){cur.to=d;cur.worst=Math.max(cur.worst,Math.abs(want-(kind==='max'?p.maxPct:p.minPct)))}
   else{if(cur)out.push(cur);cur=kind?{kind,from:d,to:d,worst:Math.abs(want-(kind==='max'?p.maxPct:p.minPct))}:null}
  }
  if(cur)out.push(cur);
  return out;
 }
-function cvWallText(p,base){
- const w=cvWalls(p,base);
+function cvWalls(p,base){return cvWallsG(p,base,d=>cvComp(p,d),-90,90)}
+function cvSideWalls(p,base){return cvWallsG(p,base,d=>cvSideComp(p,d),0,90)}
+function cvWallTextG(w,p){
  if(!w.length)return '<span style="color:var(--ok)">不會撞到上下限</span>';
  const deg=d=>(d>0?'+':'')+d+'°';
  return w.map(r=>`<div>${deg(r.from)}~${deg(r.to)} ${r.kind==='max'?`<b style="color:var(--bad)">撞上限 ${p.maxPct}%</b>`:`<b style="color:var(--warn)">觸底 ${p.minPct}%</b>`},差 ${r.worst.toFixed(0)}%</div>`).join('');
 }
+function cvWallText(p,base){return cvWallTextG(cvWalls(p,base),p)}
+function cvSideWallText(p,base){return cvWallTextG(cvSideWalls(p,base),p)}
 let curveSig='';
 function buildCurve(){
- const p=VALS.profile,sig=cvPhase+'/'+p[ck('upN')]+'/'+p[ck('dnN')];
+ const p=VALS.profile,sig=cvPhase+'/'+p[ck('upN')]+'/'+p[ck('dnN')]+'/'+p[ck('sdN')];
  if(sig===curveSig&&$('curveCard').childElementCount)return;
  curveSig=sig;
- const c=$('curveCard');c.innerHTML=`<div class="sub" style="margin:6px 0">補償曲線(兩段飛行共用). 補償值加在當段基本油門上,點與點之間直線相連,超過最後一點維持最後一點的值.</div>`;
- for(const [side,title] of [['up','機頭朝上:補速'],['dn','機頭朝下:減速']]){
+ const c=$('curveCard');c.innerHTML=`<div class="sub" style="margin:6px 0">補償曲線(兩段飛行共用). 補償值加在當段基本油門上,點與點之間直線相連,超過最後一點維持最後一點的值. 側傾曲線的輸入是翼軸仰角 0~90°,補償與機頭角度的補償相加.</div>`;
+ for(const [side,title] of [['up','機頭朝上:補速'],['dn','機頭朝下:減速'],['sd','側傾(翼軸仰角):補速']]){
   const s=document.createElement('div');s.className='side';s.innerHTML=`<h3>${title}</h3>`;
   s.appendChild(makeParam('p',ck(side+'Db'),L[side+'Db'][0],L[side+'Db'][2],'deg'));
   s.appendChild(makeCountSelect(side,'可調點數量'));
@@ -1186,6 +1197,16 @@ function cvComp(p,deg){
  for(let i=1;i<=p[ck(s+'N')];i++){const a=p[ck(`${s}${i}a`)]*sign,c=p[ck(`${s}${i}p`)];if(x<=a)return a>pa?pp+(c-pp)*(x-pa)/(a-pa):c;pa=a;pp=c}
  return pp;
 }
+// 側傾曲線(與韌體 curveSideCompPct() 同一套):輸入翼軸仰角 0~90,只有朝上那一側的算法
+function cvSideComp(p,deg){
+ const x=clamp(deg,0,90);let pa=p[ck('sdDb')],pp=0;if(x<=pa)return 0;
+ for(let i=1;i<=p[ck('sdN')];i++){const a=p[ck(`sd${i}a`)],c=p[ck(`sd${i}p`)];if(x<=a)return a>pa?pp+(c-pp)*(x-pa)/(a-pa):c;pa=a;pp=c}
+ return pp;
+}
+// 側傾曲線圖的直軸:0(下)~90(上),高度只有主圖的一半(每度的尺寸相同);橫軸與主圖共用 cvX/cvPct
+const SD={H:236,T:22,B:84};
+const SD_Y0=SD.T,SD_Y1=SD.H-SD.B;
+const sdY=d=>SD_Y0+(SD_Y1-SD_Y0)*(90-d)/90, sdDeg=y=>90-(y-SD_Y0)/(SD_Y1-SD_Y0)*90;
 function cvSelKey(){return cvSel.t==='pt'?`${cvSel.side}${cvSel.i}`:cvSel.t==='db'?cvSel.side+'Db':cvSel.t}
 function drawCurve(){
  if(!VALS||!META)return;
@@ -1242,12 +1263,64 @@ function drawCurve(){
   return `<path d="M${x},${Y1+2} l-9,14 h18 z" class="cv-hd ${cls}${sel?' sel':''}"/><text x="${x}" y="${Y1+30}" text-anchor="middle" class="cv-lab cv-sm">${label}</text>`+
    `<rect x="${x-16}" y="${Y1}" width="32" height="36" class="cv-hit" data-h="${key}"/>`};
  // 第二段:曲線不能改,只留基本油門把手(就是風格頁的第二段基本油門,兩邊連動)
- if(cvPhase===2){h+=hdX('base',base,'基本','base');$('cvSvg').innerHTML=h;if(STATUS)updateCurveNow(STATUS);buildCurvePanel();return}
+ if(cvPhase===2){h+=hdX('base',base,'基本','base');$('cvSvg').innerHTML=h;drawSideCurve();if(STATUS)updateCurveNow(STATUS);buildCurvePanel();return}
  h+=hdY('up',upDb,'補速起點')+hdY('dn',dnDb,'減速起點');
  h+=hdX('min',mn,'下限','')+hdX('max',mx,'上限','')+hdX('base',base,'基本','base');
  $('cvSvg').innerHTML=h;
+ drawSideCurve();   // 側傾曲線圖跟著重畫(上下限,基本油門,段別都共用)
  if(STATUS)updateCurveNow(STATUS);
  buildCurvePanel();   // 撞牆檢查跟著曲線即時更新(拖曳中也是)
+}
+// --- 側傾補償曲線圖(GG 2026-10-29):直軸翼軸仰角 0~90,橫軸同主圖. 只畫點與補速起點把手;上下限與基本油門在主圖拖 ---
+function drawSideCurve(){
+ const svg=$('sdSvg');if(!svg||!VALS||!META)return;
+ const p=VALS.profile,base=p[cvBaseKey()],mn=p.minPct,mx=p.maxPct,db=p[ck('sdDb')];
+ const X0=CV_X0,X1=CV_X1,Y0=SD_Y0,Y1=SD_Y1;
+ let h=`<rect x="${X0}" y="${Y0}" width="${cvX(mn)-X0}" height="${Y1-Y0}" class="cv-limit"/><rect x="${cvX(mx)}" y="${Y0}" width="${X1-cvX(mx)}" height="${Y1-Y0}" class="cv-limit"/>`;
+ h+=`<rect x="${X0}" y="${sdY(db)}" width="${X1-X0}" height="${Math.max(0,Y1-sdY(db))}" class="cv-dead"/>`;
+ for(let d=0;d<=90;d+=15){const y=sdY(d);h+=`<line x1="${X0}" y1="${y}" x2="${X1}" y2="${y}" class="${d?'cv-grid':'cv-zero'}"/>`;
+  if(d%30===0)h+=`<text x="${X0-9}" y="${y+4.5}" text-anchor="end" class="cv-lab">${d}°</text>`}
+ for(let v=0;v<=100;v+=10){const x=cvX(v);h+=`<line x1="${x}" y1="${Y0}" x2="${x}" y2="${Y1}" class="cv-grid"/>`;
+  if(v%20===0)h+=`<text x="${x}" y="${Y1+50}" text-anchor="middle" class="cv-lab">${v}%</text><text x="${x}" y="${Y1+64}" text-anchor="middle" class="cv-lab cv-sm">${cvUs(v)}µs</text>`}
+ h+=`<text x="${X0-9}" y="${Y0-8}" text-anchor="end" class="cv-lab cv-sm">翼軸仰角</text><text x="${X0}" y="${Y1+80}" class="cv-lab cv-sm">橫軸:實際輸出油門. 0° 低空平飛,90° 正頭頂;正飛倒飛同值</text>`;
+ h+=`<rect x="${X0}" y="${Y0}" width="${X1-X0}" height="${Y1-Y0}" class="cv-frame"/>`;
+ h+=`<line x1="${cvX(mn)}" y1="${Y0}" x2="${cvX(mn)}" y2="${Y1}" class="cv-lim"/><line x1="${cvX(mx)}" y1="${Y0}" x2="${cvX(mx)}" y2="${Y1}" class="cv-lim"/>`;
+ h+=`<line x1="${cvX(base)}" y1="${Y0}" x2="${cvX(base)}" y2="${Y1}" class="cv-base"/>`;
+ let raw='',clip='';
+ for(let d=0;d<=90;d++){const c=base+cvSideComp(p,d),y=sdY(d).toFixed(1);raw+=`${cvX(clamp(c,0,100)).toFixed(1)},${y} `;clip+=`${cvX(clamp(c,mn,mx)).toFixed(1)},${y} `}
+ h+=`<polyline points="${raw}" class="cv-raw"/><polyline points="${clip}" class="cv-curve"/>`;
+ for(const w of cvSideWalls(p,base)){
+  const x=cvX(w.kind==='max'?mx:mn),ya=sdY(w.to),yb=sdY(w.from),ym=(ya+yb)/2;
+  h+=`<line x1="${x}" y1="${ya}" x2="${x}" y2="${yb}" stroke="#ef4444" stroke-width="6" stroke-linecap="round" opacity=".85"/>`+
+   `<text x="${w.kind==='max'?x-8:x+8}" y="${ym+4}" text-anchor="${w.kind==='max'?'end':'start'}" class="cv-nowt">${w.kind==='max'?'撞上限':'觸底'}</text>`;
+ }
+ h+='<g id="sdNow"></g>';
+ const bx=cvX(base),bt=`基本油門 ${base}%(${cvUs(base)}µs)`,bw=bt.length*9.5+14,tx=clamp(bx,X0+bw/2+2,X1-bw/2-2);
+ h+=`<rect x="${tx-bw/2}" y="${Y0-21}" width="${bw}" height="19" rx="5" class="cv-tag"/><text x="${tx}" y="${Y0-7}" text-anchor="middle" class="cv-tagt" style="font-size:12.5px">${bt}</text>`;
+ h+=`<circle cx="${bx}" cy="${sdY(db)}" r="3" class="cv-db"/>`;
+ for(let i=1;i<=p[ck('sdN')];i++){
+  const a=p[ck(`sd${i}a`)],c=p[ck(`sd${i}p`)],x=cvX(clamp(base+c,0,100)),y=sdY(a);
+  const sel=cvPhase===1&&cvSel.t==='pt'&&cvSel.side==='sd'&&cvSel.i===i;
+  h+=`<circle cx="${x}" cy="${y}" r="${sel?7.5:6}" class="cv-pt${sel?' sel':''}"/><circle cx="${x}" cy="${y}" r="20" class="cv-hit" data-h="pt" data-side="sd" data-i="${i}"/>`;
+  if(sel){const out=clamp(base+c,mn,mx),lx=x>X1-150?x-16:x+16,ly=y-14<Y0+14?y+26:y-14;
+   h+=`<text x="${lx}" y="${ly}" text-anchor="${x>X1-150?'end':'start'}" class="cv-nowt">${a}° ${c>=0?'+':''}${c}% → ${out}%</text>`}
+ }
+ // 補速起點把手(第二段不能改曲線,不畫)
+ if(cvPhase===1){const y=sdY(db),sel=cvSel.t==='db'&&cvSel.side==='sd';
+  h+=`<path d="M${X0-2},${y} l-13,-9 v18 z" class="cv-hd${sel?' sel':''}"/><text x="${X0-17}" y="${y-8}" text-anchor="end" class="cv-lab cv-sm">補速起點</text>`+
+   `<rect x="${X0-40}" y="${y-14}" width="52" height="28" class="cv-hit" data-h="db" data-side="sd"/>`}
+ svg.innerHTML=h;
+ if(STATUS)updateSideNow(STATUS);
+}
+function updateSideNow(s){
+ const g=$('sdNow');if(!g||!VALS||typeof s.sd!=='number')return;
+ const p=VALS.profile,base=p[cvBaseKey()],d=clamp(s.sd,0,90),y=sdY(d),out=clamp(base+cvSideComp(p,d),p.minPct,p.maxPct);
+ const px=cvX(out),nt=`目前 ${d.toFixed(0)}° → ${out.toFixed(0)}%`,nw=[...nt].reduce((a,ch)=>a+(ch.charCodeAt(0)>255?12.5:7.2),0);
+ let ul=px-10-nw>=CV_X0+2&&y-8>=SD_Y0+12;
+ if(!ul&&y+18>SD_Y1-4)ul=true;
+ const tx=ul?Math.max(CV_X0+2+nw,px-10):Math.min(CV_X1-2-nw,px+10);
+ g.innerHTML=`<line x1="${CV_X0}" y1="${y}" x2="${CV_X1}" y2="${y}" class="cv-now"/><circle cx="${px}" cy="${y}" r="5" fill="#ef4444"/>`+
+  `<text x="${tx.toFixed(1)}" y="${(ul?Math.max(SD_Y0+12,y-8):y+18).toFixed(1)}" text-anchor="${ul?'end':'start'}" class="cv-nowt">${nt}</text>`;
 }
 let cvInverted=false;
 function updateCurveNow(s){
@@ -1266,20 +1339,22 @@ function updateCurveNow(s){
  const nr=(VALS.shared.noseRight===1)!==cvInverted,pl=$('cvPlane'),pf=$('cvPlaneFlip');
  if(pl)pl.setAttribute('transform',`rotate(${nr?-d:d})`);
  if(pf)pf.setAttribute('transform',`scale(${nr?-1:1},${cvInverted?-1:1})`);
+ updateSideNow(s);
 }
-function cvSvgPoint(e){const svg=$('cvSvg'),pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;return pt.matrixTransform(svg.getScreenCTM().inverse())}
+function cvSvgPoint(e,svg){const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;return pt.matrixTransform(svg.getScreenCTM().inverse())}
 // 拖曳時只改畫面上的值,放開才送出;相鄰限制在前端先夾好,送出去一定合法
 function cvApplyDrag(e){
- const p=VALS.profile,q=cvSvgPoint(e),base=p[cvBaseKey()],d=Math.round(cvDeg(q.y)),v=Math.round(cvPct(q.x));
- const s=cvDrag,A=(side,i)=>p[ck(`${side}${i}a`)];
+ const s=cvDrag,onSide=s.svg==='sdSvg',p=VALS.profile,q=cvSvgPoint(e,$(s.svg)),base=p[cvBaseKey()];
+ const d=Math.round(onSide?sdDeg(q.y):cvDeg(q.y)),v=Math.round(cvPct(q.x));
+ const A=(side,i)=>p[ck(`${side}${i}a`)];
  if(s.t==='pt'){
   const side=s.side,i=s.i,n=p[ck(side+'N')];
-  if(side==='up'){const lo=(i===1?p[ck('upDb')]:A('up',i-1))+1,hi=i===n?90:A('up',i+1)-1;p[ck(`up${i}a`)]=clamp(d,lo,hi)}
-  else{const hi=(i===1?p[ck('dnDb')]:A('dn',i-1))-1,lo=i===n?-90:A('dn',i+1)+1;p[ck(`dn${i}a`)]=clamp(d,lo,hi)}
+  if(side==='dn'){const hi=(i===1?p[ck('dnDb')]:A('dn',i-1))-1,lo=i===n?-90:A('dn',i+1)+1;p[ck(`dn${i}a`)]=clamp(d,lo,hi)}
+  else{const lo=(i===1?p[ck(side+'Db')]:A(side,i-1))+1,hi=i===n?90:A(side,i+1)-1;p[ck(`${side}${i}a`)]=clamp(d,lo,hi)}   // up 與 sd 都是正角度由小到大
   // 用總油門夾(GG:不管基本油門在哪,都能拉到總油門 10%~100%),補償值本身 ±100
   p[ck(`${side}${i}p`)]=clamp(clamp(v,META.profile.minPct[0],100)-base,-100,100);
  }else if(s.t==='db'){
-  if(s.side==='up')p[ck('upDb')]=clamp(d,0,Math.min(89,A('up',1)-1));else p[ck('dnDb')]=clamp(d,Math.max(-89,A('dn',1)+1),0);
+  if(s.side==='dn')p[ck('dnDb')]=clamp(d,Math.max(-89,A('dn',1)+1),0);else p[ck(s.side+'Db')]=clamp(d,0,Math.min(89,A(s.side,1)-1));
  }else if(s.t==='min')p.minPct=clamp(v,META.profile.minPct[0],p.maxPct-1);   // 下限最低 10%(參數表範圍)
  else if(s.t==='max')p.maxPct=clamp(v,p.minPct+1,100);
  else if(s.t==='base')p[cvBaseKey()]=clamp(v,0,100);
@@ -1296,7 +1371,9 @@ function cvDragKeys(s){
  return [s.t==='min'?'minPct':s.t==='max'?'maxPct':cvBaseKey()];
 }
 (function(){
- const svg=$('cvSvg');
+ // 主圖與側傾曲線圖各掛一套同樣的拖曳處理;cvDrag.svg 記住是在哪張圖上拖(直軸換算不同)
+ for(const svgId of ['cvSvg','sdSvg']){
+ const svg=$(svgId);
  const hitOf=e=>e.target&&e.target.closest?e.target.closest('[data-h]'):null;
  // 觸控手勢(GG 2026-09-14,說明文字在圖旁的「手勢」框):
  //  單指:只拖曲線的點與把手,不捲動網頁.
@@ -1317,7 +1394,7 @@ function cvDragKeys(s){
   if(cvPhase===2&&t!=='base'){toast('第二段只能拖基本油門. 曲線與上下限請切回「第一段」調整.');return}
   cvSel=t==='pt'?{t,side:hit.dataset.side,i:Number(hit.dataset.i)}:t==='db'?{t,side:hit.dataset.side}:{t};
   const keys=cvDragKeys(cvSel),before=keys.map(k=>VALS.profile[k]);
-  cvDrag=Object.assign({},cvSel,{keys,before,x:e.clientX,y:e.clientY,moved:false});
+  cvDrag=Object.assign({},cvSel,{svg:svgId,keys,before,x:e.clientX,y:e.clientY,moved:false});
   svg.setPointerCapture(e.pointerId);buildCurvePanel();drawCurve();
  });
  svg.addEventListener('pointermove',e=>{
@@ -1344,6 +1421,7 @@ function cvDragKeys(s){
  svg.addEventListener('pointerup',e=>{pointers.delete(e.pointerId);end()});
  // 瀏覽器接手手勢(雙指縮放)時會送 pointercancel:拖到一半的點回原位,不送出
  svg.addEventListener('pointercancel',e=>{pointers.delete(e.pointerId);cvCancelDrag()});
+ }   // for svgId
  document.querySelectorAll('#cvPhase button').forEach(b=>b.onclick=()=>{cvPhase=Number(b.dataset.ph);
   document.querySelectorAll('#cvPhase button').forEach(x=>x.classList.toggle('on',x===b));
   cvPanelSig='';buildCurvePanel();drawCurve()});
@@ -1361,7 +1439,9 @@ function buildCurvePanel(){
  // 撞牆檢查每次都更新(拖曳中也會變),不受下面的面板重建節流影響
  const wallBox=()=>{let wb=$('cvWall');if(!wb){wb=document.createElement('div');wb.id='cvWall';wb.className='selbox';wb.style.cssText='margin-top:6px;border-color:var(--line)'}
   wb.innerHTML=`<h3 style="color:var(--ink)">撞牆檢查 <span class="sub" style="font-weight:400">補償後被上下限卡住的角度</span></h3>`+
-   `<div class="wl"><span class="sub">第一段 ${p.phase1Pct}%</span><div>${cvWallText(p,p.phase1Pct)}</div></div><div class="wl"><span class="sub">第二段 ${p.phase2Pct}%</span><div>${cvWallText(p,p.phase2Pct)}</div></div>`;
+   `<div class="wl"><span class="sub">第一段 ${p.phase1Pct}%</span><div>${cvWallText(p,p.phase1Pct)}</div></div><div class="wl"><span class="sub">第二段 ${p.phase2Pct}%</span><div>${cvWallText(p,p.phase2Pct)}</div></div>`+
+   `<div class="wl"><span class="sub">側傾 第一段</span><div>${cvSideWallText(p,p.phase1Pct)}</div></div><div class="wl"><span class="sub">側傾 第二段</span><div>${cvSideWallText(p,p.phase2Pct)}</div></div>`+
+   `<div class="sub" style="margin-top:2px">兩條曲線分開檢查;飛行時兩者相加,同時斜上方又抬頭時更容易撞上限.</div>`;
   return wb};
  // 油門上下限(GG 2026-09-14 從計時器頁搬來):放在撞牆檢查下面,預設收起,點標題展開. 面板重建時保留展開狀態.
  const limBox=()=>{let d=$('cvLim');
@@ -1373,7 +1453,7 @@ function buildCurvePanel(){
  // 已在正確位置就不搬(搬動元素會讓正在輸入的上下限框失去焦點)
  const tail=()=>{const pn=$('curvePanel'),wb=wallBox(),lb=limBox();
   if(pn.lastChild!==lb||lb.previousSibling!==wb){pn.appendChild(wb);pn.appendChild(lb)}};
- const sig=cvSelKey()+'|'+cvPhase+'|'+p[ck('upN')]+'|'+p[ck('dnN')]+'|'+editP;
+ const sig=cvSelKey()+'|'+cvPhase+'|'+p[ck('upN')]+'|'+p[ck('dnN')]+'|'+p[ck('sdN')]+'|'+editP;
  if(sig===cvPanelSig&&$('curvePanel').childElementCount){tail();return}
  cvPanelSig=sig;
  const box=$('curvePanel');box.innerHTML='';
@@ -1390,18 +1470,18 @@ function buildCurvePanel(){
  const sb=document.createElement('div');sb.className='selbox';
  const ph='';
  let title='',rows=[];
- if(cvSel.t==='pt'){const s=cvSel.side;title=`選取:${s==='up'?'朝上':'朝下'} 點 ${cvSel.i}`;
-  rows=[makeParam('p',ck(`${s}${cvSel.i}a`),'角度','','deg'),makeParam('p',ck(`${s}${cvSel.i}p`),'補償','加在基本油門上','cpct')]}
- else if(cvSel.t==='db'){const s=cvSel.side;title=`選取:${s==='up'?'補速起點(死區上緣)':'減速起點(死區下緣)'}`;
+ if(cvSel.t==='pt'){const s=cvSel.side;title=`選取:${s==='up'?'朝上':s==='dn'?'朝下':'側傾'} 點 ${cvSel.i}`;
+  rows=[makeParam('p',ck(`${s}${cvSel.i}a`),s==='sd'?'翼軸仰角':'角度','','deg'),makeParam('p',ck(`${s}${cvSel.i}p`),'補償','加在基本油門上','cpct')]}
+ else if(cvSel.t==='db'){const s=cvSel.side;title=`選取:${s==='up'?'補速起點(死區上緣)':s==='dn'?'減速起點(死區下緣)':'側傾補速起點'}`;
   rows=[makeParam('p',ck(s+'Db'),L[s+'Db'][0],L[s+'Db'][2],'deg')]}
  else if(cvSel.t==='min'){title='選取:飛行中油門下限(兩段共用)';rows=[makeParam('p','minPct')]}
  else if(cvSel.t==='max'){title='選取:飛行中油門上限(兩段共用)';rows=[makeParam('p','maxPct')]}
  else {title='選取:第一段基本油門';rows=[makeParam('p',cvBaseKey())]}
  sb.innerHTML=`<h3>${title}</h3>`;rows.forEach(r=>sb.appendChild(r));
  box.appendChild(sb);
- // 朝上/朝下點數兩個選單排同一列
+ // 朝上/朝下/側傾點數選單排同一列(放不下自動換行)
  const cnt=document.createElement('div');cnt.className='cnt2';
- cnt.appendChild(makeCountSelect('up','朝上點數'));cnt.appendChild(makeCountSelect('dn','朝下點數'));
+ cnt.appendChild(makeCountSelect('up','朝上點數'));cnt.appendChild(makeCountSelect('dn','朝下點數'));cnt.appendChild(makeCountSelect('sd','側傾點數'));
  box.appendChild(cnt);
  tail();
  renderWidgets();
@@ -1640,6 +1720,7 @@ function renderStatus(s){
  const right=VALS&&VALS.shared.noseRight===1;
  $('pitch').textContent=sgn(s.p,1)+'°';
  $('roll').textContent=sgn(s.r,0)+'°';
+ if(typeof s.sd==='number')$('side').textContent=s.sd.toFixed(0)+'°';
  // 倒飛判斷:滾轉超過 100° 算倒飛,回到 80° 內才算正飛(中間保持,不來回跳).
  // 機頭接近垂直時滾轉角沒有意義(數學上的奇異點),保持前一刻的判斷.
  if(Math.abs(s.p)<70){if(Math.abs(s.r)>100)inverted=true;else if(Math.abs(s.r)<80)inverted=false}
@@ -1679,8 +1760,10 @@ function renderStatus(s){
  escRender(s);
  if(VALS){
   const name=VALS.names[s.act],act=VALS.edit===s.act?VALS.profile:null;
-  $('compPreview').textContent=act?`飛行風格「${name}」在這個角度補償 ${sgn(s.cmp,1)}%:第一段實際 ${Math.min(act.maxPct,Math.max(act.minPct,act.phase1Pct+s.cmp)).toFixed(0)}%,第二段實際 ${Math.min(act.maxPct,Math.max(act.minPct,act.phase2Pct+s.cmp)).toFixed(0)}%`
-   :`飛行風格「${name}」在這個角度補償 ${sgn(s.cmp,1)}%`;
+  // 補償 = 機頭角度曲線 + 側傾曲線(翼軸仰角),相加後再夾上下限(GG 2026-10-29)
+  const sc=typeof s.scmp==='number'?s.scmp:0,tot=s.cmp+sc,sum=`補償 機頭 ${sgn(s.cmp,1)}% + 側傾 ${sgn(sc,1)}% = ${sgn(tot,1)}%`;
+  $('compPreview').textContent=act?`飛行風格「${name}」${sum}:第一段實際 ${Math.min(act.maxPct,Math.max(act.minPct,act.phase1Pct+tot)).toFixed(0)}%,第二段實際 ${Math.min(act.maxPct,Math.max(act.minPct,act.phase2Pct+tot)).toFixed(0)}%`
+   :`飛行風格「${name}」${sum}`;
  }
  if(s.imu===0)pill('pillImu','bad','感測器未連接');else if(s.imu===2)pill('pillImu','bad','感測器故障,請重新上電');else pill('pillImu','ok','感測器正常');
  const modes=['連線中','家用 WiFi','自身熱點'];
@@ -2213,13 +2296,13 @@ $('btnRevert').onclick=async()=>{try{const r=await post('/api/revert');toast(COD
 // --- 設定備份碼(GG 2026-09-14,設計見 docs/設定備份碼設計_2026-09-14.md) ---
 // 有未儲存變更時整張卡不能用. 貼上當下就送板子檢查;不是 LP 開頭或檢查碼錯就提示並清空.
 const BK_NAMES={noseAxis:'朝機頭的軸',upAxis:'朝機背的軸',noseRight:'圖示機頭方向',escProtocol:'輸出協定',gestureEnable:'啟動手勢',
- earlyLand:'觸地提早降落',escRpm:'轉速回傳',gearEnable:'機輪收腳',gearReverse:'舵機反轉',buzzerLow:'蜂鳴器類型',armSwitchOff:'停用安全開關',phaseMode:'換段方式',landingMode:'減力方式',landingBuzz:'降落蜂鳴器提醒',upN:'補速曲線點數',dnN:'減速曲線點數'};
+ earlyLand:'觸地提早降落',escRpm:'轉速回傳',gearEnable:'機輪收腳',gearReverse:'舵機反轉',buzzerLow:'蜂鳴器類型',armSwitchOff:'停用安全開關',phaseMode:'換段方式',landingMode:'減力方式',landingBuzz:'降落蜂鳴器提醒',upN:'補速曲線點數',dnN:'減速曲線點數',sdN:'側傾曲線點數'};
 const BK_SHARED_ERR=['axis','escrange','pwmhz','twistdeg','gearrange','wagdeg'];
 function bkLabel(item){
  if(item==='act')return '飛行使用的風格';
  const i=item.indexOf(':'),sc=item.slice(0,i),key=item.slice(i+1);
- const m=/^(up|dn)(\d)([ap])$/.exec(key);
- const name=(L[key]||[])[0]||BK_NAMES[key]||(m?`${m[1]==='up'?'補速':'減速'}曲線第 ${m[2]} 點${m[3]==='a'?'角度':'補償'}`:key);
+ const m=/^(up|dn|sd)(\d)([ap])$/.exec(key);
+ const name=(L[key]||[])[0]||BK_NAMES[key]||(m?`${m[1]==='up'?'補速':m[1]==='dn'?'減速':'側傾'}曲線第 ${m[2]} 點${m[3]==='a'?'角度':'補償'}`:key);
  return sc==='s'?name:`第 ${Number(sc)+1} 組風格的${name}`;
 }
 function bkShow(ok,text,id){const e=$(id||'bkMsg');e.className='msg '+(ok?'ok':'bad');e.textContent=text}

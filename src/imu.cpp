@@ -1,4 +1,5 @@
-// 版本流水號: r2 (2026-09-13) 靜止判斷的 1g 容許範圍放寬到 ±0.3g(副廠晶片實測靜止讀 1.12g)
+// 版本流水號: r3 (2026-10-29) 加翼軸仰角 attitudeSideDeg:重力在機身 y 軸的分量取 asin,正飛倒飛同值
+// 舊: r2 (2026-09-13) 靜止判斷的 1g 容許範圍放寬到 ±0.3g(副廠晶片實測靜止讀 1.12g)
 #include "imu.h"
 #include <Wire.h>
 
@@ -250,6 +251,13 @@ float attitudePitchDeg() {
 
 float attitudeRollDeg() {
   return atan2f(2 * (q0 * q1 + q2 * q3), q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3) * DEG_PER_RAD;
+}
+
+float attitudeSideDeg() {
+  // 重力方向在機身 y 軸的分量(與 roll 的分子相同);取絕對值所以左翼朝下或朝上,正飛或倒飛都一樣
+  float v = fabsf(2 * (q0 * q1 + q2 * q3));
+  if (v > 1) v = 1;
+  return asinf(v) * DEG_PER_RAD;
 }
 
 bool imuIsStill() { return stillNow; }

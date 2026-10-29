@@ -1,4 +1,5 @@
-// 版本流水號: r18 (2026-10-07) armCancelHeld 涵蓋安全開關長按停機成功
+// 版本流水號: r19 (2026-10-29) 輸入加翼軸仰角 sideDeg(側傾補償曲線)
+// 舊: r18 (2026-10-07) armCancelHeld 涵蓋安全開關長按停機成功
 // 舊: r17 (2026-10-07) 狀態加 armCancelHeld,供蜂鳴器確認安全開關已取消起飛
 // 舊: r16 (2026-09-25) 狀態加 phaseRamp(往第二段爬),landingWarn(降落減力中)給螢幕顯示
 // 舊: r15 (2026-09-24) 強制停機結束原因 END_FORCE_SWITCH(長按安全開關)/ END_FORCE_WAG(搖擺機尾);狀態加 landPulse,landBuzz
@@ -78,6 +79,7 @@ struct FlightInputs {
   bool imuOk;
   float pitchDeg;        // 已含角度修正
   float rollDeg;
+  float sideDeg;         // 翼軸仰角 0~90(飛到斜上方時變大,側傾補償用)
   float accG[3];         // 機身座標
   float accMagG;
   float gyroDps[3];
