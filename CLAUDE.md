@@ -25,6 +25,8 @@
   所以韌體專案 licni/ESP32lineplane-firmware 有 `.github/workflows/release.yml`:manifest.json 推上 main 就自動組完整燒錄檔
   (`firmware/boot-0x0-0x10000.bin` 開機區 + 韌體檔)並建/更新 Release,刪同一天舊版;也可用 workflow_dispatch 手動觸發.
   本機發布工具建不了 Release 時會印提示交給 Actions,不算失敗.
+  **PR 的通知回音不要回報**(GG 2026-10-30):自己建的 PR 要馬上合併時,建好先 unsubscribe_pr_activity 再合併;收到自己動作的回音通知
+  (subscription.created,自己合併的 closed)一律靜默處理,不寫訊息給 GG,也不排安全網檢查. 只有真的有事(衝突,CI 紅,別人留言)才說.
 
 ## 工作方式
 - **目前是「只改程式碼」模式(GG 2026-09-14,優先於下面的檢查規則)**:在 GG 說【恢復全部檢查】之前,不跑回歸/全功能/瀏覽器測試,
