@@ -1,4 +1,5 @@
-// 版本流水號: r5 (2026-10-30) 改存快閃 spiffs 分割區(環形,序號標頭,mmap 讀取,倒數預擦,loop 寫頁);RAM 佇列取代 66KB 環形緩衝
+// 版本流水號: r6 (2026-10-30) 只記起飛程序:狀態 3~6(倒數~降落)才收,離開後再記 5 秒;每趟第一筆旗標 0x10;待機不碰快閃
+// 舊: r5 (2026-10-30) 改存快閃 spiffs 分割區(環形,序號標頭,mmap 讀取,倒數預擦,loop 寫頁);RAM 佇列取代 66KB 環形緩衝
 // 舊: r4 (2026-10-29) 每筆加翼軸仰角與方位角(區間最後的值)
 // 舊: r3 (2026-10-29) 每筆加線軸 G(區間最後的低通值)
 // 舊: r2 (2026-09-13) 修正每筆實際 105ms(區間起點改走固定 100ms 格點)
@@ -34,6 +35,12 @@ static FlightLogSample queueBuf[QUEUE_CAP];
 static volatile uint16_t qHead = 0, qTail = 0;
 static volatile uint32_t dropped = 0;
 static volatile uint32_t prepareRequest = 0;   // 要先擦好的筆數(0 = 沒有請求)
+
+// 記錄的開關(控制工作):起飛程序中(狀態 3~6)記,離開後再記 REC_TAIL_MS 收尾(觸地滾行,降落後的衝擊),其他時候不收也不寫快閃
+static const uint32_t REC_TAIL_MS = 5000;
+static bool recording = false;
+static bool recStartPending = false;   // 下一筆是這趟的第一筆
+static uint32_t lastActiveMs = 0;      // 最後一次處於狀態 3~6 的時間
 
 // 目前區間的累積(控制工作)
 static bool slotOpen = false;
@@ -182,6 +189,19 @@ void flightLogService(uint32_t nowMs) {
 
 void flightLogFeed(float pitchDeg, float throttlePct, float accMagG, float vibG, float spikeG, float pushG,
                    float lineG, float sideDeg, float azimuthDeg, uint8_t state, uint8_t flags, uint32_t nowMs) {
+  // 只記起飛程序:狀態 3(倒數)~6(降落). 回到待機/結束後再記 5 秒收尾就停,下次進倒數再開新的一趟
+  const bool active = state >= 3 && state <= 6;
+  if (active) lastActiveMs = nowMs | 1;
+  if (!recording) {
+    if (!active) return;
+    recording = true;
+    recStartPending = true;
+    slotOpen = false;   // 重新對齊區間起點
+  } else if (!active && (!lastActiveMs || nowMs - lastActiveMs > REC_TAIL_MS)) {
+    recording = false;
+    slotOpen = false;   // 沒收成的半筆丟掉
+    return;
+  }
   if (!slotOpen) {
     slotOpen = true;
     // 區間起點走固定 100ms 格點. r1 用「這一拍」當起點:收尾那一拍算進上一區,下一區從再下一拍才開,
@@ -196,6 +216,7 @@ void flightLogFeed(float pitchDeg, float throttlePct, float accMagG, float vibG,
   if (spikeG > slotSpike) slotSpike = spikeG;
   if (pushG > slotPush) slotPush = pushG;
   slot.flags |= flags;   // 區間內出現過就記
+  if (recStartPending) slot.flags |= LOG_FLAG_REC_START;
   // 角度,油門,狀態取區間最後一個值
   slot.pitchDeg = clampI8(pitchDeg);
   slot.throttlePct = clampU8(throttlePct);
@@ -218,6 +239,7 @@ void flightLogFeed(float pitchDeg, float throttlePct, float accMagG, float vibG,
   queueBuf[qHead] = slot;   // 先寫資料
   qHead = next;             // 再推進
   slotOpen = false;
+  recStartPending = false;
 }
 
 uint32_t flightLogTotal() { return flashedTotal; }
