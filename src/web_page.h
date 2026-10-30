@@ -1,4 +1,6 @@
-// 版本流水號: r101 (2026-10-30) 紀錄只記起飛程序:說明改寫,圖上畫每趟起點的分趟線(旗標 0x10),游標顯示「這趟第 m:ss」
+// 版本流水號: r103 (2026-10-30) fmtT 修正 59.6 秒顯示成 0:60
+// 舊: r102 (2026-10-30) 紀錄上限 6000 → 12000 筆(板上存 19.8 分鐘,網頁原本只留後 10 分鐘),視窗加「20 分」;3D 軌跡跨趟(中間隔著倒數/待機)不再連一條線
+// 舊: r101 (2026-10-30) 紀錄只記起飛程序:說明改寫,圖上畫每趟起點的分趟線(旗標 0x10),游標顯示「這趟第 m:ss」
 // 舊: r100 (2026-10-30) 紀錄頁說明改成斷電保留(紀錄存快閃)
 // 舊: r99 (2026-10-30) 「只用線軸 G 回授」選項加警語(GG:純回授分不出爬升俯衝、慢一拍、拐角讀數會被污染,只適合平飛大圈與練習)
 // 舊: r98 (2026-10-29) 3D 半球(GG):監看頁「3D 半球位置」(高度角 = 翼軸仰角,方位角 = 陀螺儀積分,箭頭為飛行方向,顏色/文字為曲線補償;拖曳旋轉),
@@ -583,7 +585,7 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
  <div class="card">
   <h2>G 力與姿態紀錄</h2>
   <div class="cnote">只記起飛程序(每 0.1 秒一筆):從倒數開始,到馬達停止後 5 秒;待機不記. 存在快閃裡<b>斷電保留</b>,約 19 分鐘(兩趟 8 分鐘的飛行),寫滿自動覆蓋最舊的,韌體更新不會清掉. 回家再打開來看也可以. 圖上的灰色虛線是每一趟的起點,相鄰兩趟緊接著畫,中間的待機時間不算. 訂門檻的作法:先關閉提早降落,飛幾個特技看「總 G」與「Z 抖動」最高多少,再看地面滑行的抖動,門檻訂在兩者之間. 點或拖圖表看該時刻的數值;下方最大值只算目前畫面範圍.</div>
-  <div class="row" style="margin-top:2px"><span class="seg" id="logWin"><button data-s="60">1 分</button><button data-s="180" class="on">3 分</button><button data-s="600">10 分</button></span>
+  <div class="row" style="margin-top:2px"><span class="seg" id="logWin"><button data-s="60">1 分</button><button data-s="180" class="on">3 分</button><button data-s="600">10 分</button><button data-s="1200">20 分</button></span>
    <button class="b" id="btnLogPause">暫停更新</button><span class="sub" id="logInfo"></span></div>
   <div class="grid g3" id="logStats"></div>
  </div>
@@ -1717,10 +1719,10 @@ function h3DrawMon(s){
 function h3DrawLog(begin,end){
  const c=h3Setup('h3Log');if(!c)return;const {g,W,H,R}=c;h3Frame(c);
  if(!LOG.side.length)return;
- let prev=null;g.lineWidth=2;
- for(let i=begin;i<end;i++){const P=h3Proj(LOG.side[i],LOG.az[i],W,H,R);
-  if(prev&&LOG.state[i]>=4&&LOG.state[i]<=6){g.strokeStyle=h3Color(LOG.thr[i]);g.globalAlpha=P[2]>0?0.45:1;g.beginPath();g.moveTo(prev[0],prev[1]);g.lineTo(P[0],P[1]);g.stroke()}
-  prev=P}
+ let prev=null,prevFly=false;g.lineWidth=2;
+ for(let i=begin;i<end;i++){const P=h3Proj(LOG.side[i],LOG.az[i],W,H,R),fly=LOG.state[i]>=4&&LOG.state[i]<=6;
+  if(prev&&fly&&prevFly){g.strokeStyle=h3Color(LOG.thr[i]);g.globalAlpha=P[2]>0?0.45:1;g.beginPath();g.moveTo(prev[0],prev[1]);g.lineTo(P[0],P[1]);g.stroke()}
+  prev=P;prevFly=fly}
  g.globalAlpha=1;
  if(logCursor>=begin&&logCursor<end){const P=h3Proj(LOG.side[logCursor],LOG.az[logCursor],W,H,R);g.fillStyle='#fff';g.strokeStyle=c.INK;g.lineWidth=1.5;g.beginPath();g.arc(P[0],P[1],5,0,7);g.fill();g.stroke()}
  for(let i=0;i<=10;i++){g.fillStyle=h3Color(i*10);g.fillRect(W-110+i*9,10,9,8)}   // 色標
@@ -2334,11 +2336,11 @@ async function logFetch(force){
    LOG.state.push(dv.getUint8(o+6));LOG.flags.push(dv.getUint8(o+7));LOG.lineG.push(size>8?dv.getUint8(o+8)/10:0);   // 第 9 位元組 r2 才有
    LOG.side.push(size>10?dv.getUint8(o+9):0);LOG.az.push(size>10?dv.getUint8(o+10)*360/256:0)}   // 第 10,11 位元組 r3 才有(3D 半球位置)
   LOG.next=start+count;
-  const extra=LOG.pitch.length-6000;if(extra>0){LOGK.forEach(k=>LOG[k].splice(0,extra));if(logPaused)logEnd=Math.max(0,logEnd-extra)}
+  const extra=LOG.pitch.length-12000;if(extra>0){LOGK.forEach(k=>LOG[k].splice(0,extra));if(logPaused)logEnd=Math.max(0,logEnd-extra)}
   drawLog();
  }catch(e){}finally{logBusy=false}
 }
-function fmtT(s){const m=Math.floor(Math.abs(s)/60),ss=Math.round(Math.abs(s)%60);return (s<0?'−':'')+m+':'+String(ss).padStart(2,'0')}
+function fmtT(s){const t=Math.round(Math.abs(s)),m=Math.floor(t/60),ss=t%60;return (s<0?'−':'')+m+':'+String(ss).padStart(2,'0')}   // 先整數化再分秒:59.6 秒不會變成 0:60
 function drawLog(){
  const cv=$('logCanvas');if($('log').hidden)return;
  const dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;if(!W)return;
@@ -2392,7 +2394,7 @@ function drawLog(){
  series(p3,LOG.vib,0,vMax,'#a855f7',1.6);
  hline(p3,sh.earlyLandVib,0,vMax,'#d97706','門檻',true);
  // 時間軸
- const step=logWinS<=60?10:(logWinS<=180?30:60),yAxis=H-axisH+12;
+ const step=logWinS<=60?10:(logWinS<=180?30:(logWinS<=600?60:120)),yAxis=H-axisH+12;
  g.fillStyle=MUTE;g.textAlign='center';
  for(let s=0;s<=logWinS;s+=step){const i=end-1-Math.round(s*1000/LOG.ms);const x=xOf(i);if(x<Lm-1)break;g.fillText(s?fmtT(-s):'最新',x,yAxis)}
  g.textAlign='left';
