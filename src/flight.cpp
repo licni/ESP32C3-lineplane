@@ -1,4 +1,5 @@
-// 版本流水號: r31 (2026-10-29) 審查修正:側傾補償 × flightSideCompFactor(俯衝淡出,快滾關閉);線軸 G 先低通帶號值再取絕對值(震動不整流,線鬆不翻號);
+// 版本流水號: r32 (2026-10-30) 進入倒數時請紀錄模組預擦這趟要用的快閃區塊
+// 舊: r31 (2026-10-29) 審查修正:側傾補償 × flightSideCompFactor(俯衝淡出,快滾關閉);線軸 G 先低通帶號值再取絕對值(震動不整流,線鬆不翻號);
 //   待機低通固定 0.5 秒(fp 是上一趟的快照),感測器故障歸零;回授微調過了不補償秒數後 2 秒線性漸入(模擬發現起飛加速慢時會一次跳 +20%)
 // 舊: r30 (2026-10-29) 線軸 G 回授(GG:任何方位相同的外甩手感):線軸 G = |加速度計 y 軸| 低通,微調 = (目標 − 線軸 G) × 增益 夾 ±上限;
 //   補償方式 曲線 / 曲線+回授 / 只回授. 回授與曲線同一個啟用條件(感測器正常且過了不補償秒數),降落中不補償
@@ -40,6 +41,7 @@
 #include "flight.h"
 #include "esc_service.h"
 #include "event_log.h"
+#include "flight_log.h"
 
 static const uint32_t ESC_ARM_MS = 3000;            // 上電後給電變最低油門的解鎖時間
 static const float SETTLE_REQUIRED_S = 1.0f;        // 放穩要維持多久才開始(或繼續)倒數
@@ -193,6 +195,8 @@ static bool lastGearUp = false;
 static void enter(FlightState s) {
   state = s;
   stateStartMs = nowMsCache;
+  // 進入倒數:請 loop 先把這趟飛行(總時間 + 降落保險 + 1 分鐘)要用的紀錄區塊擦好,飛行中就不必擦(擦除停機會漏姿態)
+  if (s == FS_COUNTDOWN) flightLogRequestPrepare((uint32_t)(fp.flightSec + fs.landingTimeoutSec + 60) * (1000 / FLIGHT_LOG_SAMPLE_MS));
 }
 
 static bool motorState(FlightState s) { return s == FS_TAKEOFF || s == FS_FLYING || s == FS_LANDING; }
