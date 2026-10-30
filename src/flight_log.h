@@ -1,21 +1,23 @@
-// 版本流水號: r3 (2026-10-29) 每筆加翼軸仰角 sideDeg(0~90)與方位角 azim(0~255 = 0~360°);一筆 11 位元組,3D 半球軌跡用
+// 版本流水號: r4 (2026-10-30) 改存快閃(GG:斷電保留):閒置的 spiffs 分割區 128KB 當環形紀錄,約 19 分鐘;控制工作只推進 RAM 佇列,
+//   Arduino loop 寫快閃;倒數時先擦好這趟要用的區塊,飛行中只寫頁(停 1ms),不擦(停 30~50ms 會漏姿態). 網頁讀取靠 mmap,格式不變
+// 舊: r3 (2026-10-29) 每筆加翼軸仰角 sideDeg(0~90)與方位角 azim(0~255 = 0~360°);一筆 11 位元組,3D 半球軌跡用
 // 舊: r2 (2026-10-29) 每筆加線軸 G(0.1g 單位,區間最後的低通值);一筆 9 位元組,網頁依 /api/log 標頭的每筆大小解碼
 // 舊: r1 (2026-09-13) 初版:0.1 秒一筆的環形紀錄(角度,油門,G 力,Z 抖動,短尖峰,手勢推力,狀態)
 #pragma once
 #include <Arduino.h>
 // ============================================================================
 // 飛行紀錄. 控制工作每個節拍餵資料,每 100ms 收成一筆(區間內取最大值,短尖峰不會漏掉).
-// 一直在記(不分飛行或地面),保留最近 10 分鐘,重新通電清除.
-// 為什麼記在板子上:飛行中手機在飛手口袋裡,不可能即時接收. 降落後再打開紀錄頁看.
-// 用途(GG 第三輪回饋):先關掉提早降落飛幾個特技,看特技的最高 G 力與地面滑行的抖動各是多少,再訂門檻.
+// 一直在記(不分飛行或地面),存在快閃的 spiffs 分割區(分割表 min_spiffs 給了 128KB,韌體沒用它當檔案系統),
+// 斷電保留,寫滿自動覆蓋最舊的;韌體更新不動這塊. 為什麼記在板子上:飛行中手機在飛手口袋裡,不可能即時接收.
 //
-// 記憶體:一筆 11 位元組 × 6000 筆 = 66KB,開機時靜態配置,不碎片化.
-// 讀取端(網頁)不上鎖直接讀:寫入是「先寫資料再推進計數」,讀到的一定是完整的舊資料;
-// 唯一的風險是環形覆寫時最舊那一筆被改寫,讀取端丟掉最舊一筆即可.
+// 快閃版面:32 個 4KB 區塊,每塊 8 位元組標頭(magic,序號,每筆大小)+ 371 筆. 序號遞增,開機掃標頭找最新的區塊接著寫.
+// 全域編號 = 序號 × 371 + 區塊內位置,網頁的增量讀取不用改. 讀取用 mmap(記憶體映射,走快取,不停機).
+// 寫入時機:控制工作只把收成的一筆推進 RAM 佇列(不碰快閃);loop 每秒把佇列寫進快閃(寫一頁約停 1ms).
+// 擦除區塊會讓整顆晶片停 30~50ms(控制工作漏 6~10 拍姿態),所以進入倒數時先把這趟要用的區塊擦好(flightLogRequestPrepare),
+// 飛行中只在擦好的區塊裡寫;真的寫到沒擦的區塊才就地擦(飛太久才會遇到).
 // ============================================================================
 
 const uint16_t FLIGHT_LOG_SAMPLE_MS = 100;
-const uint16_t FLIGHT_LOG_CAPACITY = 6000;   // 10 分鐘
 
 // 旗標位元
 const uint8_t LOG_FLAG_LEVEL = 0x01;          // 正飛水平(提早降落的姿態條件)
@@ -37,12 +39,20 @@ struct __attribute__((packed)) FlightLogSample {
   uint8_t azim;         // 方位角 0~255 = 0~360°(r3):半球上繞飛手的角度,馬達啟動時歸零
 };
 
+// 開機呼叫(控制工作啟動前):找分割區,mmap,掃標頭接續上次的位置. 找不到分割區就只用 RAM 佇列(網頁看不到紀錄).
+void flightLogBegin();
+// Arduino loop 每圈呼叫:把佇列寫進快閃,處理擦除請求.
+void flightLogService(uint32_t nowMs);
+// 進入倒數時呼叫(控制工作):請 loop 把接下來 samples 筆要用的區塊先擦好.
+void flightLogRequestPrepare(uint32_t samples);
 // 控制工作呼叫. 各值取區間最大,時間到自動收成一筆.
 void flightLogFeed(float pitchDeg, float throttlePct, float accMagG, float vibG, float spikeG, float pushG,
                    float lineG, float sideDeg, float azimuthDeg, uint8_t state, uint8_t flags, uint32_t nowMs);
-// 已寫入的總筆數(單調遞增,讀取端拿來做增量更新).
+// 已寫進快閃的總筆數(單調遞增,讀取端拿來做增量更新). 佇列裡還沒寫的不算.
 uint32_t flightLogTotal();
 // 取第 index 筆(以總筆數編號). 不在保留範圍內回 false.
 bool flightLogGet(uint32_t index, FlightLogSample &out);
 // 保留範圍內最舊的一筆編號.
 uint32_t flightLogOldest();
+// 診斷:快閃可用,區塊數,目前區塊序號,佇列溢出丟掉的筆數,飛行中就地擦除次數.
+void flightLogStats(bool &flashOk, uint16_t &sectors, uint32_t &seq, uint32_t &dropped, uint32_t &inflightErases);

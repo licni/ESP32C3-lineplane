@@ -1,4 +1,5 @@
-// 版本流水號: r20 (2026-09-25) 帶螢幕板 OLED(displayBegin/displayTick);開機印板子種類與安全開關腳位;序列指令 buzz(蜂鳴器診斷)
+// 版本流水號: r21 (2026-10-30) 飛行紀錄改存快閃:flightLogBegin 在控制工作前,loop 呼叫 flightLogService
+// 舊: r20 (2026-09-25) 帶螢幕板 OLED(displayBegin/displayTick);開機印板子種類與安全開關腳位;序列指令 buzz(蜂鳴器診斷)
 // 舊: r19 (2026-09-14) 載入設定後蜂鳴器腳位依設定的電位先設成不響(buzzerBegin)
 // 舊: r18 (2026-09-14) 開機檢查設定備份碼的編碼表(backupSelfCheck)
 // 舊: r17 (2026-09-14) 序列指令 armwait <秒>|off(測試用縮短安全開關等待上限,軟體重開保留)
@@ -37,6 +38,7 @@
 #include "settings.h"
 #include "settings_backup.h"
 #include "buzzer.h"
+#include "flight_log.h"
 #include "display.h"
 #include "flight.h"
 #include "fw_update.h"
@@ -440,6 +442,7 @@ void setup() {
   if (escCalibrate) Serial.printf("ESC calibration: output %uus for %.1fs\n", sharedSettings.escMaxUs, sharedSettings.calibHoldSec);
   else if (escCalibPending()) Serial.println(F("ESC calibration pending (waits for a power-on reset)"));
   testArmOverrideBoot();   // 測試用安全開關覆寫(軟體重開保留),要在控制工作開始讀之前
+  flightLogBegin();   // 飛行紀錄接續快閃上次的位置(控制工作開始餵之前)
   fwUpdateBegin();   // 新韌體待確認或上次更新被退回;要在控制工作讀 fwUpdateBlockReason 之前設好(安全審查 2-F:原本在控制工作之後)
   controlBegin(imuOk, escCalibrate, escCalibStartMs);
 
@@ -455,6 +458,7 @@ void loop() {
   wifiTick();
   webTick();
   fwUpdateTick(millis());
+  flightLogService(millis());   // 佇列寫進快閃,倒數時預擦
   escCalibTick(millis());   // 校正旗標時效
   displayTick(millis());
   static uint32_t lastPrintMs = 0;

@@ -1,4 +1,6 @@
-// 版本流水號: r98 (2026-10-29) 3D 半球(GG):監看頁「3D 半球位置」(高度角 = 翼軸仰角,方位角 = 陀螺儀積分,箭頭為飛行方向,顏色/文字為曲線補償;拖曳旋轉),
+// 版本流水號: r100 (2026-10-30) 紀錄頁說明改成斷電保留(紀錄存快閃)
+// 舊: r99 (2026-10-30) 「只用線軸 G 回授」選項加警語(GG:純回授分不出爬升俯衝、慢一拍、拐角讀數會被污染,只適合平飛大圈與練習)
+// 舊: r98 (2026-10-29) 3D 半球(GG):監看頁「3D 半球位置」(高度角 = 翼軸仰角,方位角 = 陀螺儀積分,箭頭為飛行方向,顏色/文字為曲線補償;拖曳旋轉),
 //   紀錄頁 3D 飛行軌跡(油門著色,游標白點);補償預覽不再在地上顯示回授預測;側傾說明加俯衝淡出;撞牆檢查加兩條同時作用的最壞情況;回授增益提示
 // 舊: r97 (2026-10-29) 補償方式與線軸 G 回授(GG):角度補償頁新卡「補償方式」(曲線 / 曲線+回授 / 只回授)與目標 G,增益,幅度,低通,
 //   即時顯示線軸 G 與微調量,只回授時曲線卡變淡;監看頁加線軸 G 讀數,補償預覽與飛行中面板含 G 微調;紀錄頁 G 力面板加線軸 G(藍),游標與統計加線軸 G
@@ -579,7 +581,7 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
 <section id="log" hidden>
  <div class="card">
   <h2>G 力與姿態紀錄</h2>
-  <div class="cnote">板子一直記錄最近 10 分鐘(每 0.1 秒一筆,重新通電清除),飛完打開來看. 訂門檻的作法:先關閉提早降落,飛幾個特技看「總 G」與「Z 抖動」最高多少,再看地面滑行的抖動,門檻訂在兩者之間. 點或拖圖表看該時刻的數值;下方最大值只算目前畫面範圍.</div>
+  <div class="cnote">板子一直記錄(每 0.1 秒一筆),存在快閃裡<b>斷電保留</b>,約 19 分鐘(3 趟 5 分鐘的飛行),寫滿自動覆蓋最舊的,韌體更新不會清掉. 回家再打開來看也可以. 訂門檻的作法:先關閉提早降落,飛幾個特技看「總 G」與「Z 抖動」最高多少,再看地面滑行的抖動,門檻訂在兩者之間. 點或拖圖表看該時刻的數值;下方最大值只算目前畫面範圍.</div>
   <div class="row" style="margin-top:2px"><span class="seg" id="logWin"><button data-s="60">1 分</button><button data-s="180" class="on">3 分</button><button data-s="600">10 分</button></span>
    <button class="b" id="btnLogPause">暫停更新</button><span class="sub" id="logInfo"></span></div>
   <div class="grid g3" id="logStats"></div>
@@ -1193,12 +1195,14 @@ function buildCompMode(){
   const box=$('compModeCards');box.innerHTML='';
   box.appendChild(makeSelect('p','compMode','補償方式',COMP_NAMES,'曲線:照角度曲線補償(原本的做法). 曲線 + 回授:曲線之外再依線軸 G 微調,讓每個方位的拉力一樣. 只回授:不用曲線,基本油門 + 回授微調,幅度上限就是它能加減的範圍.'));
   for(const k of ['gTarget','gGain','gLimit','gFilter'])box.appendChild(makeParam('p',k));
+  box.insertAdjacentHTML('beforeend','<div class="asoff" id="compModeWarn" hidden style="margin:4px 0"><b>⚠ 只用線軸 G 回授不適合特技飛行</b><span>它分不出爬升與俯衝(同一高度拉力一樣),要等速度掉了才補,慢一拍;方形拐角的大 G 會污染讀數讓油門亂動. 只建議平飛、大圈、練習,或拿來量各方位需要多少補償再拉回曲線. 特技請用「曲線 + 線軸 G 回授微調」.</span></div>');
   box.insertAdjacentHTML('beforeend','<div class="sub" style="margin:2px 0 4px">增益 × 平滑秒數太大(例如 30 %/g 配 2 秒以上)可能來回抽油門,先用出廠值飛,看紀錄頁線軸 G 的藍線再調. 只回授方式分不出爬升與俯衝,要等速度掉了才補,快速動作仍建議保留曲線(曲線 + 回授). 微調過了「起飛後不補償」秒數後 2 秒內漸入.</div>');
  }
  // 只回授時曲線用不到:曲線卡變淡並提示(仍可編輯,切回去就生效);回授參數在「曲線」方式下變淡
  const m=p.compMode|0,cc=$('curveMainCard');
  if(cc){cc.style.opacity=m===2?'.45':'';cc.title=m===2?'補償方式是「只用線軸 G 回授」,這些曲線飛行時不會用到':''}
  for(const w of WIDGETS)if(['gTarget','gGain','gLimit','gFilter'].includes(w.key)&&w.scope==='p')w.el.style.opacity=m===0?'.45':'';
+ const warn=$('compModeWarn');if(warn)warn.hidden=m!==2;
  if(STATUS)updateGfbLive(STATUS);
 }
 // 即時:目前線軸 G 與依目前參數算出的微調量(與韌體同一個算式)

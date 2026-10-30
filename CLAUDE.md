@@ -92,4 +92,5 @@
 - WiFi 設定用獨立 NVS 命名空間 `lpwifi`,不放進飛行設定結構.
 - 副廠 MPU6050 誤差大(開發板靜止讀 1.12g):任何判斷不要依賴「剛好 1g」.
 - 姿態用向心力補償的 Mahony,飛行 Kp 0.3. 依據是 tools/sim_attitude.py 的模擬,改演算法先跑模擬.
-- 電變訊號用 GPIO4(重置期間無毛刺). 分割表 min_spiffs(OTA 需要兩個插槽).
+- 電變訊號用 GPIO4(重置期間無毛刺). 分割表 min_spiffs(OTA 需要兩個插槽). **spiffs 分割區 128KB 給飛行紀錄用**(GG 2026-10-30,斷電保留;不當檔案系統,
+  flight_log.cpp 直接用 esp_partition 讀寫 + mmap). 寫快閃整顆晶片會停(擦 4KB 約 30~50ms),所以進入倒數時預擦,飛行中只寫頁;不要在控制工作裡碰快閃.
