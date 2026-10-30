@@ -1,4 +1,5 @@
-# 版本流水號: r1 (2026-10-30) 網頁假伺服器:沒有板子也能開啟 web_page.h 的網頁(截圖,寫說明書,離線看版面用)
+# 版本流水號: r2 (2026-10-30) 合成紀錄第一筆加旗標 0x10(分趟線)
+# 舊: r1 (2026-10-30) 網頁假伺服器:沒有板子也能開啟 web_page.h 的網頁(截圖,寫說明書,離線看版面用)
 # ============================================================================
 # 從 src/web_page.h 取出 HTML,用 Python 內建 http.server 提供 / 與板子的 API(/api/meta,/api/settings,/api/status,
 # /api/events,/api/log,/api/wifi,/api/fw;POST 一律回 ok). 參數表與出廠值直接從 src/settings.cpp 解析(SP/PP 表,defaultShared/defaultProfile),
@@ -193,7 +194,7 @@ def synth_log(sc, seconds=240):
             state, thr, lineg, eps, pitch = 7, 0, 0.0, 0, 2
         acc = 1.0 + lineg * 0.9 + abs(pitch) / 90
         samples.append(struct.pack("<bBBBBbBBBBB", int(pitch), int(thr), int(min(25.5, acc) * 10), int(0.05 * 50), 0, 0, state,
-                                   1 if (state == 5 and abs(pitch) < 20 and eps < 20) else 0, int(max(0, min(25.5, lineg)) * 10),
+                                   (1 if (state == 5 and abs(pitch) < 20 and eps < 20) else 0) | (16 if i == 0 else 0), int(max(0, min(25.5, lineg)) * 10),
                                    int(max(0, min(90, eps))), int(az * 256 / 360) & 0xFF))
     return samples
 

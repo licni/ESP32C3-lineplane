@@ -1,4 +1,5 @@
-// 版本流水號: r100 (2026-10-30) 紀錄頁說明改成斷電保留(紀錄存快閃)
+// 版本流水號: r101 (2026-10-30) 紀錄只記起飛程序:說明改寫,圖上畫每趟起點的分趟線(旗標 0x10),游標顯示「這趟第 m:ss」
+// 舊: r100 (2026-10-30) 紀錄頁說明改成斷電保留(紀錄存快閃)
 // 舊: r99 (2026-10-30) 「只用線軸 G 回授」選項加警語(GG:純回授分不出爬升俯衝、慢一拍、拐角讀數會被污染,只適合平飛大圈與練習)
 // 舊: r98 (2026-10-29) 3D 半球(GG):監看頁「3D 半球位置」(高度角 = 翼軸仰角,方位角 = 陀螺儀積分,箭頭為飛行方向,顏色/文字為曲線補償;拖曳旋轉),
 //   紀錄頁 3D 飛行軌跡(油門著色,游標白點);補償預覽不再在地上顯示回授預測;側傾說明加俯衝淡出;撞牆檢查加兩條同時作用的最壞情況;回授增益提示
@@ -581,7 +582,7 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
 <section id="log" hidden>
  <div class="card">
   <h2>G 力與姿態紀錄</h2>
-  <div class="cnote">板子一直記錄(每 0.1 秒一筆),存在快閃裡<b>斷電保留</b>,約 19 分鐘(3 趟 5 分鐘的飛行),寫滿自動覆蓋最舊的,韌體更新不會清掉. 回家再打開來看也可以. 訂門檻的作法:先關閉提早降落,飛幾個特技看「總 G」與「Z 抖動」最高多少,再看地面滑行的抖動,門檻訂在兩者之間. 點或拖圖表看該時刻的數值;下方最大值只算目前畫面範圍.</div>
+  <div class="cnote">只記起飛程序(每 0.1 秒一筆):從倒數開始,到馬達停止後 5 秒;待機不記. 存在快閃裡<b>斷電保留</b>,約 19 分鐘(兩趟 8 分鐘的飛行),寫滿自動覆蓋最舊的,韌體更新不會清掉. 回家再打開來看也可以. 圖上的灰色虛線是每一趟的起點,相鄰兩趟緊接著畫,中間的待機時間不算. 訂門檻的作法:先關閉提早降落,飛幾個特技看「總 G」與「Z 抖動」最高多少,再看地面滑行的抖動,門檻訂在兩者之間. 點或拖圖表看該時刻的數值;下方最大值只算目前畫面範圍.</div>
   <div class="row" style="margin-top:2px"><span class="seg" id="logWin"><button data-s="60">1 分</button><button data-s="180" class="on">3 分</button><button data-s="600">10 分</button></span>
    <button class="b" id="btnLogPause">暫停更新</button><span class="sub" id="logInfo"></span></div>
   <div class="grid g3" id="logStats"></div>
@@ -2383,6 +2384,10 @@ function drawLog(){
   for(let i=begin;i<=end;i++){const on=i<end&&(LOG.flags[i]&bit);
    if(on&&s<0)s=i;else if(!on&&s>=0){const x0=xOf(s),x1=xOf(i-1)+plotW/winN;g.fillRect(x0,y,Math.max(1,x1-x0),h);s=-1}}};
  band(1,'rgba(34,197,94,.14)',p3.y,ph);band(2,'rgba(245,158,11,.9)',p3.y+1,5);
+ // 分趟線:旗標 0x10 = 這趟紀錄的第一筆(進入倒數). 待機不記,所以兩趟在圖上緊接著
+ g.save();g.setLineDash([3,3]);g.strokeStyle=MUTE;g.lineWidth=1;
+ for(let i=Math.max(begin,1);i<end;i++)if(LOG.flags[i]&16){const x=xOf(i);g.beginPath();g.moveTo(x,top0);g.lineTo(x,H-axisH);g.stroke();g.fillStyle=MUTE;g.fillText('起飛程序',x+3,top0+ph+gap-2)}
+ g.restore();
  for(let v=0;v<=vMax;v+=vMax>3?1:0.5){g.fillStyle=MUTE;g.textAlign='right';g.fillText(v,Lm-3,yOf(p3,v,0,vMax)+4);g.textAlign='left'}
  series(p3,LOG.vib,0,vMax,'#a855f7',1.6);
  hline(p3,sh.earlyLandVib,0,vMax,'#d97706','門檻',true);
@@ -2394,8 +2399,8 @@ function drawLog(){
  // 游標
  if(logCursor>=begin&&logCursor<end){const x=xOf(logCursor),i=logCursor;
   g.strokeStyle=INK;g.lineWidth=1;g.beginPath();g.moveTo(x,top0);g.lineTo(x,H-axisH);g.stroke();
-  const ago=(N-1-i)*LOG.ms/1000;
-  $('logCursor').innerHTML=`<b>${fmtT(-ago)}</b> 角度 ${LOG.pitch[i]}°,油門 ${LOG.thr[i]}%,總 G ${LOG.acc[i].toFixed(1)},線軸 G ${LOG.lineG[i].toFixed(1)},短尖峰 ${LOG.spike[i]?LOG.spike[i].toFixed(1)+' g':'無'},推力 ${Math.max(0,LOG.push[i]).toFixed(1)} g,抖動 ${LOG.vib[i].toFixed(2)} g${LOG.flags[i]&1?'(正飛水平)':''}${LOG.flags[i]&2?',抖動持續達標':''}`;
+  const ago=(N-1-i)*LOG.ms/1000;let s0=i;while(s0>0&&!(LOG.flags[s0]&16))s0--;   // 這趟的起點(旗標 0x10)
+  $('logCursor').innerHTML=`<b>${fmtT(-ago)}</b>(這趟 ${fmtT((i-s0)*LOG.ms/1000)}) 角度 ${LOG.pitch[i]}°,油門 ${LOG.thr[i]}%,總 G ${LOG.acc[i].toFixed(1)},線軸 G ${LOG.lineG[i].toFixed(1)},短尖峰 ${LOG.spike[i]?LOG.spike[i].toFixed(1)+' g':'無'},推力 ${Math.max(0,LOG.push[i]).toFixed(1)} g,抖動 ${LOG.vib[i].toFixed(2)} g${LOG.flags[i]&1?'(正飛水平)':''}${LOG.flags[i]&2?',抖動持續達標':''}`;
  }else $('logCursor').textContent='點或拖曳圖表查看某一時刻的數值.';
  // 統計(目前視窗)
  let aM=0,sM=0,vM=0,vL=0,pM=0,lgMin=99,lgMax=0;
