@@ -1,4 +1,5 @@
-// 版本流水號: r6 (2026-10-30) 只記起飛程序:狀態 3~6(倒數~降落)才收,離開後再記 5 秒;每趟第一筆旗標 0x10;待機不碰快閃
+// 版本流水號: r7 (2026-10-30) 倒數的樣本先放暫存(PRE_CAP 筆),馬達啟動(狀態 4)才一次補進佇列;倒數被取消沒起飛就丟掉,不會留下一堆碎片
+// 舊: r6 (2026-10-30) 只記起飛程序:狀態 3~6(倒數~降落)才收,離開後再記 5 秒;每趟第一筆旗標 0x10;待機不碰快閃
 // 舊: r5 (2026-10-30) 改存快閃 spiffs 分割區(環形,序號標頭,mmap 讀取,倒數預擦,loop 寫頁);RAM 佇列取代 66KB 環形緩衝
 // 舊: r4 (2026-10-29) 每筆加翼軸仰角與方位角(區間最後的值)
 // 舊: r3 (2026-10-29) 每筆加線軸 G(區間最後的低通值)
@@ -40,6 +41,11 @@ static volatile uint32_t prepareRequest = 0;   // 要先擦好的筆數(0 = 沒�
 static const uint32_t REC_TAIL_MS = 5000;
 static bool recording = false;
 static bool recStartPending = false;   // 下一筆是這趟的第一筆
+// 倒數中的樣本先收在暫存(只有控制工作碰,不需要鎖):倒數被碰到取消,重新放穩,又倒數,都不會寫進快閃;馬達真的啟動才一次補進佇列.
+static const uint16_t PRE_CAP = 200;   // 20 秒(出廠倒數 20 秒;更長就只留最後 20 秒)
+static FlightLogSample preBuf[PRE_CAP];
+static uint16_t preHead = 0, preCount = 0;
+static bool committed = false;         // 這趟已經進入馬達運轉(狀態 4~6),樣本直接進佇列
 static uint32_t lastActiveMs = 0;      // 最後一次處於狀態 3~6 的時間
 
 // 目前區間的累積(控制工作)
@@ -187,6 +193,16 @@ void flightLogService(uint32_t nowMs) {
   }
 }
 
+static void pushQueue(const FlightLogSample &smp) {
+  const uint16_t next = (uint16_t)((qHead + 1) % QUEUE_CAP);
+  if (next == qTail) {   // 佇列滿:丟最舊的,計數
+    qTail = (uint16_t)((qTail + 1) % QUEUE_CAP);
+    ++dropped;
+  }
+  queueBuf[qHead] = smp;   // 先寫資料
+  qHead = next;            // 再推進
+}
+
 void flightLogFeed(float pitchDeg, float throttlePct, float accMagG, float vibG, float spikeG, float pushG,
                    float lineG, float sideDeg, float azimuthDeg, uint8_t state, uint8_t flags, uint32_t nowMs) {
   // 只記起飛程序:狀態 3(倒數)~6(降落). 回到待機/結束後再記 5 秒收尾就停,下次進倒數再開新的一趟
@@ -197,10 +213,25 @@ void flightLogFeed(float pitchDeg, float throttlePct, float accMagG, float vibG,
     recording = true;
     recStartPending = true;
     slotOpen = false;   // 重新對齊區間起點
+    committed = false;
+    preHead = preCount = 0;
   } else if (!active && (!lastActiveMs || nowMs - lastActiveMs > REC_TAIL_MS)) {
     recording = false;
     slotOpen = false;   // 沒收成的半筆丟掉
+    committed = false;
+    preHead = preCount = 0;   // 倒數後沒起飛:暫存的倒數樣本丟掉
     return;
+  }
+  // 馬達啟動(狀態 4~6):把倒數的暫存按時間順序補進佇列,之後的樣本直接進佇列
+  if (!committed && state >= 4 && state <= 6) {
+    committed = true;
+    for (uint16_t k = 0, i = (uint16_t)((preHead + PRE_CAP - preCount) % PRE_CAP); k < preCount; ++k, i = (uint16_t)((i + 1) % PRE_CAP))
+    {
+      FlightLogSample smp = preBuf[i];
+      if (k == 0) smp.flags |= LOG_FLAG_REC_START;   // 倒數超過暫存長度時第一筆已被蓋掉,起點旗標補在現存最舊的一筆
+      pushQueue(smp);
+    }
+    preHead = preCount = 0;
   }
   if (!slotOpen) {
     slotOpen = true;
@@ -231,13 +262,13 @@ void flightLogFeed(float pitchDeg, float throttlePct, float accMagG, float vibG,
   slot.spikeDg = clampU8(slotSpike * 10);
   slot.pushDg = clampI8(slotPush * 10);
   if (slot.throttlePct == 0xFF) slot.throttlePct = 0xFE;   // 全 0xFF 代表「還沒寫」,油門本來就不會到 255
-  const uint16_t next = (uint16_t)((qHead + 1) % QUEUE_CAP);
-  if (next == qTail) {   // 佇列滿:丟最舊的,計數
-    qTail = (uint16_t)((qTail + 1) % QUEUE_CAP);
-    ++dropped;
+  if (committed) {
+    pushQueue(slot);
+  } else {   // 倒數中:先放暫存,滿了蓋掉最舊的
+    preBuf[preHead] = slot;
+    preHead = (uint16_t)((preHead + 1) % PRE_CAP);
+    if (preCount < PRE_CAP) ++preCount;
   }
-  queueBuf[qHead] = slot;   // 先寫資料
-  qHead = next;             // 再推進
   slotOpen = false;
   recStartPending = false;
 }
