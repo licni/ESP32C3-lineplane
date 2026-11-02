@@ -1,8 +1,9 @@
-# 版本流水號: r6 (2026-11-02) 版本說明去掉 Markdown 粗體符號(GG:說明要給終端使用者看);APP_VERSION 2.0.3
+# 版本流水號: r7 (2026-11-02) 板子訊息併入燒錄頁(GG):兩個分頁「燒錄與板子訊息」「設定與備份」;APP_VERSION 2.0.4
+# 舊: r6 (2026-11-02) 版本說明去掉 Markdown 粗體符號(GG:說明要給終端使用者看);APP_VERSION 2.0.3
 # 舊: r5 (2026-11-02) 連續燒多片(GG:自動偵測只有第一片會跳出):監看守著的埠不見了(換板子)就停掉監看改選新板子;APP_VERSION 2.0.2
 # 舊: r4 (2026-11-02) 分頁改成自製大按鈕(TabBar,GG:ttk 的分頁框太不明顯);APP_VERSION 2.0.1
 # 舊: r3 (2026-11-02) 改名「線控飛機設定器」LineplaneConfig.exe,APP_VERSION 2.0.0(GG:燒錄器改寫成設定器):
-#   三個分頁(燒錄 / 設定與備份 / 板子訊息);USB 線開板子那一份設定網頁(board_link.py 本機轉送,需韌體 2026.11.02.2 以上);
+#   兩個分頁(燒錄與板子訊息 / 設定與備份);USB 線開板子那一份設定網頁(board_link.py 本機轉送,需韌體 2026.11.02.2 以上);
 #   WiFi 也能開;匯出/匯入板上全部設定備份(USB 或 WiFi);燒完整燒錄檔前先問要不要匯出備份
 # 舊: r2 (2026-10-29) 韌體版本讓使用者選(GG:不要只下載最新版):版本清單,版本說明,保留設定選項;APP_VERSION 1.1.0
 # 舊: r1 (2026-10-21) 初版:免安裝燒錄工具(GG:給不想裝開發環境的使用者)
@@ -16,7 +17,7 @@
 #  - 燒錄:用 esptool(當成函式庫呼叫,不另外安裝). 完整燒錄檔從 0x0 燒(可先清除整片);
 #    韌體更新檔燒 0x10000 並把 otadata 寫成 boot_app0(設定保留,和 PlatformIO USB 燒錄相同,不待確認).
 #  - 檢查:esptool 寫完逐段校驗檢查碼;重新開機後送序列指令 fw / mpu / net,確認版本,感測器與 WiFi.
-#  - 序列監看:顯示板子回報的訊息,可以送指令(help 列出全部).
+#  - 序列監看(燒錄頁下方):顯示板子回報的訊息,可以送指令(help 列出全部).
 # 序列埠一律 dtr=False, rts=False 再開(C3 原生 USB 把 DTR/RTS 切換當成重置).
 # 只用 Python 內建 tkinter + esptool + pyserial. 開發測試:python lineplane_config.py
 # ============================================================================
@@ -40,7 +41,7 @@ import serial.tools.list_ports
 import board_link
 import fw_image
 
-APP_VERSION = "2.0.3"
+APP_VERSION = "2.0.4"
 TITLE = f"線控飛機設定器 v{APP_VERSION}"
 USB_API_MIN_FW = "2026.11.02.2"   # USB 設定通道從這版韌體開始
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
@@ -312,13 +313,19 @@ class App:
         r = self.root
         r.title(TITLE)
         r.minsize(760, 620)
+        # 預設高度依螢幕:燒錄頁下方有板子訊息區,太矮會被擠掉;小筆電(768)就用剩下的高度
+        try:
+            sh = r.winfo_screenheight()
+            r.geometry(f"880x{min(980, max(620, sh - 90))}")
+        except Exception:
+            pass
         pad = {"padx": 8, "pady": 4}
         main = ttk.Frame(r, padding=8)
         main.pack(fill="both", expand=True)
         main.columnconfigure(0, weight=1)
         main.rowconfigure(1, weight=1)
 
-        # 序列埠(三個分頁共用)
+        # 序列埠(兩個分頁共用)
         f1 = ttk.LabelFrame(main, text=" 開發板序列埠(USB 線) ", padding=6)
         f1.grid(row=0, column=0, sticky="ew", **pad)
         f1.columnconfigure(1, weight=1)
@@ -336,14 +343,11 @@ class App:
         self.nb.grid(row=1, column=0, sticky="nsew", **pad)
         tab_flash = ttk.Frame(self.nb.body, padding=(4, 8, 4, 4))
         tab_cfg = ttk.Frame(self.nb.body, padding=(4, 8, 4, 4))
-        tab_mon = ttk.Frame(self.nb.body, padding=(4, 8, 4, 4))
-        self.nb.add(tab_flash, text="① 燒錄")
+        self.nb.add(tab_flash, text="① 燒錄與板子訊息")
         self.nb.add(tab_cfg, text="② 設定與備份")
-        self.nb.add(tab_mon, text="③ 板子訊息")
         tab_flash.columnconfigure(0, weight=1)
         tab_cfg.columnconfigure(0, weight=1)
-        tab_mon.columnconfigure(0, weight=1)
-        tab_mon.rowconfigure(0, weight=1)
+        tab_flash.rowconfigure(2, weight=1)   # 板子訊息區吃掉剩下的高度
 
         # 燒錄分頁 1. 韌體檔
         f2 = ttk.LabelFrame(tab_flash, text=" 1. 韌體檔 ", padding=6)
@@ -407,11 +411,13 @@ class App:
         chk = ttk.Frame(f3)
         chk.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         self.checks = {}
+        chk.columnconfigure(1, weight=1)
+        chk.columnconfigure(3, weight=1)
         for i, (key, name) in enumerate([("chip", "晶片"), ("verify", "寫入校驗"), ("boot", "開機與版本"),
                                          ("mpu", "感測器 MPU6050"), ("wifi", "WiFi")]):
-            ttk.Label(chk, text=name + ":").grid(row=i, column=0, sticky="w")
-            lab = ttk.Label(chk, text="—", foreground="#777")
-            lab.grid(row=i, column=1, sticky="w", padx=6)
+            ttk.Label(chk, text=name + ":").grid(row=i // 2, column=(i % 2) * 2, sticky="w", padx=(0 if i % 2 == 0 else 16, 0))
+            lab = ttk.Label(chk, text="—", foreground="#777", wraplength=330, justify="left")
+            lab.grid(row=i // 2, column=(i % 2) * 2 + 1, sticky="w", padx=6)
             self.checks[key] = lab
 
         # 設定與備份分頁
@@ -452,9 +458,9 @@ class App:
                            "板上有未儲存的變更時會先問要不要儲存. 含 WiFi 的備份套用後 WiFi 設定為試用,重新開機後 3 分鐘內要在網頁按「保持」.",
                   foreground="#555", wraplength=700, justify="left").grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
-        # 板子訊息分頁(序列監看)
-        f4 = ttk.LabelFrame(tab_mon, text=" 板子回報訊息(序列監看) ", padding=6)
-        f4.grid(row=0, column=0, sticky="nsew", **pad)
+        # 燒錄分頁 3. 板子訊息(序列監看)
+        f4 = ttk.LabelFrame(tab_flash, text=" 3. 板子回報訊息(序列監看) ", padding=6)
+        f4.grid(row=2, column=0, sticky="nsew", **pad)
         f4.columnconfigure(0, weight=1)
         f4.rowconfigure(1, weight=1)
         bar = ttk.Frame(f4)
@@ -472,7 +478,7 @@ class App:
         txt.columnconfigure(0, weight=1)
         txt.rowconfigure(0, weight=1)
         mono = ("Consolas", 10) if sys.platform == "win32" else ("Monospace", 10)
-        self.log = tk.Text(txt, height=8, wrap="word", font=mono, background="#111", foreground="#ddd", insertbackground="#ddd")
+        self.log = tk.Text(txt, height=6, wrap="word", font=mono, background="#111", foreground="#ddd", insertbackground="#ddd")
         self.log.grid(row=0, column=0, sticky="nsew")
         sb = ttk.Scrollbar(txt, command=self.log.yview)
         sb.grid(row=0, column=1, sticky="ns")
@@ -498,7 +504,7 @@ class App:
         self.status = ttk.Label(r, text="", relief="sunken", anchor="w", padding=(6, 2))
         self.status.pack(side="bottom", fill="x")
         self._log(f"{TITLE}. 接上開發板後會自動偵測序列埠. 燒錄與測試前請拆下螺旋槳.", "tool")
-        self.nb.select({"flash": 0, "cfg": 1, "mon": 2}.get(self.prefs.get("tab", "flash"), 0))
+        self.nb.select({"flash": 0, "cfg": 1}.get(self.prefs.get("tab", "flash"), 0))
 
     # ---------------- 共用 ----------------
     def _log(self, text, tag=None):
@@ -719,9 +725,9 @@ class App:
         body = r["notes"].split("\n---")[0].strip()   # Release 說明後段是「怎麼更新」的固定文字
         body = re.sub(r"\*\*(.+?)\*\*", r"\1", body)   # Markdown 粗體符號拿掉(這裡是純文字)
         lines = [x.strip() for x in body.splitlines() if x.strip()]
-        text = "\n".join(lines[:8]) + (" …" if len(lines) > 8 else "")
-        if len(text) > 600:
-            text = text[:600] + " …"
+        text = "\n".join(lines[:5]) + (" …" if len(lines) > 5 else "")
+        if len(text) > 400:
+            text = text[:400] + " …"
         extra = []
         if self.keep_var.get():
             if not has_app:
@@ -1036,7 +1042,7 @@ class App:
         save_prefs(self.prefs)
 
     def _save_tab(self):
-        self.prefs["tab"] = ["flash", "cfg", "mon"][self.nb.index(self.nb.select())]
+        self.prefs["tab"] = ["flash", "cfg"][self.nb.index(self.nb.select())]
         save_prefs(self.prefs)
 
     def _usb_monitor_on(self, port, timeout=4.0):
