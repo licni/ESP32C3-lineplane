@@ -1,10 +1,11 @@
-# 版本流水號: r2 (2026-10-21) main 分支打包完直接發布 Release(標籤 flasher-v<APP_VERSION>,設為最新),不用另外推標籤
+# 版本流水號: r3 (2026-11-02) 改名設定器 LineplaneConfig.exe(GG),Release 標籤 config-v<APP_VERSION>;測試加 test_board_link
+# 舊: r2 (2026-10-21) main 分支打包完直接發布 Release(標籤 flasher-v<APP_VERSION>,設為最新),不用另外推標籤
 # 舊: r1 (2026-10-21) 初版:在 Windows 打包燒錄工具 LineplaneFlasher.exe
 # - 改到 tools/flasher/ 就打包,exe 放在這次執行的 Artifacts(Actions 頁面下載).
-# - main 分支(推送或手動執行)打包完建立/更新 Release「燒錄工具 v版本」並附上 exe,設為最新版:
-#   固定下載網址 https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneFlasher.exe
-#   同一版本重跑會覆蓋 exe;發新版前先改 lineplane_flasher.py 的 APP_VERSION.
-name: 燒錄工具 exe
+# - main 分支(推送或手動執行)打包完建立/更新 Release「線控飛機設定器 v版本」並附上 exe,設為最新版:
+#   固定下載網址 https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneConfig.exe
+#   同一版本重跑會覆蓋 exe;發新版前先改 lineplane_config.py 的 APP_VERSION.
+name: 設定器 exe
 
 on:
   push:
@@ -13,6 +14,7 @@ on:
       - ".github/workflows/flasher.yml"
     tags:
       - "flasher-v*"
+      - "config-v*"
   workflow_dispatch:
 
 permissions:
@@ -33,17 +35,17 @@ jobs:
 
       - name: 單元測試
         working-directory: tools/flasher
-        run: python -m unittest -v test_fw_image
+        run: python -m unittest -v test_fw_image test_board_link
 
       - name: 打包 exe
         working-directory: tools/flasher
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name LineplaneFlasher --collect-data esptool lineplane_flasher.py
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name LineplaneConfig --collect-data esptool lineplane_config.py
 
       - name: 檢查 exe 帶了 esptool 的 ESP32-C3 燒錄小程式
         working-directory: tools/flasher
         shell: pwsh
         run: |
-          $exe = "dist/LineplaneFlasher.exe"
+          $exe = "dist/LineplaneConfig.exe"
           if (-not (Test-Path $exe)) { throw "沒有產生 $exe" }
           $hit = python -m PyInstaller.utils.cliutils.archive_viewer --list $exe | Select-String "esp32c3.json"
           if (-not $hit) { throw "exe 裡沒有 esptool 的 esp32c3.json(--collect-data esptool 沒作用)" }
@@ -52,37 +54,39 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: LineplaneFlasher
-          path: tools/flasher/dist/LineplaneFlasher.exe
+          name: LineplaneConfig
+          path: tools/flasher/dist/LineplaneConfig.exe
           if-no-files-found: error
 
       - name: 讀工具版本
         id: ver
         shell: pwsh
         run: |
-          $m = Select-String -Path tools/flasher/lineplane_flasher.py -Pattern '^APP_VERSION = "([^"]+)"'
-          if (-not $m) { throw "lineplane_flasher.py 找不到 APP_VERSION" }
+          $m = Select-String -Path tools/flasher/lineplane_config.py -Pattern '^APP_VERSION = "([^"]+)"'
+          if (-not $m) { throw "lineplane_config.py 找不到 APP_VERSION" }
           "ver=$($m.Matches[0].Groups[1].Value)" >> $env:GITHUB_OUTPUT
 
       - name: 發布 Release(main 分支)
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/flasher-v')
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/config-v')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: flasher-v${{ steps.ver.outputs.ver }}
+          tag_name: config-v${{ steps.ver.outputs.ver }}
           target_commitish: ${{ github.sha }}
-          name: 線控飛機韌體燒錄工具 v${{ steps.ver.outputs.ver }}
+          name: 線控飛機設定器 v${{ steps.ver.outputs.ver }}
           make_latest: "true"
-          files: tools/flasher/dist/LineplaneFlasher.exe
+          files: tools/flasher/dist/LineplaneConfig.exe
           body: |
-            ## 線控飛機韌體燒錄工具(Windows,免安裝)
+            ## 線控飛機設定器(Windows,免安裝):燒錄 + 設定 + 備份 + 板子訊息
 
-            **下載:[LineplaneFlasher.exe](https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneFlasher.exe)**
+            **下載:[LineplaneConfig.exe](https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneConfig.exe)**
 
             1. 下載後直接打開,不用安裝. Windows 跳出「Windows 已保護您的電腦」時,按「其他資訊」→「仍要執行」.
-            2. 用可以傳資料的 USB 線接上 ESP32-C3 開發板,工具會自動找到板子.
-            3. 選「普通版」或「帶螢幕板」,在「韌體版本」挑一版(預設最新版),按「下載這個版本」.
-            4. 按「開始燒錄」,確定. 燒完會自動檢查,全部打勾就完成了.
-            5. 手機連板子的 WiFi 熱點,瀏覽器開 http://192.168.4.1 設定.
+            2. 用可以傳資料的 USB 線接上 ESP32-C3 開發板,程式會自動找到板子.
+            3. **燒錄**頁:選「普通版」或「帶螢幕板」,在「韌體版本」挑一版(預設最新版),按「下載這個版本」,再按「開始燒錄」.
+               已經在用的板子勾「保留板上設定」. 燒完整燒錄檔前會先問要不要匯出備份.
+            4. **設定與備份**頁:按「開啟設定網頁」,用電腦瀏覽器打開和手機一樣的設定網頁(USB 線或 WiFi 都可以;
+               USB 線需要韌體 2026.11.02.2 以上,先在燒錄頁更新). 「匯出 / 匯入備份」把板上全部設定存成檔案或還原.
+            5. **板子訊息**頁:看板子回報的訊息,送序列指令.
 
             燒錄與測試時請拆下螺旋槳. 找不到板子時:按住板子上的 BOOT 鍵,拔掉再插上 USB,放開 BOOT.
             詳細說明:https://github.com/licni/ESP32C3-lineplane/blob/main/tools/flasher/README.md

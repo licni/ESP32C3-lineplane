@@ -1,4 +1,6 @@
-// 版本流水號: r103 (2026-10-30) fmtT 修正 59.6 秒顯示成 0:60
+// 版本流水號: r104 (2026-11-02) USB 模式(電腦設定器透過 USB 線開這份網頁,網址是 127.0.0.1):韌體更新卡換成提示(更新用設定器的燒錄頁),
+//   新韌體待確認不自動確認(確認要證明 WiFi 能連上),網路標籤顯示 USB 線;其他功能與 WiFi 完全相同
+// 舊: r103 (2026-10-30) fmtT 修正 59.6 秒顯示成 0:60
 // 舊: r102 (2026-10-30) 紀錄上限 6000 → 12000 筆(板上存 19.8 分鐘,網頁原本只留後 10 分鐘),視窗加「20 分」;3D 軌跡跨趟(中間隔著倒數/待機)不再連一條線
 // 舊: r101 (2026-10-30) 紀錄只記起飛程序:說明改寫,圖上畫每趟起點的分趟線(旗標 0x10),游標顯示「這趟第 m:ss」
 // 舊: r100 (2026-10-30) 紀錄頁說明改成斷電保留(紀錄存快閃)
@@ -702,6 +704,15 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
   <div class="row" style="margin-bottom:0"><button class="b pri" id="btnWifiSave">儲存 WiFi 設定</button><button class="b" id="btnReboot">重新開機</button></div>
   <div class="msg" id="wifiMsg"></div>
  </div>
+ <div class="card" id="usbFwCard" hidden>
+  <h2>韌體更新</h2>
+  <div class="cnote">目前是透過 <b>USB 線</b>(電腦設定器)連到板子. 韌體更新請用設定器的「燒錄」頁:選版本,勾「保留板上設定」,按開始燒錄.
+   用 WiFi 開網頁時,這裡會有「檢查更新」與手動上傳.</div>
+  <div class="grid">
+   <div class="stat"><div class="k">韌體版本</div><div class="v" id="usbFwVer" style="font-size:14px">--</div><div class="k" id="usbFwBoard"></div></div>
+  </div>
+  <div class="live" id="usbFwPendBox" hidden><span class="pill warn">新韌體待確認</span><span class="sub">USB 線不做確認(確認要證明新韌體的 WiFi 連得上):請用 WiFi 開一次網頁,或等它自動退回舊版後再更新.</span></div>
+ </div>
  <div class="card" id="fwCard">
   <h2>韌體更新</h2>
   <div class="cnote">板子連上家用 WiFi(要能上網)後按「檢查更新」,確認後板子自己下載安裝,完成自動重新開機.
@@ -778,6 +789,8 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
 <div class="toast" id="toast" hidden></div>
 <script>
 const $=id=>document.getElementById(id);
+// USB 模式:電腦設定器在本機開一個小伺服器轉送請求到 USB 線,網址是 127.0.0.1. 功能與 WiFi 相同,只有韌體更新卡與待確認不同.
+const USB_MODE=/^(127\.0\.0\.1|localhost)$/.test(location.hostname);
 let pane='mon',META=null,VALS=null,editP=0,STATUS=null;
 const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔掉電池再接上(每次通電倒數一次).',startstate:'只有待機或飛行結束時可以開始.',
  startblock:'剛取消起飛或剛停止馬達,稍等幾秒再開始.',startbusy:'手動輸出或電變校正進行中,先上鎖或等校正完成再開始.',cancelstate:'只有等待放穩或倒數中可以取消;馬達運轉中請用緊急停止.',start:'已開始.',saved:'已儲存.',pwshort:'密碼至少 8 碼(開放網路請留空).',apsfxlong:'熱點名稱後面接的字太長:最多 14 個英數字(中文一字算 3 個).',
@@ -1787,6 +1800,7 @@ const BOARD_NAME={MINI:'普通版',OLED:'帶螢幕板'};   // 韌體身分標記
 async function fwLoad(){try{FW=await poll('/api/fw');fwRender()}catch(e){}}
 function fwRender(){
  const f=FW;if(!f)return;
+ if(USB_MODE){$('usbFwVer').textContent=f.ver;$('usbFwBoard').textContent=BOARD_NAME[f.board]||f.board||'';$('usbFwPendBox').hidden=!f.pending;return}
  $('fwVer').textContent=f.ver;
  $('fwBoard').textContent=BOARD_NAME[f.board]||f.board||'';
  $('fwPendBox').hidden=!f.pending;
@@ -1811,9 +1825,9 @@ function fwRender(){
 function renderFw(s){
  const fw=s.fw;if(!fw)return;
  // 新韌體待確認:能跑到這裡代表新韌體的 WiFi,網頁伺服器與網頁程式都正常 → 自動確認
- if(fw[1]&&Date.now()-fwConfirmAt>5000){fwConfirmAt=Date.now();
+ if(fw[1]&&!USB_MODE&&Date.now()-fwConfirmAt>5000){fwConfirmAt=Date.now();
   post('/api/fw/confirm').then(r=>{if(r.ok){toast('新韌體已確認採用.');fwLoad();tick()}}).catch(()=>{})}
- const bt=fw[0]?(fw[3]===3?`韌體下載安裝中 ${fw[4]}%,請勿斷電`:fw[3]===4?'韌體安裝完成,重新開機中…':'韌體更新中,請勿斷電'):(fw[1]?'正在確認新韌體…':'');
+ const bt=fw[0]?(fw[3]===3?`韌體下載安裝中 ${fw[4]}%,請勿斷電`:fw[3]===4?'韌體安裝完成,重新開機中…':'韌體更新中,請勿斷電'):(fw[1]?(USB_MODE?'新韌體待確認:請用 WiFi 開網頁確認':'正在確認新韌體…'):'');
  $('fwBar').hidden=!bt;if(bt)$('fwBarText').textContent=bt;
  // 板子上的檢查狀態和畫面上的不同就重讀:原本只在「檢查中」時重讀,剛好在兩次讀取之間檢查完成,畫面會一直停在「檢查中…」
  if(pane==='sys'&&(fw[0]||fw[3]===1||fw[3]===3||fw[1]||!FW||FW.check!==fw[3]||FW.rb!==fw[5]))fwLoad();
@@ -1906,7 +1920,7 @@ function renderStatus(s){
  }
  if(s.imu===0)pill('pillImu','bad','感測器未連接');else if(s.imu===2)pill('pillImu','bad','感測器故障,請重新上電');else pill('pillImu','ok','感測器正常');
  const modes=['連線中','家用 WiFi','自身熱點'];
- pill('pillNet',s.ws===0?'warn':'ok',modes[s.ws]||'?');
+ pill('pillNet',USB_MODE?'ok':(s.ws===0?'warn':'ok'),USB_MODE?'USB 線':(modes[s.ws]||'?'));
  $('pillLock').hidden=!s.lock;
  // 忽略安全開關:每一頁上方都一直顯示(含還沒儲存的值,寧可多警告)
  $('asOffBar').hidden=!s.asoff;
@@ -2704,6 +2718,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>showPane(b.data
  try{VALS=await poll('/api/settings');editP=VALS.active}catch(e){}
  buildProfile();buildShared();wireNotes(document);
  await loadVals();
+ if(USB_MODE){$('fwCard').hidden=true;$('usbFwCard').hidden=false}
  showPane(location.hash.replace(/^#(tab-)?/,'')||'mon');window.scrollTo(0,0);loadWifi();
 })();
 </script></body></html>)HTML";

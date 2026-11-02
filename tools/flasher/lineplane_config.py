@@ -1,8 +1,13 @@
-# 版本流水號: r2 (2026-10-29) 韌體版本讓使用者選(GG:不要只下載最新版):版本清單,版本說明,保留設定選項;APP_VERSION 1.1.0
+# 版本流水號: r3 (2026-11-02) 改名「線控飛機設定器」LineplaneConfig.exe,APP_VERSION 2.0.0(GG:燒錄器改寫成設定器):
+#   三個分頁(燒錄 / 設定與備份 / 板子訊息);USB 線開板子那一份設定網頁(board_link.py 本機轉送,需韌體 2026.11.02.2 以上);
+#   WiFi 也能開;匯出/匯入板上全部設定備份(USB 或 WiFi);燒完整燒錄檔前先問要不要匯出備份
+# 舊: r2 (2026-10-29) 韌體版本讓使用者選(GG:不要只下載最新版):版本清單,版本說明,保留設定選項;APP_VERSION 1.1.0
 # 舊: r1 (2026-10-21) 初版:免安裝燒錄工具(GG:給不想裝開發環境的使用者)
 # ============================================================================
-# 線控飛機韌體燒錄工具. 打包成單一 exe(PyInstaller,見 build_exe.bat 與 .github/workflows/flasher.yml).
+# 線控飛機設定器(燒錄 + 設定 + 備份 + 監看). 打包成單一 exe(PyInstaller,見 build_exe.bat 與 .github/workflows/flasher.yml).
 #  - 序列埠:自動偵測 ESP32-C3 原生 USB(VID 303A),也可以手動選.
+#  - 設定:電腦上開一個小伺服器(board_link.LocalProxy),瀏覽器開它就是板子那一份網頁,請求透過 USB 線轉給板子;
+#    或直接用 WiFi 開 http://lineplane.local. 備份匯出/匯入兩種連線都能用.
 #  - 韌體檔:從公開韌體專案的版本清單選一版下載(普通版/帶螢幕板,下載後驗證),或選本機 .bin.
 #    預設下載完整燒錄檔(全新板子可用);勾「保留板上設定」只下載韌體更新檔.
 #  - 燒錄:用 esptool(當成函式庫呼叫,不另外安裝). 完整燒錄檔從 0x0 燒(可先清除整片);
@@ -10,7 +15,7 @@
 #  - 檢查:esptool 寫完逐段校驗檢查碼;重新開機後送序列指令 fw / mpu / net,確認版本,感測器與 WiFi.
 #  - 序列監看:顯示板子回報的訊息,可以送指令(help 列出全部).
 # 序列埠一律 dtr=False, rts=False 再開(C3 原生 USB 把 DTR/RTS 切換當成重置).
-# 只用 Python 內建 tkinter + esptool + pyserial. 開發測試:python lineplane_flasher.py
+# 只用 Python 內建 tkinter + esptool + pyserial. 開發測試:python lineplane_config.py
 # ============================================================================
 import contextlib
 import io
@@ -23,15 +28,18 @@ import tempfile
 import threading
 import time
 import tkinter as tk
+import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 import serial
 import serial.tools.list_ports
 
+import board_link
 import fw_image
 
-APP_VERSION = "1.1.0"
-TITLE = f"線控飛機韌體燒錄工具 v{APP_VERSION}"
+APP_VERSION = "2.0.0"
+TITLE = f"線控飛機設定器 v{APP_VERSION}"
+USB_API_MIN_FW = "2026.11.02.2"   # USB 設定通道從這版韌體開始
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
 BAUD_MONITOR = 115200
 ESPRESSIF_VID = 0x303A
@@ -47,7 +55,7 @@ if sys.stderr is None:
 
 def data_dir():
     base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), ".local", "share")
-    d = os.path.join(base, "LineplaneFlasher")
+    d = os.path.join(base, "LineplaneConfig")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -129,7 +137,8 @@ class _LineWriter(io.TextIOBase):
 
 
 class Monitor:
-    """序列監看:背景讀取,一行一行交給 on_line;斷線後(板子重開,拔插)自動重連."""
+    """序列監看:背景讀取,一行一行交給 on_line;斷線後(板子重開,拔插)自動重連.
+    收到的位元組全部先經過 bridge(USB 設定通道):@A 回應配給等待中的請求,其他整行才交給 on_line."""
 
     def __init__(self, on_line, on_state):
         self.on_line = on_line
@@ -139,6 +148,7 @@ class Monitor:
         self.want = False
         self.lock = threading.Lock()
         self.thread = None
+        self.bridge = board_link.SerialBridge(self.send_raw, on_line)
 
     def start(self, port):
         self.stop()
@@ -166,17 +176,25 @@ class Monitor:
         return self.ser is not None
 
     def send(self, text):
+        return self.send_raw((text + "\n").encode("utf-8"))
+
+    def send_raw(self, data):
         with self.lock:
             if not self.ser:
                 return False
             try:
-                self.ser.write((text + "\n").encode("utf-8"))
+                self.ser.write(data)
                 return True
             except Exception:
                 return False
 
+    def wait_connected(self, timeout):
+        t0 = time.time()
+        while not self.connected() and time.time() - t0 < timeout:
+            time.sleep(0.1)
+        return self.connected()
+
     def _run(self):
-        buf = b""
         announced = False
         while self.want:
             if not self.ser:
@@ -191,26 +209,19 @@ class Monitor:
                 with self.lock:
                     self.ser = s
                 announced = False
+                self.bridge.reset()
                 self.on_state(True, f"已連線 {self.port}")
             try:
                 b = self.ser.read(4096)
             except Exception:
                 self._close()
+                self.bridge.reset()
                 self.on_state(False, f"{self.port} 中斷,等待重新連線 …")
-                buf = b""
                 continue
-            if not b:
-                continue
-            buf += b
-            while b"\n" in buf:
-                line, buf = buf.split(b"\n", 1)
-                text = line.decode("utf-8", "replace").rstrip("\r")
-                if text.strip():
-                    self.on_line(text)
-            if len(buf) > 4096:   # 沒有換行的雜訊(例如鮑率不對),整段丟出去
-                self.on_line(buf.decode("utf-8", "replace"))
-                buf = b""
+            if b:
+                self.bridge.feed(b)
         self._close()
+        self.bridge.reset()
         self.on_state(False, "監看已停止")
 
 
@@ -227,6 +238,8 @@ class App:
         self.shown = []              # 版本下拉選單目前列出的 release(和選單順序相同)
         self.monitor = Monitor(lambda line: self.q.put(("board", line)),
                                lambda ok, msg: self.q.put(("mon_state", (ok, msg))))
+        self.proxy = board_link.LocalProxy(self.monitor.bridge, os.path.join(data_dir(), "pages"),
+                                           log=lambda m: self.q.put(("tool", m)))
         self._build()
         self._scan_ports(force=True)
         self.root.after(1500, self._port_loop)
@@ -241,14 +254,15 @@ class App:
     def _build(self):
         r = self.root
         r.title(TITLE)
-        r.minsize(760, 640)
+        r.minsize(760, 620)
         pad = {"padx": 8, "pady": 4}
         main = ttk.Frame(r, padding=8)
         main.pack(fill="both", expand=True)
         main.columnconfigure(0, weight=1)
+        main.rowconfigure(1, weight=1)
 
-        # 1. 序列埠
-        f1 = ttk.LabelFrame(main, text=" 1. 開發板序列埠 ", padding=6)
+        # 序列埠(三個分頁共用)
+        f1 = ttk.LabelFrame(main, text=" 開發板序列埠(USB 線) ", padding=6)
         f1.grid(row=0, column=0, sticky="ew", **pad)
         f1.columnconfigure(1, weight=1)
         self.auto_port = tk.BooleanVar(value=True)
@@ -261,9 +275,22 @@ class App:
         self.port_hint = ttk.Label(f1, text="", foreground="#555")
         self.port_hint.grid(row=1, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
-        # 2. 韌體檔
-        f2 = ttk.LabelFrame(main, text=" 2. 韌體檔 ", padding=6)
-        f2.grid(row=1, column=0, sticky="ew", **pad)
+        self.nb = ttk.Notebook(main)
+        self.nb.grid(row=1, column=0, sticky="nsew", **pad)
+        tab_flash = ttk.Frame(self.nb, padding=4)
+        tab_cfg = ttk.Frame(self.nb, padding=4)
+        tab_mon = ttk.Frame(self.nb, padding=4)
+        self.nb.add(tab_flash, text="  燒錄  ")
+        self.nb.add(tab_cfg, text="  設定與備份  ")
+        self.nb.add(tab_mon, text="  板子訊息  ")
+        tab_flash.columnconfigure(0, weight=1)
+        tab_cfg.columnconfigure(0, weight=1)
+        tab_mon.columnconfigure(0, weight=1)
+        tab_mon.rowconfigure(0, weight=1)
+
+        # 燒錄分頁 1. 韌體檔
+        f2 = ttk.LabelFrame(tab_flash, text=" 1. 韌體檔 ", padding=6)
+        f2.grid(row=0, column=0, sticky="ew", **pad)
         f2.columnconfigure(1, weight=1)
         ttk.Label(f2, text="板子種類").grid(row=0, column=0, sticky="w")
         row = ttk.Frame(f2)
@@ -301,9 +328,9 @@ class App:
         self.erase_cb = ttk.Checkbutton(f2, text="燒錄前先清除整片(全新板子建議勾選)", variable=self.erase_var)
         self.erase_cb.grid(row=7, column=1, columnspan=2, sticky="w", padx=6, pady=(4, 0))
 
-        # 3. 燒錄與檢查
-        f3 = ttk.LabelFrame(main, text=" 3. 燒錄與檢查 ", padding=6)
-        f3.grid(row=2, column=0, sticky="ew", **pad)
+        # 燒錄分頁 2. 燒錄與檢查
+        f3 = ttk.LabelFrame(tab_flash, text=" 2. 燒錄與檢查 ", padding=6)
+        f3.grid(row=1, column=0, sticky="ew", **pad)
         f3.columnconfigure(1, weight=1)
         self.flash_btn = ttk.Button(f3, text="開始燒錄", command=self._start_flash, style="Big.TButton")
         self.flash_btn.grid(row=0, column=0, rowspan=2, sticky="ns", padx=(0, 10))
@@ -314,7 +341,12 @@ class App:
         self.check_btn = ttk.Button(f3, text="只做檢查", command=self._start_check_only)
         self.check_btn.grid(row=0, column=2, rowspan=2, sticky="ns", padx=(10, 0))
         self.auto_check = tk.BooleanVar(value=True)
-        ttk.Checkbutton(f3, text="燒錄完自動檢查", variable=self.auto_check).grid(row=2, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        opt = ttk.Frame(f3)
+        opt.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        ttk.Checkbutton(opt, text="燒錄完自動檢查", variable=self.auto_check).pack(side="left")
+        self.bk_flash_btn = ttk.Button(opt, text="匯出板上設定備份…", command=lambda: self._backup_export())
+        self.bk_flash_btn.pack(side="left", padx=(16, 4))
+        ttk.Label(opt, text="(完整燒錄檔會清掉板上設定;燒錄前會先問要不要備份)", foreground="#555").pack(side="left")
         chk = ttk.Frame(f3)
         chk.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         self.checks = {}
@@ -325,10 +357,47 @@ class App:
             lab.grid(row=i, column=1, sticky="w", padx=6)
             self.checks[key] = lab
 
-        # 4. 序列監看
-        f4 = ttk.LabelFrame(main, text=" 4. 板子回報訊息(序列監看) ", padding=6)
-        f4.grid(row=3, column=0, sticky="nsew", **pad)
-        main.rowconfigure(3, weight=1)
+        # 設定與備份分頁
+        fc = ttk.LabelFrame(tab_cfg, text=" 連線方式 ", padding=6)
+        fc.grid(row=0, column=0, sticky="ew", **pad)
+        fc.columnconfigure(1, weight=1)
+        self.link_var = tk.StringVar(value=self.prefs.get("link", "usb"))
+        ttk.Radiobutton(fc, text="USB 線(上面選的序列埠;韌體要 " + USB_API_MIN_FW + " 以上)", value="usb", variable=self.link_var,
+                        command=self._save_link).grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Radiobutton(fc, text="WiFi,板子位址:", value="wifi", variable=self.link_var, command=self._save_link).grid(row=1, column=0, sticky="w")
+        self.host_var = tk.StringVar(value=self.prefs.get("host", "lineplane.local"))
+        he = ttk.Entry(fc, textvariable=self.host_var)
+        he.grid(row=1, column=1, sticky="ew", padx=6)
+        he.bind("<FocusOut>", lambda e: self._save_link())
+        ttk.Label(fc, text="連家用 WiFi 用 lineplane.local(或板子的 IP);電腦連板子熱點時用 192.168.4.1", foreground="#555").grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+        fs = ttk.LabelFrame(tab_cfg, text=" 設定板子(和手機看到的網頁完全相同) ", padding=6)
+        fs.grid(row=1, column=0, sticky="ew", **pad)
+        fs.columnconfigure(1, weight=1)
+        self.cfg_btn = ttk.Button(fs, text="開啟設定網頁", command=self._open_config, style="Big.TButton")
+        self.cfg_btn.grid(row=0, column=0, rowspan=2, sticky="ns", padx=(0, 10))
+        self.cfg_state = ttk.Label(fs, text="按下後會用電腦的瀏覽器打開設定網頁.", wraplength=620, justify="left")
+        self.cfg_state.grid(row=0, column=1, sticky="w")
+        ttk.Label(fs, text="USB 線:網頁透過這個程式轉送到板子,程式關掉網頁就斷線. 韌體更新請用「燒錄」頁(勾保留板上設定).\n"
+                           "WiFi:直接開板子的網頁,和手機一樣.", foreground="#555", wraplength=620, justify="left").grid(row=1, column=1, sticky="w", pady=(4, 0))
+
+        fb = ttk.LabelFrame(tab_cfg, text=" 板上設定備份(全部 6 組飛行風格 + 起飛降落與安全 / 安裝 / 電變 / WiFi) ", padding=6)
+        fb.grid(row=2, column=0, sticky="ew", **pad)
+        fb.columnconfigure(2, weight=1)
+        self.bk_out_btn = ttk.Button(fb, text="匯出板上設定備份…", command=lambda: self._backup_export())
+        self.bk_out_btn.grid(row=0, column=0, sticky="w")
+        self.bk_in_btn = ttk.Button(fb, text="匯入備份到板子…", command=self._backup_import)
+        self.bk_in_btn.grid(row=0, column=1, sticky="w", padx=(6, 0))
+        self.bk_state = ttk.Label(fb, text="", wraplength=600, justify="left")
+        self.bk_state.grid(row=0, column=2, sticky="w", padx=8)
+        ttk.Label(fb, text="匯出存成文字檔(裡面是板子網頁「備份」頁用的設定備份碼). 匯入會先檢查,顯示內容後才套用並儲存;\n"
+                           "板上有未儲存的變更時會先問要不要儲存. 含 WiFi 的備份套用後 WiFi 設定為試用,重新開機後 3 分鐘內要在網頁按「保持」.",
+                  foreground="#555", wraplength=700, justify="left").grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
+
+        # 板子訊息分頁(序列監看)
+        f4 = ttk.LabelFrame(tab_mon, text=" 板子回報訊息(序列監看) ", padding=6)
+        f4.grid(row=0, column=0, sticky="nsew", **pad)
         f4.columnconfigure(0, weight=1)
         f4.rowconfigure(1, weight=1)
         bar = ttk.Frame(f4)
@@ -371,7 +440,9 @@ class App:
 
         self.status = ttk.Label(r, text="", relief="sunken", anchor="w", padding=(6, 2))
         self.status.pack(side="bottom", fill="x")
-        self._log(f"{TITLE}. 接上開發板後會自動偵測序列埠. 燒錄前請拆下螺旋槳.", "tool")
+        self._log(f"{TITLE}. 接上開發板後會自動偵測序列埠. 燒錄與測試前請拆下螺旋槳.", "tool")
+        self.nb.select({"flash": 0, "cfg": 1, "mon": 2}.get(self.prefs.get("tab", "flash"), 0))
+        self.nb.bind("<<NotebookTabChanged>>", lambda e: self._save_tab())
 
     # ---------------- 共用 ----------------
     def _log(self, text, tag=None):
@@ -390,7 +461,8 @@ class App:
     def _set_busy(self, busy):
         self.busy = busy
         st = "disabled" if busy else "normal"
-        for w in (self.flash_btn, self.check_btn, self.dl_btn, self.reload_btn, self.mon_btn):
+        for w in (self.flash_btn, self.check_btn, self.dl_btn, self.reload_btn, self.mon_btn, self.cfg_btn,
+                  self.bk_out_btn, self.bk_in_btn, self.bk_flash_btn):
             w.configure(state=st)
         self.port_cb.configure(state="disabled" if busy else "readonly")
         self.ver_cb.configure(state="disabled" if busy else "readonly")
@@ -449,6 +521,16 @@ class App:
                 elif kind == "dialog":
                     title, msg, err = val
                     (messagebox.showerror if err else messagebox.showinfo)(title, msg, parent=self.root)
+                elif kind == "ask":   # 背景執行緒要問使用者:(標題, 訊息, 結果容器[Event, 答案])
+                    title, msg, box = val
+                    box[1] = messagebox.askyesno(title, msg, parent=self.root)
+                    box[0].set()
+                elif kind == "cfg_state":
+                    self.cfg_state.configure(text=val[0], foreground=val[1])
+                elif kind == "bk_state":
+                    self.bk_state.configure(text=val[0], foreground=val[1])
+                elif kind == "open_url":
+                    webbrowser.open(val)
         except queue.Empty:
             pass
         self.root.after(50, self._poll)
@@ -632,7 +714,7 @@ class App:
         if not self.image or self.image[0] != path:
             self._load_file(path)
         if not self.image:
-            messagebox.showwarning("沒有韌體檔", "請先選擇韌體檔,或按「下載最新版完整燒錄檔」.", parent=self.root)
+            messagebox.showwarning("沒有韌體檔", "請先選版本按「下載這個版本」,或選電腦裡的韌體檔.", parent=self.root)
             return
         _, data, a = self.image
         if a["problems"]:
@@ -649,6 +731,21 @@ class App:
             msg = "注意:" + a["warnings"][-1] + "\n\n" + msg
         if not messagebox.askokcancel("開始燒錄", msg, parent=self.root, icon="warning"):
             return
+        if a["kind"] == "full":
+            # 完整燒錄檔會清掉板上設定:板子有 USB 設定通道就問要不要先匯出備份(空白板或舊韌體問不到,直接燒)
+            fw = self._usb_probe(port, 2.0)
+            if fw:
+                ans = messagebox.askyesnocancel("先備份板上設定?", f"板子目前韌體 {fw.get('ver')},板上設定燒錄後會全部清除.\n\n"
+                                                "要先把板上全部設定匯出成備份檔嗎?(燒完可以在「設定與備份」頁匯入)\n\n是 = 先匯出再燒錄,否 = 直接燒錄",
+                                                parent=self.root, icon="warning")
+                if ans is None:
+                    return
+                if ans:
+                    self._backup_export(then=lambda: self._start_flash_go(port, data, a))
+                    return
+        self._start_flash_go(port, data, a)
+
+    def _start_flash_go(self, port, data, a):
         self.monitor.stop()   # esptool 要用這個序列埠
         for k in self.checks:
             self._set_check(k, "", "—")
@@ -860,14 +957,182 @@ class App:
             q.put(("stage", "檢查完成" if not bad else "檢查完成,有項目沒通過"))
             q.put(("okmsg", "檢查完成. 序列監看保持開著,可以繼續看板子回報的訊息."))
             if after_flash and not bad:
-                q.put(("dialog", ("完成", f"燒錄與檢查完成,板子韌體 {ver}.\n\n接下來:手機連板子的 WiFi 熱點,開 http://192.168.4.1 設定"
-                                  "(已設定家用 WiFi 的板子開 http://lineplane.local).\n詳細步驟見專案 README 與使用說明書.", False)))
+                q.put(("dialog", ("完成", f"燒錄與檢查完成,板子韌體 {ver}.\n\n接下來可以到「設定與備份」頁按「開啟設定網頁」用 USB 線設定,"
+                                  "或手機連板子的 WiFi 熱點開 http://192.168.4.1.\n詳細步驟見專案 README 與使用說明書.", False)))
             elif after_flash:
-                q.put(("dialog", ("燒錄完成,檢查有問題", f"燒錄完成,板子韌體 {ver},但這些項目沒通過:{','.join(bad)}.\n請看「3. 燒錄與檢查」的說明.", True)))
+                q.put(("dialog", ("燒錄完成,檢查有問題", f"燒錄完成,板子韌體 {ver},但這些項目沒通過:{','.join(bad)}.\n請看「燒錄與檢查」的說明.", True)))
         finally:
             with contextlib.suppress(ValueError):
                 self.listeners.remove(lq)
             q.put(("mon_state", (self.monitor.connected(), f"已連線 {port}" if self.monitor.connected() else "未連線")))
+
+    # ---------------- 設定網頁與備份 ----------------
+    def _save_link(self):
+        self.prefs["link"] = self.link_var.get()
+        self.prefs["host"] = self.host_var.get().strip()
+        save_prefs(self.prefs)
+
+    def _save_tab(self):
+        self.prefs["tab"] = ["flash", "cfg", "mon"][self.nb.index(self.nb.select())]
+        save_prefs(self.prefs)
+
+    def _usb_monitor_on(self, port, timeout=4.0):
+        """確保監看開在這個序列埠並已連線(USB 設定通道掛在監看的讀取執行緒上). 可在背景執行緒呼叫."""
+        if not (self.monitor.want and self.monitor.port == port):
+            self.monitor.start(port)
+            self.q.put(("mon_state", (False, f"連線 {port} …")))
+        return self.monitor.wait_connected(timeout)
+
+    def _usb_probe(self, port, timeout=2.0):
+        """板子透過 USB 有沒有網頁 API. 回 /api/fw dict 或 None. 主執行緒呼叫(會等最多幾秒)."""
+        if not self._usb_monitor_on(port, 3.0):
+            return None
+        return board_link.probe(self.monitor.bridge, timeout)
+
+    def _board(self):
+        """依連線方式回 (板子物件, 來源說明);USB 沒連上或沒有 API 時丟 BoardError. 可在背景執行緒呼叫."""
+        if self.link_var.get() == "wifi":
+            host = self.host_var.get().strip() or "lineplane.local"
+            return board_link.HttpBoard(host), f"WiFi {host}"
+        port = self._port()
+        if not port:
+            raise board_link.BoardError("沒有序列埠:請接上開發板,或改用 WiFi")
+        if not self._usb_monitor_on(port):
+            raise board_link.BoardError(f"打不開 {port}")
+        if not board_link.probe(self.monitor.bridge, 2.5):
+            raise board_link.BoardError(f"板子沒有回應 USB 設定通道:韌體要 {USB_API_MIN_FW} 以上,請先到「燒錄」頁更新(勾「保留板上設定」);或改用 WiFi")
+        return self.monitor.bridge, f"USB {port}"
+
+    def _ask(self, title, msg):
+        """背景執行緒問使用者是/否."""
+        box = [threading.Event(), False]
+        self.q.put(("ask", (title, msg, box)))
+        box[0].wait()
+        return box[1]
+
+    def _open_config(self):
+        self._save_link()
+        if self.link_var.get() == "wifi":
+            host = self.host_var.get().strip() or "lineplane.local"
+            url = "http://" + host + "/"
+            self.cfg_state.configure(text=f"已用瀏覽器開 {url}(電腦要和板子在同一個 WiFi,或連板子的熱點)", foreground="#1a7f37")
+            self._log(f"開設定網頁(WiFi):{url}", "tool")
+            webbrowser.open(url)
+            return
+        port = self._port()
+        if not port:
+            messagebox.showwarning("沒有序列埠", "請先接上開發板,選擇序列埠;或改用 WiFi.", parent=self.root)
+            return
+        self._set_busy(True)
+        self.cfg_state.configure(text=f"連線 {port} …", foreground="#9a6700")
+
+        def job():
+            try:
+                fw = None
+                if self._usb_monitor_on(port):
+                    fw = board_link.probe(self.monitor.bridge, 2.5)
+                if not fw:
+                    msg = (f"板子沒有回應 USB 設定通道.\n\n可能是韌體太舊(要 {USB_API_MIN_FW} 以上):請到「燒錄」頁選最新版,勾「保留板上設定」更新;"
+                           "\n或板子沒開機 / 不是線控飛機韌體. 也可以改用 WiFi.")
+                    self.q.put(("cfg_state", (msg, "#cf222e")))
+                    self.q.put(("dialog", ("連不到板子", msg, True)))
+                    return
+                url = self.proxy.start()
+                self.proxy.page()   # 先把網頁抓好(第一次約 230KB),瀏覽器開起來就有東西
+                self.q.put(("cfg_state", (f"設定網頁已開在瀏覽器:{url}(板子韌體 {fw.get('ver')},{fw_image.board_name(fw.get('board'))})\n"
+                                          "關掉這個程式或拔掉 USB 線,網頁就會斷線;重新整理網頁即可再連.", "#1a7f37")))
+                self.q.put(("tool", f"開設定網頁(USB {port}):{url}"))
+                self.q.put(("open_url", url))
+            except board_link.BoardError as e:
+                self.q.put(("cfg_state", (f"失敗:{e}", "#cf222e")))
+                self.q.put(("dialog", ("開設定網頁失敗", str(e), True)))
+            finally:
+                self.q.put(("done", None))
+
+        threading.Thread(target=job, daemon=True).start()
+
+    def _backup_export(self, then=None):
+        """匯出板上全部設定成檔案. then:成功後在主執行緒接著做的事(燒錄前備份用)."""
+        self._save_link()
+        path = filedialog.asksaveasfilename(parent=self.root, title="匯出板上設定備份", defaultextension=".txt",
+                                            initialfile=time.strftime("lineplane_backup_%Y%m%d_%H%M%S.txt"),
+                                            filetypes=[("設定備份", "*.txt")])
+        if not path:
+            return
+        self._set_busy(True)
+        self.bk_state.configure(text="讀取板上設定 …", foreground="#9a6700")
+
+        def job():
+            ok = False
+            try:
+                board, src = self._board()
+                code, fw = board_link.backup_export(board, log=lambda m: self.q.put(("tool", m)),
+                                                    ask_save=lambda: self._ask("板上有未儲存的變更", "板上有還沒儲存的設定變更,備份碼只能從已儲存的設定產生.\n\n要先儲存板上的變更再備份嗎?"))
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(board_link.backup_file_text(code, fw, src))
+                msg = f"已匯出到 {path}(韌體 {fw.get('ver', '?')},{src})"
+                self.q.put(("bk_state", (msg, "#1a7f37")))
+                self.q.put(("okmsg", msg))
+                ok = True
+            except (board_link.BoardError, OSError, ValueError) as e:
+                self.q.put(("bk_state", (f"匯出失敗:{e}", "#cf222e")))
+                self.q.put(("err", f"匯出備份失敗:{e}"))
+                self.q.put(("dialog", ("匯出備份失敗", str(e), True)))
+            finally:
+                self.q.put(("done", None))
+                if ok and then:
+                    self.root.after(0, then)
+
+        threading.Thread(target=job, daemon=True).start()
+
+    def _backup_import(self):
+        self._save_link()
+        path = filedialog.askopenfilename(parent=self.root, title="選擇設定備份檔", filetypes=[("設定備份", "*.txt"), ("全部檔案", "*.*")])
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8-sig") as f:
+                code = board_link.backup_file_code(f.read())
+        except (OSError, board_link.BoardError) as e:
+            messagebox.showerror("讀不到備份", str(e), parent=self.root)
+            return
+        self._set_busy(True)
+        self.bk_state.configure(text="檢查備份碼 …", foreground="#9a6700")
+
+        def job():
+            try:
+                board, src = self._board()
+                r = board_link.backup_check(board, code)
+                if not r.get("ok"):
+                    raise board_link.BoardError("板子不接受這個備份碼:" + str(r.get("code")) +
+                                                (" (板上有未儲存的變更,請先在網頁儲存或放棄)" if r.get("code") == "bkdirty" else ""))
+                names = [n for n in r.get("names", []) if n]
+                secs = [n for bit, n in ((1, "起飛降落與安全"), (2, "安裝"), (4, "電變"), (8, "WiFi")) if int(r.get("sec", 0)) & bit]
+                mask = int(r.get("mask", 0))
+                profs = [f"第 {i + 1} 組" for i in range(6) if mask & (1 << i)]
+                msg = (f"備份碼檢查通過(來源 {os.path.basename(path)}).\n\n飛行風格:{','.join(profs) or '無'}"
+                       f"{'(' + ','.join(names) + ')' if names else ''}\n其他設定:{','.join(secs) or '無'}\n"
+                       + ("\n注意:這份備份來自比板子新的韌體,部分項目可能被限制在板子的範圍內.\n" if r.get("newer") else "")
+                       + f"\n套用到 {src} 的板子並儲存?板上同名項目會被覆蓋.")
+                if not self._ask("匯入備份", msg):
+                    self.q.put(("bk_state", ("已取消匯入", "#555")))
+                    return
+                ra, _ = board_link.backup_apply(board, code)
+                note = " WiFi 設定已存成試用,重新開機後 3 分鐘內要在網頁按「保持」." if ra.get("wifisaved") else ""
+                clamp = ra.get("clamp") or []
+                if clamp:
+                    note += f" 有 {len(clamp)} 項被限制在板子允許的範圍."
+                self.q.put(("bk_state", (f"已套用並儲存({src}).{note}", "#1a7f37")))
+                self.q.put(("okmsg", f"備份已匯入並儲存.{note}"))
+                self.q.put(("dialog", ("匯入完成", f"設定已套用並儲存到板子.{note}", False)))
+            except (board_link.BoardError, ValueError) as e:
+                self.q.put(("bk_state", (f"匯入失敗:{e}", "#cf222e")))
+                self.q.put(("err", f"匯入備份失敗:{e}"))
+                self.q.put(("dialog", ("匯入備份失敗", str(e), True)))
+            finally:
+                self.q.put(("done", None))
+
+        threading.Thread(target=job, daemon=True).start()
 
     # ---------------- 監看 ----------------
     def _toggle_monitor(self):
@@ -914,6 +1179,8 @@ class App:
         if self.busy and not messagebox.askokcancel("燒錄中", "正在燒錄或下載,現在關閉可能讓板子燒到一半(可以重新燒錄救回). 確定關閉?", parent=self.root):
             return
         self.monitor.want = False
+        with contextlib.suppress(Exception):
+            self.proxy.stop()
         self.root.destroy()
 
 

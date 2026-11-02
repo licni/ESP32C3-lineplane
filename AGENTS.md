@@ -43,11 +43,14 @@
   首頁只放 README,CHANGELOG,manifest.json;韌體檔在 firmware/ 資料夾(GG:首頁不要越來越長). 每版一定寫修正說明.
   **每天只留當天最新一版**(GG 2026-09-14):同一天再發布時工具自動刪掉當天舊的 Release/tag/韌體檔,當天修改合併進最新版的 Release 與 CHANGELOG.
   --notes 是板子顯示的精簡版(≤400 位元組,寫當天合併重點),--day-notes-file 是當天所有修改的完整條列(自己整理,拿掉已被取代的內容). firmware/ 只留最近 3 天.
-- **免安裝燒錄工具** tools/flasher/(2026-10-21,GG:給不想裝開發環境的使用者):Python tkinter + esptool,GitHub Actions 在 Windows 打包 LineplaneFlasher.exe,
-  main 分支打包完自動發布 Release(標籤 flasher-v<APP_VERSION>,設為最新;雲端環境推不了標籤所以不靠標籤觸發). 給使用者的固定網址
-  https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneFlasher.exe ;發新版改 lineplane_flasher.py 的 APP_VERSION. 版本清單讀韌體專案 Releases,依賴發布工具的命名(Release 標籤 v版本,firmware-/lineplane-full-版本[-oled].bin,讀不到時退回 manifest);
-  舊版沒有完整燒錄檔時用最新完整檔前 64KB 組合;
-  改 publish_firmware.py 的命名,身分標記格式,分割表時要一起改 tools/flasher/fw_image.py.
+- **線控飛機設定器** tools/flasher/(2026-10-21 燒錄工具起家,2026-11-02 GG 改成設定器):Python tkinter + esptool + pyserial,
+  GitHub Actions 在 Windows 打包 LineplaneConfig.exe,main 分支打包完自動發布 Release(標籤 config-v<APP_VERSION>,設為最新;雲端環境推不了標籤所以不靠標籤觸發).
+  給使用者的固定網址 https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneConfig.exe ;發新版改 lineplane_config.py 的 APP_VERSION.
+  三個分頁:燒錄(版本清單讀韌體專案 Releases,依賴發布工具的命名 Release 標籤 v版本,firmware-/lineplane-full-版本[-oled].bin,讀不到時退回 manifest;
+  舊版沒有完整燒錄檔時用最新完整檔前 64KB 組合;燒完整檔前先問要不要匯出備份),設定與備份(USB 線或 WiFi 開板子那一份網頁;備份匯出/匯入),板子訊息(序列監看).
+  **USB 設定通道**(韌體 2026.11.02.2 起):web_server.cpp 的 server 是轉接物件 Req,同一組處理函式服務 WiFi 與序列埠「@Q」請求(協定見 web_server.cpp 與 tools/flasher/board_link.py);
+  電腦端 board_link.LocalProxy 在 127.0.0.1 開小伺服器轉送,網頁看 location.hostname 是 127.0.0.1 就進 USB 模式(韌體更新卡換提示,待確認不自動確認).
+  改 publish_firmware.py 的命名,身分標記格式,分割表時要一起改 tools/flasher/fw_image.py;改 @Q/@A 協定時兩邊一起改.
 - **使用說明書** docs/使用說明書.md(GG 2026-09-14 要求,給拿到硬體的使用者):改參數範圍/出廠值,網頁畫面文字,操作流程時同步更新說明書,
   再跑 `tools/manual_check.py`(目錄,連結,參數數值對照 settings.cpp). 網頁版用 `tools/manual_page/build.py` 產生,發布在 GG 的 Codex.ai 私人 Artifact「線控飛機油門控制器 使用說明書」.
 - 開機安全:只有真的拔電再接電才會「上電後直接倒數」;軟體重開不會. 測試要模擬上電時先送序列指令 `powerontest`.

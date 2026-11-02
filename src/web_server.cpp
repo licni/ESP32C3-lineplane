@@ -1,4 +1,6 @@
-// 版本流水號: r35 (2026-10-29) 狀態加 az(方位角)與 sf(側傾補償倍率);scmp 已乘倍率
+// 版本流水號: r36 (2026-11-02) USB 設定通道(GG:電腦接線用同一份網頁設定):序列埠「@Q」請求走同一組處理函式,
+//   server 改成轉接物件(Req),同時服務 WiFi 的 WebServer 與 USB 序列埠;/update 上傳只有 WiFi(USB 用燒錄工具)
+// 舊: r35 (2026-10-29) 狀態加 az(方位角)與 sf(側傾補償倍率);scmp 已乘倍率
 // 舊: r34 (2026-10-29) 狀態 f 加 lg(線軸 G 低通值)與 gt(線軸 G 回授微調 %)
 // 舊: r33 (2026-10-29) 狀態加 sd(翼軸仰角)與 scmp(目前風格在這個翼軸仰角的側傾補償);cmp 仍是機頭角度補償
 // 舊: r32 (2026-09-25) 狀態加 swp(安全開關腳位);GET /api/buzz;/api/fw 加 board;網頁上傳另一種板子的韌體擋下(fwboard)
@@ -51,8 +53,205 @@
 #include "wifi_manager.h"
 #include "web_page.h"
 
-static WebServer server(80);
+static WebServer http(80);
 static bool started = false;
+
+// --- 轉接層:同一組處理函式同時服務 WiFi(WebServer)與 USB 序列埠 ------------------------------
+// 處理函式只透過 server.arg/hasArg/send 等讀請求與回應. WiFi 模式全部轉給 WebServer;
+// USB 模式(webSerialRequest 進來的「@Q」請求)參數從序列埠那一行解出來,回應寫回序列埠.
+// 序列埠協定(電腦端 tools/flasher/board_link.py):
+//   請求 一行:@Q <編號> <GET|POST> <F|T> <路徑?查詢>\t<本文百分比編碼>\n   F = 表單編碼(本文解成參數),T = 其他(本文只放 plain)
+//   回應:@A <編號> <狀態碼> <本文長度> <內容類型>\n<本文 長度位元組>\n       本文可為二進位(/api/log);其他序列輸出照常混在中間
+// 寫序列埠用 availableForWrite 分段送(Serial 的逾時是 0,一次塞超過緩衝會丟),電腦停止讀取 1.5 秒就放棄這筆回應.
+static const size_t SERIAL_REQ_MAX = 6000;   // 請求一行上限(setmany/backup 本文各限 4000,百分比編碼後最多 3 倍但實際多半是英數)
+static const uint32_t SERIAL_TX_STALL_MS = 1500;
+
+struct Route {
+  const char *path;
+  HTTPMethod method;
+  void (*fn)();
+  bool upload;   // 有上傳處理(只有 /update):USB 模式拒絕
+};
+
+class Req {
+ public:
+  // --- 路由登記(兩邊都登記) ---
+  void on(const char *path, HTTPMethod m, void (*fn)()) { add(path, m, fn, false); http.on(path, m, fn); }
+  void on(const char *path, HTTPMethod m, void (*fn)(), void (*up)()) { add(path, m, fn, true); http.on(path, m, fn, up); }
+  void onNotFound(void (*fn)()) { http.onNotFound(fn); }
+  void collectHeaders(const char *h[], size_t n) { http.collectHeaders(h, n); }
+  void begin() { http.begin(); }
+  void handleClient() { http.handleClient(); }
+  auto &client() { return http.client(); }
+  HTTPUpload &upload() { return http.upload(); }
+
+  // --- 請求 ---
+  bool hasArg(const char *name) {
+    if (!serial) return http.hasArg(name);
+    for (uint8_t i = 0; i < argCount; ++i)
+      if (args[i].key == name) return true;
+    return false;
+  }
+  String arg(const char *name) {
+    if (!serial) return http.arg(name);
+    for (uint8_t i = 0; i < argCount; ++i)
+      if (args[i].key == name) return args[i].val;
+    return String();
+  }
+  String header(const char *name) { return serial ? String() : http.header(name); }
+
+  // --- 回應 ---
+  void sendHeader(const char *name, const char *value) {
+    if (!serial) http.sendHeader(name, value);
+  }
+  void setContentLength(size_t n) {
+    if (serial) contentLen = (long)n;
+    else http.setContentLength(n);
+  }
+  void send(int code, const char *type, const String &body) { send(code, type, body.c_str(), body.length()); }
+  void send(int code, const char *type, const char *body) { send(code, type, body, strlen(body)); }
+  void send_P(int code, const char *type, PGM_P body) {
+    if (!serial) {
+      http.send_P(code, type, body);
+      return;
+    }
+    send(code, type, body, strlen(body));   // ESP32 的 PROGMEM 就是一般記憶體
+  }
+  void sendContent(const char *data, size_t n) {
+    if (serial) serialWrite((const uint8_t *)data, n);
+    else http.sendContent(data, n);
+  }
+
+  // --- USB 模式:一筆請求 ---
+  void serialRequest(const String &line);
+
+ private:
+  struct Arg {
+    String key, val;
+  };
+  static const uint8_t ARGS_MAX = 16;   // ARG_MAX 是系統巨集(sys/param.h)
+  Route routes[48];
+  uint8_t routeCount = 0;
+  bool serial = false;
+  bool sent = false;      // 這筆已送出回應表頭
+  bool aborted = false;   // 電腦不讀了,剩下的回應丟掉
+  long contentLen = -1;
+  String reqId;
+  Arg args[ARGS_MAX];
+  uint8_t argCount = 0;
+
+  void add(const char *path, HTTPMethod m, void (*fn)(), bool up) {
+    if (routeCount < sizeof(routes) / sizeof(routes[0])) routes[routeCount++] = {path, m, fn, up};
+  }
+  void send(int code, const char *type, const char *body, size_t len) {
+    if (!serial) {
+      http.send(code, type, body);   // WebServer 的 send(const char*) 用 strlen,處理函式的本文都是字串
+      return;
+    }
+    if (sent) return;
+    sent = true;
+    const size_t total = contentLen >= 0 ? (size_t)contentLen : len;
+    char head[96];
+    snprintf(head, sizeof(head), "@A %s %d %u %s\n", reqId.c_str(), code, (unsigned)total, type);
+    serialWrite((const uint8_t *)head, strlen(head));
+    if (len) serialWrite((const uint8_t *)body, len);
+  }
+  void serialWrite(const uint8_t *p, size_t n) {
+    if (aborted) return;
+    uint32_t stall = millis();
+    while (n) {
+      size_t room = Serial.availableForWrite();
+      if (room > n) room = n;
+      const size_t w = room ? Serial.write(p, room) : 0;
+      if (w == 0) {
+        if (millis() - stall >= SERIAL_TX_STALL_MS) {
+          aborted = true;
+          return;
+        }
+        delay(1);
+        continue;
+      }
+      stall = millis();
+      p += w;
+      n -= w;
+    }
+  }
+  static void urlDecode(const String &in, String &out) {
+    out.reserve(in.length());
+    for (size_t i = 0; i < in.length(); ++i) {
+      const char c = in[i];
+      if (c == '%' && i + 2 < in.length() && isxdigit((unsigned char)in[i + 1]) && isxdigit((unsigned char)in[i + 2])) {
+        out += (char)strtol(in.substring(i + 1, i + 3).c_str(), nullptr, 16);
+        i += 2;
+      } else if (c == '+') {
+        out += ' ';
+      } else {
+        out += c;
+      }
+    }
+  }
+  void addArg(const String &key, const String &val) {
+    if (argCount >= ARGS_MAX || key.length() == 0) return;
+    urlDecode(key, args[argCount].key);
+    urlDecode(val, args[argCount].val);
+    ++argCount;
+  }
+  void parseForm(const String &text) {   // a=1&b=2
+    size_t start = 0;
+    while (start <= text.length()) {
+      int amp = text.indexOf('&', start);
+      if (amp < 0) amp = text.length();
+      const String pair = text.substring(start, amp);
+      const int eq = pair.indexOf('=');
+      if (eq < 0) addArg(pair, String());
+      else addArg(pair.substring(0, eq), pair.substring(eq + 1));
+      start = amp + 1;
+    }
+  }
+};
+
+static Req server;
+
+// USB 序列埠進來的一筆請求(main.cpp handleSerial 看到「@Q 」開頭就交過來). 在 Arduino loop 執行,和 WiFi 請求同一條路.
+void Req::serialRequest(const String &line) {
+  if (line.length() > SERIAL_REQ_MAX) return;
+  // @Q <id> <method> <F|T> <path>\t<body>
+  int p1 = line.indexOf(' ', 3), p2 = p1 < 0 ? -1 : line.indexOf(' ', p1 + 1), p3 = p2 < 0 ? -1 : line.indexOf(' ', p2 + 1);
+  if (p3 < 0) return;
+  reqId = line.substring(3, p1);
+  const String method = line.substring(p1 + 1, p2), kind = line.substring(p2 + 1, p3);
+  if (reqId.length() == 0 || reqId.length() > 12 || reqId.indexOf('\t') >= 0) return;
+  const int tab = line.indexOf('\t', p3 + 1);
+  String target = tab < 0 ? line.substring(p3 + 1) : line.substring(p3 + 1, tab);
+  target.trim();
+  String body;
+  if (tab >= 0) urlDecode(line.substring(tab + 1), body);
+  body.trim();   // 結尾的 \r\n 與編碼前後的空白
+  for (uint8_t i = 0; i < argCount; ++i) args[i].key = args[i].val = String();
+  argCount = 0;
+  const int q = target.indexOf('?');
+  const String path = q < 0 ? target : target.substring(0, q);
+  if (q >= 0) parseForm(target.substring(q + 1));
+  if (kind == "F") parseForm(body);
+  if (body.length()) addArg("plain", body);   // WebServer:非表單本文放在 plain
+  const HTTPMethod m = method == "POST" ? HTTP_POST : HTTP_GET;
+  serial = true;
+  sent = aborted = false;
+  contentLen = -1;
+  const Route *r = nullptr;
+  for (uint8_t i = 0; i < routeCount; ++i)
+    if (routes[i].method == m && path == routes[i].path) r = &routes[i];
+  if (!r) send(404, "text/plain", "Not found");
+  else if (r->upload) send(400, "application/json", "{\"ok\":false,\"code\":\"usbnoupload\"}");   // 韌體上傳只走 WiFi,USB 用燒錄工具
+  else r->fn();
+  if (!sent) send(500, "text/plain", "no response");
+  serialWrite((const uint8_t *)"\n", 1);
+  serial = false;
+  for (uint8_t i = 0; i < argCount; ++i) args[i].key = args[i].val = String();
+  argCount = 0;
+}
+
+void webSerialRequest(const String &line) { server.serialRequest(line); }
 
 // 首頁是編譯期常數,掛 ETag 讓重整時回 304(零位元組). ETag 取編譯時間,每次燒錄自動換.
 static const char PAGE_ETAG[] = "\"" __DATE__ " " __TIME__ "\"";
@@ -701,10 +900,11 @@ static void registerRoutes() {
 static const uint32_t IDLE_CLIENT_MS = 400;
 static uint32_t idleSinceMs = 0;
 
+void webBegin() { registerRoutes(); }
+
 void webTick() {
   if (!started) {
     if (wifiState() == WIFI_STATE_CONNECTING) return;
-    registerRoutes();
     server.begin();
     started = true;
   }

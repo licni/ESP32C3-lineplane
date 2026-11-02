@@ -144,8 +144,9 @@ stateDiagram-v2
 
 **1. 燒錄韌體**(第一次要用 USB)
 
-不想安裝開發環境:下載 Windows 免安裝燒錄工具 **[LineplaneFlasher.exe](https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneFlasher.exe)**,
-自動偵測板子,下載最新版,燒錄,開機檢查一次完成,還能看板子回報的訊息. 用法見 [tools/flasher](tools/flasher/README.md).
+不想安裝開發環境:下載 Windows 免安裝的**線控飛機設定器 [LineplaneConfig.exe](https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneConfig.exe)**:
+自動偵測板子,選版本下載,燒錄,開機檢查一次完成;**接 USB 線就能用電腦開和手機一樣的設定網頁**(韌體 2026.11.02.2 起),
+匯出/匯入板上全部設定備份,看板子回報的訊息. 用法見 [tools/flasher](tools/flasher/README.md).
 
 自己編譯:安裝 [PlatformIO](https://platformio.org/),接上板子後:
 

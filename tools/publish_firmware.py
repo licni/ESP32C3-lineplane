@@ -46,7 +46,7 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REL = os.path.join(ROOT, "firmware_release")
+REL = os.environ.get("LP_FW_RELEASE_DIR") or os.path.join(ROOT, "firmware_release")
 REPO = "licni/ESP32lineplane-firmware"
 ENV = "esp32c3_supermini"
 FWDIR = "firmware"   # 韌體檔資料夾(manifest.json 留在首頁當板子的入口)
@@ -143,8 +143,18 @@ def merged_day_text(ver, notes, day_notes_file):
     return "\n".join(lines)
 
 
+def gh_api(path, *args, check=True):
+    """GitHub REST(gh api). Release 相關的 gh release 子指令會用 GraphQL,Claude 雲端環境不開放,統一走 REST."""
+    return run(["gh", "api", path, *args], check=check)
+
+
+def release_find(tag):
+    r = gh_api(f"repos/{REPO}/releases/tags/{tag}", check=False)
+    return json.loads(r.stdout) if r.returncode == 0 and r.stdout.strip().startswith("{") else None
+
+
 def release(ver, day_text, assets):
-    """GitHub Release「韌體 版本」,說明 = 當天合併的修改,附兩種板子的韌體檔. 已存在就更新說明並補上檔案."""
+    """GitHub Release「韌體 版本」,說明 = 當天合併的修改,附兩種板子的韌體檔. 已存在就更新說明並補上檔案(同名先刪)."""
     tag = f"v{ver}"
     body = (day_text + "\n\n---\n板子網頁「系統 → 韌體更新 → 檢查更新」即可更新.\n"
             "手動更新:下載下面的 firmware-版本.bin,到「手動上傳韌體檔」上傳(裝錯板子會被擋下).\n\n"
@@ -152,7 +162,6 @@ def release(ver, day_text, assets):
             "做法見專案首頁 README「全新開發板第一次燒錄」. 已在用的板子不要用這個檔,用上面的檢查更新.\n\n"
             "帶螢幕板(OLED)自 2026-10-29 起不再維護,停在 2026.10.07.1.")
     files = [a if os.path.isabs(a) else os.path.join(REL, a) for a in assets]
-    # 多行說明以 UTF-8 檔案交給 gh,保留原始換行與文字.
     with tempfile.TemporaryDirectory(prefix="lineplane-release-") as tmp:
         notes_path = os.path.join(tmp, "notes.md")
         with open(notes_path, "w", encoding="utf-8", newline="\n") as f:
@@ -171,11 +180,15 @@ def release(ver, day_text, assets):
 def prune_releases(ver):
     """每天只留最新一版:刪同一天較舊的 GitHub Release 與 tag(新版 Release 建好之後才呼叫)."""
     day, _, seq = day_of(ver)
-    r = run(["gh", "release", "list", "-R", REPO, "--limit", "200", "--json", "tagName"])
-    for tag in [x["tagName"] for x in json.loads(r.stdout or "[]")]:
+    r = gh_api(f"repos/{REPO}/releases?per_page=100", "--jq", ".[] | [.id, .tag_name] | @tsv")
+    for line in r.stdout.splitlines():
+        if "\t" not in line:
+            continue
+        rid, tag = line.split("\t", 1)
         d = day_of(tag[1:]) if tag.startswith("v") else None
         if d and d[0] == day and d[2] < seq:
-            run(["gh", "release", "delete", tag, "-R", REPO, "--yes", "--cleanup-tag"])
+            gh_api(f"repos/{REPO}/releases/{rid}", "-X", "DELETE")
+            gh_api(f"repos/{REPO}/git/refs/tags/{tag}", "-X", "DELETE", check=False)
             print("  刪除同一天的舊版 Release", tag)
 
 
@@ -219,7 +232,7 @@ def main():
     if not os.path.isdir(os.path.join(REL, ".git")):
         if os.path.isdir(REL) and os.listdir(REL):
             sys.exit("firmware_release/ 存在但不是 git 複本,請先處理")
-        run(["gh", "repo", "clone", REPO, REL])
+        run(["git", "clone", f"https://github.com/{REPO}", REL])
     run(["git", "pull", "--ff-only"], cwd=REL)
     mpath = os.path.join(REL, "manifest.json")
     old = {}
@@ -306,14 +319,14 @@ def main():
         # 完整檔 0x10000 起就是韌體本體:比對確認合併的是這次編的韌體
         if full[0x10000:0x10000 + len(data)] != data:
             sys.exit(f"{board} 完整燒錄檔裡的韌體和 firmware.bin 不一樣")
-        if b"Users/" in full or b"Users\\" in full:
-            sys.exit(f"{board} 完整燒錄檔含本機路徑(Users/)")
+        if b"Users/" in full or b"Users\\" in full or b"/home/" in full:
+            sys.exit(f"{board} 完整燒錄檔含本機路徑(Users/ 或 /home/)")
         fulls.append((f"{FULL_PREFIX}-{ver}{suffix}.bin", full))
         mark = f"LPFWID1:ESP32C3-lineplane|{ver}|{board}|".encode()
         if mark not in data:
             sys.exit(f"編譯出的 {board} 韌體裡找不到身分標記 {mark.decode()}(版本或板子種類不對)")
-        if b"Users/" in data or b"Users\\" in data:
-            sys.exit(f"{board} 韌體檔含本機路徑(Users/),檢查 extra_scripts pio_strip_paths.py")
+        if b"Users/" in data or b"Users\\" in data or b"/home/" in data:
+            sys.exit(f"{board} 韌體檔含本機路徑(Users/ 或 /home/),檢查 extra_scripts pio_strip_paths.py")
         name = f"firmware-{ver}{suffix}.bin"
         man = {"version": ver, "size": len(data), "sha256": hashlib.sha256(data).hexdigest(), "file": f"{FWDIR}/{name}", "notes": notes}
         builds.append((mname, name, data, man))

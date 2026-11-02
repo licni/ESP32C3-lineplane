@@ -1,4 +1,6 @@
-// 版本流水號: r21 (2026-10-30) 飛行紀錄改存快閃:flightLogBegin 在控制工作前,loop 呼叫 flightLogService
+// 版本流水號: r22 (2026-11-02) USB 設定通道:序列埠「@Q 」開頭的一行交給 webSerialRequest(電腦設定器用同一份網頁);
+//   RX 緩衝 4KB(設定批次寫入與備份碼一行可到 4KB);開機先 webBegin 登記路由
+// 舊: r21 (2026-10-30) 飛行紀錄改存快閃:flightLogBegin 在控制工作前,loop 呼叫 flightLogService
 // 舊: r20 (2026-09-25) 帶螢幕板 OLED(displayBegin/displayTick);開機印板子種類與安全開關腳位;序列指令 buzz(蜂鳴器診斷)
 // 舊: r19 (2026-09-14) 載入設定後蜂鳴器腳位依設定的電位先設成不響(buzzerBegin)
 // 舊: r18 (2026-09-14) 開機檢查設定備份碼的編碼表(backupSelfCheck)
@@ -48,6 +50,7 @@
 #include "gear.h"
 
 static const uint16_t SERIAL_TX_BUFFER_BYTES = 2048;
+static const uint16_t SERIAL_RX_BUFFER_BYTES = 4096;   // USB 設定通道一行請求最長約 4KB(預設 256 會掉字)
 static bool telemetryPrint = false;
 
 static void printTelemetry() {
@@ -155,6 +158,10 @@ static void scanAllPins() {
 static void handleSerial() {
   if (!Serial.available()) return;
   const String raw = Serial.readStringUntil('\n');
+  if (raw.startsWith("@Q ")) {   // 電腦設定器的網頁請求(web_server.cpp),大小寫與空白都有意義,不經過下面的整理
+    webSerialRequest(raw);
+    return;
+  }
   String line = raw;
   line.trim();
   line.toLowerCase();
@@ -389,7 +396,7 @@ static void handleSerial() {
       controlSetImuPresent(ok);
     }
   } else if (line.length()) {
-    Serial.println(F("commands: t | net | fs | gesture | disturb | twist | tilt | cancel | estop | sim ... | pwmcap on|off|reset | pwm | ledcap [ms] | led | dshot | rpm | rpmtest [us] | timing | wifi <ssid> <pw> | txp <dBm> | fw | fwwin <s> | calexp <s> | armsw 0|1|off | armwait <s>|off | powerontest | rescuetest | reboot | orient +x +z | save | mpu | scan | scanall"));
+    Serial.println(F("commands: t | net | fs | @Q (usb web api) | gesture | disturb | twist | tilt | cancel | estop | sim ... | pwmcap on|off|reset | pwm | ledcap [ms] | led | dshot | rpm | rpmtest [us] | timing | wifi <ssid> <pw> | txp <dBm> | fw | fwwin <s> | calexp <s> | armsw 0|1|off | armwait <s>|off | powerontest | rescuetest | reboot | orient +x +z | save | mpu | scan | scanall"));
   }
 }
 
@@ -418,6 +425,7 @@ void setup() {
   // USB CDC:沒有人讀序列埠時 write 預設會卡住呼叫端最久約 2 秒(參考專案實測),
   // 逾時設 0 永不等待. 緩衝要在 begin() 之前設.
   Serial.setTxBufferSize(SERIAL_TX_BUFFER_BYTES);
+  Serial.setRxBufferSize(SERIAL_RX_BUFFER_BYTES);
   Serial.setTxTimeoutMs(0);
   Serial.begin(115200);
   if (!buzzerOk) Serial.println(F("ERR buzzer PWM unavailable (passive buzzer silent)"));
@@ -450,6 +458,7 @@ void setup() {
   if (testArmOverride() >= 0) Serial.printf("TEST armsw override %d (kept across soft reboot)\n", testArmOverride());
   if (testArmWaitOverride()) Serial.printf("TEST armwait override %us (kept across soft reboot)\n", (unsigned)testArmWaitOverride());
   wifiBegin();
+  webBegin();   // 路由先登記:USB 設定通道不等 WiFi
   Serial.println(F("READY (type 'help')"));
 }
 
