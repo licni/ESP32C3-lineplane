@@ -1,4 +1,6 @@
-# 版本流水號: r1 (2026-11-02) 初版:電腦端 USB 設定通道(GG:插線用同一份網頁設定飛控)
+# 版本流水號: r2 (2026-11-03) WiFi 設定(GG:使用者用手機熱點怎樣都連不上,要能在設定器改):wifi_get / wifi_set / wifi_scan / wifi_keep / reboot,
+#   板子錯誤代碼 → 中文(WIFI_CODES,與 web_page.h 的 CODES 同義)
+# 舊: r1 (2026-11-02) 初版:電腦端 USB 設定通道(GG:插線用同一份網頁設定飛控)
 # ============================================================================
 # 三件事,都不碰視窗:
 #  - SerialBridge:透過 USB 序列埠向板子送「網頁請求」(韌體 web_server.cpp r33 的 @Q/@A 協定),板子用同一組處理函式回應.
@@ -300,6 +302,79 @@ def backup_apply(board, code):
     if not rs.get("ok"):
         raise BoardError("套用成功但儲存失敗:" + str(rs.get("code")))
     return r, rs
+
+
+# 板子回的錯誤代碼 → 給使用者看的中文(對照 web_page.h 的 CODES 與 wifi_manager.cpp 的驗證)
+WIFI_CODES = {
+    "pwshort": "WiFi 密碼至少 8 碼(開放網路請留空)", "pwlong": "WiFi 密碼太長(最多 63 碼)", "ssidlong": "WiFi 名稱太長(最多 32 位元組)",
+    "apsfxlong": "熱點名稱後面接的字太長:最多 14 個英數字(中文一字算 3 個)", "apsfxspace": "熱點名稱後面接的字,頭尾不能是空白",
+    "apsfxbad": "熱點名稱後面接的字含有不能用的字元", "appwshort": "熱點密碼至少 8 碼", "appwlong": "熱點密碼最多 63 碼",
+    "appwspace": "熱點密碼頭尾不能是空白", "appwbad": "熱點密碼只能用英文,數字與鍵盤符號(不能有中文)",
+    "hostbad": "裝置名稱只能用英文,數字與連字號", "tmo": "等待秒數要在 10~120", "txp": "發射功率超出範圍",
+    "savefail": "板子寫入失敗,請再試一次", "badform": "欄位不齊(程式錯誤,請回報)",
+    "locked": "板子在起飛程序或飛行中,現在不能改設定", "busy": "板子不在待機(起飛程序,馬達運轉或更新中),現在不能做",
+    "scanbusy": "板子還在開機連線中,等幾秒再搜尋", "scanfail": "搜尋啟動失敗,請再按一次",
+}
+
+
+def _code_text(code):
+    return WIFI_CODES.get(code, f"板子拒絕({code})")
+
+
+def wifi_get(board):
+    """板上 WiFi 設定(GET /api/wifi 的 dict:ssid,pw,host,tmo,forceap,txp,apprefix,apsfx,appw,apssid,apnow,apsfxmax …)."""
+    st, _, data = board.get("/api/wifi", timeout=5)
+    if st != 200:
+        raise BoardError("讀不到板上的 WiFi 設定")
+    return _json(data, "WiFi 設定")
+
+
+def wifi_set(board, cfg):
+    """寫入 WiFi 設定(板子存成試用,重開後 WiFi 就緒 3 分鐘內要 wifi_keep 才固定). cfg 的鍵同 /api/wifi POST:
+    ssid,pw,host,tmo,forceap,txp,apsfx,appw. 板子拒絕時丟 BoardError(中文)."""
+    _, _, data = board.post("/api/wifi", cfg, timeout=8)
+    r = _json(data, "WiFi 設定")
+    if not r.get("ok"):
+        raise BoardError(_code_text(r.get("code")))
+    return r
+
+
+def wifi_keep(board):
+    """確認目前的 WiFi 設定(試用 → 固定)."""
+    _, _, data = board.post("/api/wifi/keep", timeout=5)
+    r = _json(data, "WiFi 保持")
+    if not r.get("ok"):
+        raise BoardError(_code_text(r.get("code")))
+
+
+def reboot(board):
+    """重新開機(只在待機允許)."""
+    _, _, data = board.post("/api/reboot", timeout=5)
+    r = _json(data, "重新開機")
+    if not r.get("ok"):
+        raise BoardError(_code_text(r.get("code")))
+
+
+def wifi_scan(board, timeout=20.0, sleep=time.sleep):
+    """搜尋附近 2.4GHz WiFi. 回 [(ssid, rssi, channel, open), ...] 依訊號由強到弱(板子已排好). 失敗丟 BoardError."""
+    _, _, data = board.post("/api/wifi/scan", timeout=8)
+    r = _json(data, "WiFi 搜尋")
+    if not r.get("ok"):
+        raise BoardError(_code_text(r.get("code")))
+    end = time.time() + timeout
+    while time.time() < end:
+        sleep(0.7)
+        try:
+            _, _, data = board.get("/api/wifi/scan", timeout=5)
+        except BoardError:
+            continue
+        g = _json(data, "WiFi 搜尋")
+        if g.get("run"):
+            continue
+        if int(g.get("n", -2)) < 0:
+            raise BoardError("搜尋失敗,請再按一次")
+        return [tuple(x) for x in g.get("list", [])]
+    raise BoardError("搜尋逾時,請再按一次")
 
 
 def backup_file_text(code, fw, source):

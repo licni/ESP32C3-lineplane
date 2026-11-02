@@ -1,4 +1,8 @@
-# 版本流水號: r11 (2026-11-02) 燒錄頁重新設計(GG:使用者不該知道普通/full 檔):選版本 + 燒錄方式「更新(保留設定)/全新燒錄(清空)」,
+# 版本流水號: r12 (2026-11-03) WiFi 設定區 + 板子訊息中文化(GG:使用者用手機熱點怎樣都連不上;快捷指令對終端使用者沒意義,回應要中文):
+#   設定與備份頁新增「WiFi 設定」(USB 線):讀板上設定,選「板子自己開熱點(熱點名稱固定開頭 + 可改後綴,密碼)/ 連家用 WiFi 或手機熱點(名稱可搜尋附近,密碼)」,
+#   按「套用到板子並測試連線」→ 寫入 → 重開 → 等 WiFi 就緒 → 連上就自動保持(固定)並用大字顯示網址(IP 與 lineplane.local);連不上問要不要改回原設定.
+#   板子訊息區:快捷鈕改「板子狀態 / 重新開機」,板子回的英文訊息翻成中文(可勾「顯示原始訊息」),送指令列收進「進階」;APP_VERSION 2.3.0
+# 舊: r11 (2026-11-02) 燒錄頁重新設計(GG:使用者不該知道普通/full 檔):選版本 + 燒錄方式「更新(保留設定)/全新燒錄(清空)」,
 #   按開始燒錄自動下載對應檔案;兩種都先自動備份板上設定(只存檔,不寫回;更新方式設定本來就不動);空白板子選更新時自動改全新燒錄;
 #   拿掉帶螢幕板選項;「選電腦裡的檔案」收進進階;APP_VERSION 2.2.0
 # 舊: r10 (2026-11-02) 監看區至少 12 行(GG);APP_VERSION 2.1.1
@@ -23,7 +27,10 @@
 #  - 燒錄:用 esptool(當成函式庫呼叫,不另外安裝). 完整燒錄檔從 0x0 燒(可先清除整片);
 #    韌體更新檔燒 0x10000 並把 otadata 寫成 boot_app0(設定保留,和 PlatformIO USB 燒錄相同,不待確認).
 #  - 檢查:esptool 寫完逐段校驗檢查碼;重新開機後送序列指令 fw / mpu / net,確認版本,感測器與 WiFi.
-#  - 序列監看(燒錄頁下方):顯示板子回報的訊息,可以送指令(help 列出全部).
+#  - 序列監看(燒錄頁下方):板子回報的訊息翻成中文顯示(translate_line;勾「顯示原始訊息」看英文原文),「板子狀態」送 fw/net/fs/mpu,
+#    「重新開機」送 reboot;「進階」才有送指令列(help 列出全部).
+#  - WiFi 設定(設定與備份頁,只走 USB):GET /api/wifi 讀 → POST /api/wifi 寫(板子存成試用)→ POST /api/reboot → 等板子回來 → 序列指令 net
+#    看 wifi=sta|ap|connecting → 符合要的模式就 POST /api/wifi/keep 固定,大字顯示網址;要連家用 WiFi 卻退到熱點 = 連不上,問要不要改回原設定.
 # 序列埠一律 dtr=False, rts=False 再開(C3 原生 USB 把 DTR/RTS 切換當成重置).
 # 只用 Python 內建 tkinter + esptool + pyserial. 開發測試:python lineplane_config.py
 # ============================================================================
@@ -47,7 +54,7 @@ import serial.tools.list_ports
 import board_link
 import fw_image
 
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.3.0"
 TITLE = f"線控飛機設定器 v{APP_VERSION}"
 USB_API_MIN_FW = "2026.11.02.2"   # USB 設定通道從這版韌體開始
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
@@ -121,6 +128,122 @@ def friendly_error(text):
     if "wrong --chip" in t or "this chip is" in t:
         return "接上的板子不是 ESP32-C3:" + text
     return text
+
+
+# ---------------- 板子訊息翻譯(GG 2026-11-03:終端使用者看不懂英文訊息) ----------------
+# 板子序列埠印的固定格式訊息 → 中文. 沒對到的照原文顯示;開機 ROM 的雜訊(ESP-ROM:,load:,entry …)藏起來.
+CMD_NAMES = {"fw": "查詢韌體版本", "net": "查詢 WiFi 狀態", "fs": "查詢飛行狀態", "mpu": "查詢感測器", "reboot": "重新開機",
+             "t": "切換即時資料", "help": "列出全部指令"}
+FLIGHT_NAMES = {"arming": "解鎖中", "standby": "待機", "wait_still": "等待放穩", "countdown": "倒數中", "takeoff": "起飛",
+                "flying": "飛行中", "landing": "降落中", "done": "飛行結束"}
+NET_RE = re.compile(r"^wifi=(\w+) ip=(\S*) rssi=(-?\d+) host=(\S+) ssid=(.*) txp=(\d+)dBm$")
+
+
+def parse_net(line):
+    """序列指令 net 的回應 → dict(wifi, ip, rssi, host, ssid, txp);不是 net 的回應回 None."""
+    m = NET_RE.match(line)
+    if not m:
+        return None
+    wifi, ip, rssi, host, ssid, txp = m.groups()
+    return {"wifi": wifi, "ip": ip, "rssi": int(rssi), "host": host, "ssid": ssid, "txp": int(txp)}
+
+
+def _tr_fw(m):
+    ver, busy, pend, remain, rb, rbfrom, _check, err, remote, _size, prog = m.groups()
+    parts = [f"韌體版本 {ver}"]
+    if busy == "1":
+        parts.append(f"更新下載中 {prog}%")
+    if pend == "1":
+        parts.append(f"新韌體待確認(剩 {remain} 秒;用 WiFi 開網頁會自動確認,沒確認會退回舊版)")
+    if rb == "1":
+        parts.append(f"上次更新到 {rbfrom} 沒有確認,已退回這版" if rbfrom else "上次更新沒有確認,已退回這版")
+    if remote:
+        parts.append(f"網站上的版本 {remote}")
+    if err:
+        parts.append(f"更新錯誤 {err}")
+    return ",".join(parts)
+
+
+def _tr_net(m):
+    wifi, ip, rssi, host, ssid, txp = m.groups()
+    if wifi == "ap":
+        return f"WiFi:板子自己開熱點,位址 http://{ip}(手機連板子的熱點後開這個網址);發射功率 {txp} dBm"
+    if wifi == "sta":
+        return f"WiFi:已連上「{ssid}」,位址 http://{ip} 或 http://{host}(Android 請用 IP);訊號 {rssi} dBm,發射功率 {txp} dBm"
+    return f"WiFi:正在連「{ssid}」…(連不上會自動改開熱點)"
+
+
+def _tr_fs(m):
+    state, secs, cd, t, out = m.group(1), m.group(2), m.group(3), m.group(4), m.group(7)
+    text = f"飛行狀態:{FLIGHT_NAMES.get(state, state)}(已 {float(secs):.0f} 秒)"
+    if state == "countdown":
+        text += f",倒數剩 {float(cd):.0f} 秒"
+    if state in ("takeoff", "flying", "landing"):
+        text += f",油門 {float(out):.0f}%(飛行 {float(t):.0f} 秒)"
+    return text
+
+
+def _tr_rst(m):
+    why = m.group(1)
+    kind = "上電" if "POWERON" in why else ("燒錄工具重置" if "USB_UART" in why else "軟體重開")
+    return f"板子重新開機({kind})"
+
+
+TRANSLATE = [
+    (re.compile(r"^version=(\S+) busy=(\d) pending=(\d) remain=(-?\d+) rolledBack=(\d)\((.*?)\) check=(\d) err=(\S*) remote=(\S*) size=(\d+) prog=(\d+)"), _tr_fw),
+    (NET_RE, _tr_net),
+    (re.compile(r"^state=(\w+) ([\d.]+)s cd=([\d.-]+) t=([\d.-]+) base=([\d.-]+) comp=([\d.-]+) out=([\d.-]+)"), _tr_fs),
+    (re.compile(r"^ERR MPU in use"), lambda m: "感測器 MPU6050:正常(控制迴圈使用中)"),
+    (re.compile(r"^MPU OK"), lambda m: "感測器 MPU6050:正常"),
+    (re.compile(r"^ERR MPU"), lambda m: "感測器 MPU6050:找不到(檢查 SDA→GPIO5,SCL→GPIO6,VCC,GND 接線)"),
+    (re.compile(r"^board (.+), arm switch GPIO(\d+)"), lambda m: f"板子開機:{m.group(1)},安全開關接 GPIO{m.group(2)}"),
+    (re.compile(r"^FW version (\S+) I2C SDA=(\d+) SCL=(\d+)"), lambda m: f"韌體 {m.group(1)},感測器接 GPIO{m.group(2)}/GPIO{m.group(3)}"),
+    (re.compile(r"^ESC protocol (\S+) (\d+)Hz"), lambda m: f"電變訊號 {m.group(1)} {m.group(2)}Hz"),
+    (re.compile(r"^ESC calibration: output (\d+)us for ([\d.]+)s"), lambda m: f"電變校正:輸出 {m.group(1)} µs 持續 {m.group(2)} 秒"),
+    (re.compile(r"^ESC calibration pending"), lambda m: "電變校正已排定(下次拔電再接電時執行)"),
+    (re.compile(r"^READY"), lambda m: "板子開機完成"),
+    (re.compile(r"^rst:0x[0-9a-f]+ \((\w+)\)"), _tr_rst),
+    (re.compile(r"^STA scanning for (.*)"), lambda m: f"WiFi:搜尋「{m.group(1)}」…"),
+    (re.compile(r"^STA best node RSSI=(-?\d+)dBm"), lambda m: f"WiFi:找到訊號 {m.group(1)} dBm 的節點,連線中"),
+    (re.compile(r"^STA -> generic connect"), lambda m: "WiFi:指定節點連不上,改用一般方式連線"),
+    (re.compile(r"^STA connected IP=(\S+) RSSI=(-?\d+)"), lambda m: f"WiFi:已連上家用 WiFi / 手機熱點,位址 http://{m.group(1)}(訊號 {m.group(2)} dBm)"),
+    (re.compile(r"^STA ssid not found -> AP"), lambda m: "WiFi:附近找不到設定的 WiFi 名稱(是不是 5GHz?或名稱打錯),改開板子自己的熱點"),
+    (re.compile(r"^STA timeout -> AP"), lambda m: "WiFi:等太久連不上(多半是密碼錯),改開板子自己的熱點"),
+    (re.compile(r"^STA lost -> reconnecting"), lambda m: "WiFi:家用 WiFi 斷線,重新連線中"),
+    (re.compile(r"^STA lost too long -> AP"), lambda m: "WiFi:斷線太久,改開板子自己的熱點"),
+    (re.compile(r"^AP SSID=(.*) IP=(\S+)"), lambda m: f"WiFi:已開熱點「{m.group(1)}」,手機連這個熱點後開 http://{m.group(2)}"),
+    (re.compile(r"^mDNS http://(\S+)"), lambda m: f"網址 http://{m.group(1)} 可用(電腦與 iPhone;Android 請用 IP)"),
+    (re.compile(r"^mDNS start failed"), lambda m: "名稱網址(lineplane.local)啟動失敗,請用 IP"),
+    (re.compile(r"^WiFi settings confirmed"), lambda m: "WiFi 設定已確認,固定使用"),
+    (re.compile(r"^WiFi settings kept for now"), lambda m: "目前的 WiFi 設定先保留;新設定重開後仍要再確認"),
+    (re.compile(r"^WiFi settings not confirmed"), lambda m: "WiFi 新設定 3 分鐘內沒有確認,已改回上一次的設定"),
+    (re.compile(r"^WiFi rescue"), lambda m: "連續開關電 3 次:WiFi 設定已回出廠(板子自己開熱點 HappySuperGG_Plane,密碼 12345678)"),
+    (re.compile(r"^WiFi tx power not confirmed -> back to (\d+)dBm"), lambda m: f"發射功率沒有確認,退回 {m.group(1)} dBm"),
+    (re.compile(r"^WiFi scan: (\d+) found, (\d+) listed"), lambda m: f"WiFi 搜尋完成:找到 {m.group(1)} 個,列出 {m.group(2)} 個"),
+    (re.compile(r"^OK saved, type 'reboot' to connect"), lambda m: "WiFi 設定已儲存,重新開機後連線"),
+    (re.compile(r"^OK txp (\d+)dBm"), lambda m: f"發射功率 {m.group(1)} dBm 已生效並儲存"),
+    (re.compile(r"^OTA start"), lambda m: "無線韌體更新開始"),
+    (re.compile(r"^OTA done"), lambda m: "無線韌體更新完成,重新開機"),
+    (re.compile(r"^OTA refused"), lambda m: "無線韌體更新被拒(板子不在待機)"),
+    (re.compile(r"^WEB OTA start"), lambda m: "網頁韌體上傳開始"),
+    (re.compile(r"^I2C bus was stuck"), lambda m: "感測器匯流排開機時卡住,已解除"),
+    (re.compile(r"^backup codec ok"), lambda m: "設定備份編碼表正常"),
+    (re.compile(r"^flight log: flash (\d+) sectors \((\d+) samples, ([\d.]+) min\)"), lambda m: f"飛行紀錄區:可存 {m.group(2)} 筆(約 {m.group(3)} 分鐘)"),
+    (re.compile(r"^ERR buzzer"), lambda m: "蜂鳴器 PWM 無法使用(無源蜂鳴器不會響)"),
+    (re.compile(r"^commands: "), lambda m: "可用的序列指令:" + m.string[10:]),
+]
+HIDE_RE = re.compile(r"^(ESP-ROM:|Build:|SPIWP:|mode:|load:0x|entry 0x|configsip|clk_drv|Saved PC:|FW id LPFWID)")
+
+
+def translate_line(line):
+    """板子的一行訊息 → 中文;沒對到回原文;開機 ROM 雜訊回 None(不顯示)."""
+    for rx, fn in TRANSLATE:
+        m = rx.match(line)
+        if m:
+            return fn(m)
+    if HIDE_RE.match(line):
+        return None
+    return line
 
 
 class _LineWriter(io.TextIOBase):
@@ -453,8 +576,76 @@ class App:
         ttk.Label(fs, text="USB 線:網頁透過這個程式轉送到板子,程式關掉網頁就斷線. 韌體更新請用「燒錄」頁(勾保留板上設定).\n"
                            "WiFi:直接開板子的網頁,和手機一樣.", foreground="#555", wraplength=W(620), justify="left").grid(row=1, column=1, sticky="w", pady=(4, 0))
 
+        # WiFi 設定(GG 2026-11-03:使用者用手機熱點怎樣都連不上,要能在設定器改;只走 USB 線,改完板子重開會斷 WiFi)
+        fw = ttk.LabelFrame(tab_cfg, text=" WiFi 設定(用 USB 線設定板子怎麼連網) ", padding=6)
+        fw.grid(row=2, column=0, sticky="ew", **pad)
+        fw.columnconfigure(1, weight=1)
+        top = ttk.Frame(fw)
+        top.grid(row=0, column=0, columnspan=3, sticky="ew")
+        self.wifi_read_btn = ttk.Button(top, text="讀取板上設定", command=self._wifi_read)
+        self.wifi_read_btn.pack(side="left")
+        self.wifi_state = ttk.Label(top, text="接上 USB 線後按「讀取板上設定」,或直接改好按下面的套用.", foreground="#555", wraplength=W(600), justify="left")
+        self.wifi_state.pack(side="left", padx=8)
+        self.wmode = tk.StringVar(value="ap")
+        ttk.Radiobutton(fw, text="板子自己開熱點:手機直接連板子的 WiFi(出廠方式,不需要其他網路)", value="ap", variable=self.wmode,
+                        command=self._wifi_mode_changed).grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        ttk.Radiobutton(fw, text="板子連到家用 WiFi 或手機熱點:手機和板子連同一個網路", value="sta", variable=self.wmode,
+                        command=self._wifi_mode_changed).grid(row=2, column=0, columnspan=3, sticky="w")
+        self.wsta = []   # 連家用 WiFi 才有用的欄位(熱點模式時變灰)
+        lab = ttk.Label(fw, text="WiFi 名稱")
+        lab.grid(row=3, column=0, sticky="w", padx=(24, 0))
+        self.wssid = tk.StringVar()
+        self.wssid_cb = ttk.Combobox(fw, textvariable=self.wssid)
+        self.wssid_cb.grid(row=3, column=1, sticky="ew", padx=6)
+        self.wssid_cb.bind("<<ComboboxSelected>>", lambda e: self._wifi_ssid_picked())
+        self.scan_items = {}   # 下拉文字 → (ssid, open)
+        self.wifi_scan_btn = ttk.Button(fw, text="搜尋附近 WiFi", command=self._wifi_scan)
+        self.wifi_scan_btn.grid(row=3, column=2, sticky="w")
+        lab2 = ttk.Label(fw, text="WiFi 密碼")
+        lab2.grid(row=4, column=0, sticky="w", padx=(24, 0), pady=(4, 0))
+        self.wpw = tk.StringVar()
+        self.wpw_e = ttk.Entry(fw, textvariable=self.wpw, show="•")
+        self.wpw_e.grid(row=4, column=1, sticky="ew", padx=6, pady=(4, 0))
+        self.wpw_show = tk.BooleanVar(value=False)
+        pwc = ttk.Checkbutton(fw, text="顯示", variable=self.wpw_show, command=lambda: self.wpw_e.configure(show="" if self.wpw_show.get() else "•"))
+        pwc.grid(row=4, column=2, sticky="w", pady=(4, 0))
+        hint = ttk.Label(fw, text="手機熱點要開 2.4GHz 板子才看得到:iPhone 在「個人熱點」打開「最大化相容性」;Android 在熱點設定把頻段選 2.4GHz.\n"
+                                  "名稱與密碼分大小寫;開放網路密碼留空. 連上後手機開網頁用下面顯示的 IP(iPhone 與電腦也可以用 lineplane.local).",
+                         foreground="#555", wraplength=W(680), justify="left")
+        hint.grid(row=5, column=0, columnspan=3, sticky="w", padx=(24, 0), pady=(2, 0))
+        self.wsta = [lab, self.wssid_cb, self.wifi_scan_btn, lab2, self.wpw_e, pwc, hint]
+        ttk.Label(fw, text="板子的熱點(連不上上面的 WiFi 時也會自動開這個):", foreground="#333").grid(row=6, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        ttk.Label(fw, text="熱點名稱").grid(row=7, column=0, sticky="w", padx=(24, 0))
+        apn = ttk.Frame(fw)
+        apn.grid(row=7, column=1, columnspan=2, sticky="ew", padx=6)
+        self.ap_prefix = "HappySuperGG_Plane"
+        self.ap_prefix_lab = ttk.Label(apn, text=self.ap_prefix, font=("Consolas", 10))
+        self.ap_prefix_lab.pack(side="left")
+        self.wsfx = tk.StringVar()
+        self.wsfx.trace_add("write", lambda *a: self._wifi_ap_preview())
+        ttk.Entry(apn, textvariable=self.wsfx, width=16).pack(side="left")
+        self.ap_preview = ttk.Label(apn, text="", foreground="#555")
+        self.ap_preview.pack(side="left", padx=8)
+        ttk.Label(fw, text="熱點密碼").grid(row=8, column=0, sticky="w", padx=(24, 0), pady=(4, 0))
+        self.wappw = tk.StringVar()
+        self.wappw_e = ttk.Entry(fw, textvariable=self.wappw, show="•")
+        self.wappw_e.grid(row=8, column=1, sticky="ew", padx=6, pady=(4, 0))
+        self.wappw_show = tk.BooleanVar(value=False)
+        ttk.Checkbutton(fw, text="顯示", variable=self.wappw_show,
+                        command=lambda: self.wappw_e.configure(show="" if self.wappw_show.get() else "•")).grid(row=8, column=2, sticky="w", pady=(4, 0))
+        ttk.Label(fw, text="固定開頭後面可以接數字或名字(最多 14 個英數字),同場好幾架飛機才分得出來. 密碼 8~63 個英數字,出廠 12345678.",
+                  foreground="#555", wraplength=W(680), justify="left").grid(row=9, column=0, columnspan=3, sticky="w", padx=(24, 0), pady=(2, 0))
+        self.wifi_apply_btn = ttk.Button(fw, text="套用到板子並測試連線", command=self._wifi_apply, style="Big.TButton")
+        self.wifi_apply_btn.grid(row=10, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        bigfam = "Microsoft JhengHei UI" if sys.platform == "win32" else "TkDefaultFont"
+        self.wifi_big = tk.Label(fw, text="", font=(bigfam, 15, "bold"), foreground="#1a7f37", justify="left", anchor="w", wraplength=W(700))
+        self.wifi_big.grid(row=11, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        self.wifi_big.grid_remove()
+        self._wifi_mode_changed()
+        self._wifi_ap_preview()
+
         fb = ttk.LabelFrame(tab_cfg, text=" 板上設定備份(全部 6 組飛行風格 + 起飛降落與安全 / 安裝 / 電變 / WiFi) ", padding=6)
-        fb.grid(row=2, column=0, sticky="ew", **pad)
+        fb.grid(row=3, column=0, sticky="ew", **pad)
         fb.columnconfigure(2, weight=1)
         self.bk_out_btn = ttk.Button(fb, text="匯出板上設定備份…", command=lambda: self._backup_export())
         self.bk_out_btn.grid(row=0, column=0, sticky="w")
@@ -495,19 +686,29 @@ class App:
         self.log.tag_configure("err", foreground="#ff7b7b")
         self.log.tag_configure("ok", foreground="#7ee787")
         self.log.tag_configure("sent", foreground="#e3b341")
-        cmd = ttk.Frame(f4)
-        cmd.grid(row=2, column=0, sticky="ew")
-        cmd.columnconfigure(1, weight=1)
-        ttk.Label(cmd, text="送指令").grid(row=0, column=0)
+        # 快捷動作(GG 2026-11-03:fw/net/fs/t/help 對終端使用者沒意義):板子狀態 = 送 fw/net/fs/mpu,回應翻成中文;送指令列收進進階
+        quick = ttk.Frame(f4)
+        quick.grid(row=2, column=0, sticky="ew", pady=(2, 0))
+        self.status_btn = ttk.Button(quick, text="板子狀態", command=self._board_status)
+        self.status_btn.pack(side="left")
+        self.reboot_btn = ttk.Button(quick, text="重新開機", command=self._reboot_board)
+        self.reboot_btn.pack(side="left", padx=(4, 0))
+        self.cmd_adv_btn = ttk.Button(quick, text="進階 ▸", width=8, command=self._toggle_cmd_adv)
+        self.cmd_adv_btn.pack(side="right")
+        self.raw_var = tk.BooleanVar(value=bool(self.prefs.get("raw", False)))
+        ttk.Checkbutton(quick, text="顯示原始英文訊息", variable=self.raw_var, command=self._save_link).pack(side="right", padx=(0, 10))
+        self.cmd_row = ttk.Frame(f4)
+        self.cmd_row.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+        self.cmd_row.columnconfigure(1, weight=1)
+        self.cmd_row.grid_remove()
+        ttk.Label(self.cmd_row, text="送指令").grid(row=0, column=0)
         self.cmd_var = tk.StringVar()
-        ce = ttk.Entry(cmd, textvariable=self.cmd_var)
+        ce = ttk.Entry(self.cmd_row, textvariable=self.cmd_var)
         ce.grid(row=0, column=1, sticky="ew", padx=6)
         ce.bind("<Return>", lambda ev: self._send_cmd())
-        ttk.Button(cmd, text="送出", command=self._send_cmd).grid(row=0, column=2)
-        quick = ttk.Frame(f4)
-        quick.grid(row=3, column=0, sticky="w", pady=(4, 0))
-        for label, c in [("版本 fw", "fw"), ("網路 net", "net"), ("飛行狀態 fs", "fs"), ("即時資料開關 t", "t"), ("全部指令 help", "help")]:
-            ttk.Button(quick, text=label, command=lambda c=c: self._send_cmd(c)).pack(side="left", padx=(0, 4))
+        ttk.Button(self.cmd_row, text="送出", command=self._send_cmd).grid(row=0, column=2)
+        for label, c in [("fw", "fw"), ("net", "net"), ("fs", "fs"), ("t", "t"), ("help", "help")]:
+            ttk.Button(self.cmd_row, text=label, width=5, command=lambda c=c: self._send_cmd(c)).grid(row=0, column=3 + ["fw", "net", "fs", "t", "help"].index(c), padx=(4, 0))
 
         self.status = ttk.Label(r, text="", relief="sunken", anchor="w", padding=(6, 2))
         self.status.pack(side="bottom", fill="x")
@@ -520,6 +721,9 @@ class App:
         r.update_idletasks()
         sw, sh = r.winfo_screenwidth(), r.winfo_screenheight()
         need_w, need_h = r.winfo_reqwidth() + 16, r.winfo_reqheight() + 16
+        # 沒顯示的分頁(設定與備份頁有 WiFi 設定區)可能比目前這頁高:兩頁都要放得下
+        shown = self.nb.frames[self.nb.cur].winfo_reqheight()
+        need_h += max(0, max(f.winfo_reqheight() for f in self.nb.frames) - shown)
         w, h = min(sw - 40, max(int(880 * self.dpi), need_w)), min(sh - 90, max(620, need_h))
         r.geometry(f"{w}x{h}+{max(0, (sw - w) // 2)}+{max(0, (sh - h) // 2 - 20)}")
         if need_h > sh - 90 and sys.platform == "win32":
@@ -544,7 +748,8 @@ class App:
         self.busy = busy
         st = "disabled" if busy else "normal"
         for w in (self.flash_btn, self.check_btn, self.reload_btn, self.mon_btn, self.cfg_btn,
-                  self.bk_out_btn, self.bk_in_btn, self.bk_flash_btn):
+                  self.bk_out_btn, self.bk_in_btn, self.bk_flash_btn, self.wifi_read_btn, self.wifi_scan_btn, self.wifi_apply_btn,
+                  self.status_btn, self.reboot_btn):
             w.configure(state=st)
         self.port_cb.configure(state="disabled" if busy else "readonly")
         self.ver_cb.configure(state="disabled" if busy else "readonly")
@@ -609,6 +814,18 @@ class App:
                     self.cfg_state.configure(text=val[0], foreground=val[1])
                 elif kind == "bk_state":
                     self.bk_state.configure(text=val[0], foreground=val[1])
+                elif kind == "wifi_state":
+                    self.wifi_state.configure(text=val[0], foreground=val[1])
+                elif kind == "wifi_big":   # (文字, 顏色);空字串 = 藏起來
+                    if val[0]:
+                        self.wifi_big.configure(text=val[0], foreground=val[1])
+                        self.wifi_big.grid()
+                    else:
+                        self.wifi_big.grid_remove()
+                elif kind == "wifi_fields":
+                    self._wifi_fill(val)
+                elif kind == "scan_list":
+                    self._wifi_scan_fill(val)
                 elif kind == "open_url":
                     webbrowser.open(val)
         except queue.Empty:
@@ -617,7 +834,9 @@ class App:
 
     def _on_board_line(self, line):
         tag = "err" if line.startswith("ERR") and "in use" not in line else None
-        self._log(line, tag)
+        shown = line if self.raw_var.get() else translate_line(line)
+        if shown is not None:
+            self._log(shown, tag)
         for lq in list(self.listeners):
             lq.put(line)
         if "invalid header" in line:
@@ -1060,7 +1279,7 @@ class App:
                 while time.time() < end:
                     if time.time() >= nxt:
                         self.monitor.send(cmd)
-                        q.put(("tool", f"> {cmd}"))
+                        q.put(("tool", f"> {CMD_NAMES.get(cmd, cmd)}({cmd})"))
                         nxt = time.time() + retry
                     try:
                         line = lq.get(timeout=0.1)
@@ -1136,11 +1355,15 @@ class App:
     def _save_link(self):
         self.prefs["link"] = self.link_var.get()
         self.prefs["host"] = self.host_var.get().strip()
+        self.prefs["raw"] = bool(self.raw_var.get())
         save_prefs(self.prefs)
 
     def _save_tab(self):
         self.prefs["tab"] = ["flash", "cfg"][self.nb.index(self.nb.select())]
         save_prefs(self.prefs)
+        # 切到設定頁時順手把板上 WiFi 設定讀進來(有板子,沒在忙,而且還沒讀過)
+        if self.prefs["tab"] == "cfg" and not self.busy and self._port() and not getattr(self, "wifi_loaded", False):
+            self._wifi_read(quiet=True)
 
     def _usb_monitor_on(self, port, timeout=4.0):
         """確保監看開在這個序列埠並已連線(USB 設定通道掛在監看的讀取執行緒上). 可在背景執行緒呼叫."""
@@ -1300,7 +1523,292 @@ class App:
 
         threading.Thread(target=job, daemon=True).start()
 
+    # ---------------- WiFi 設定(GG 2026-11-03) ----------------
+    def _wifi_mode_changed(self):
+        st = "normal" if self.wmode.get() == "sta" else "disabled"
+        for w in self.wsta:
+            w.configure(state=st)
+
+    def _wifi_ap_preview(self):
+        s = self.wsfx.get()
+        n = len(s.encode("utf-8"))
+        over = n > 14 or s != s.strip()
+        self.ap_preview.configure(text=f"→ {self.ap_prefix}{s}({n}/14{',太長' if n > 14 else ''}{',頭尾不能空白' if s != s.strip() else ''})",
+                                  foreground="#cf222e" if over else "#555")
+
+    def _wifi_ssid_picked(self):
+        label = self.wssid.get()
+        if label in self.scan_items:
+            ssid, is_open = self.scan_items[label]
+            changed = ssid != getattr(self, "wifi_cur_ssid", None)
+            self.wssid.set(ssid)
+            if changed:
+                self.wpw.set("")   # 換了不同的網路,舊密碼一定不對
+                if not is_open:
+                    self.wpw_e.focus_set()
+            self.wifi_state.configure(text=f"已選「{ssid}」" + ("(開放網路,密碼留空)" if is_open else ",請輸入密碼") + ",再按「套用到板子並測試連線」.",
+                                      foreground="#333")
+
+    def _wifi_scan_fill(self, items):
+        bars = lambda r: "▂▄▆█" if r >= -55 else "▂▄▆" if r >= -67 else "▂▄" if r >= -78 else "▂"   # noqa: E731
+        self.scan_items = {}
+        labels = []
+        for ssid, rssi, _ch, is_open in items:
+            label = f"{ssid}    {bars(rssi)} {rssi} dBm{'  開放' if is_open else ''}"
+            self.scan_items[label] = (ssid, bool(is_open))
+            labels.append(label)
+        self.wssid_cb.configure(values=labels)
+        if labels:
+            with contextlib.suppress(Exception):
+                self.wssid_cb.tk.call("ttk::combobox::Post", self.wssid_cb)   # 直接把下拉清單打開讓使用者點
+            self.wifi_state.configure(text=f"找到 {len(labels)} 個 2.4GHz WiFi,從「WiFi 名稱」的下拉選單點一個.", foreground="#1a7f37")
+        else:
+            self.wifi_state.configure(text="附近找不到 2.4GHz 的 WiFi. 手機熱點請開 2.4GHz(iPhone 開「最大化相容性」)再搜尋一次.", foreground="#cf222e")
+
+    def _wifi_fill(self, w):
+        """GET /api/wifi 的結果填進欄位."""
+        self.wifi_loaded = True
+        self.wifi_cur = w
+        self.wifi_cur_ssid = w.get("ssid", "")
+        self.ap_prefix = w.get("apprefix") or self.ap_prefix
+        self.ap_prefix_lab.configure(text=self.ap_prefix)
+        self.wmode.set("ap" if (w.get("forceap") or not w.get("ssid")) else "sta")
+        self.wssid.set(w.get("ssid", ""))
+        self.wpw.set(w.get("pw", ""))
+        self.wsfx.set(w.get("apsfx", ""))
+        self.wappw.set(w.get("appw") or "12345678")
+        self._wifi_mode_changed()
+
+    def _wifi_board(self, port):
+        """背景:確保 USB 監看開著且板子有 API,回 bridge."""
+        if not self._usb_monitor_on(port, 3.0):
+            raise board_link.BoardError(f"打不開 {port}")
+        if not board_link.probe(self.monitor.bridge, 2.5):
+            raise board_link.BoardError(f"板子沒有回應 USB 設定通道:韌體要 {USB_API_MIN_FW} 以上,請先到「燒錄」頁更新(保留板上設定)")
+        return self.monitor.bridge
+
+    def _wifi_read(self, quiet=False):
+        port = self._port()
+        if not port:
+            if not quiet:
+                messagebox.showwarning("沒有序列埠", "請用 USB 線接上開發板. WiFi 設定只能透過 USB 線改.", parent=self.root)
+            return
+        self._set_busy(True)
+        self.wifi_state.configure(text=f"讀取 {port} 板上的 WiFi 設定 …", foreground="#9a6700")
+
+        def job():
+            try:
+                w = board_link.wifi_get(self._wifi_board(port))
+                self.q.put(("wifi_fields", w))
+                now = w.get("apnow") or w.get("apssid")
+                mode = "板子自己開熱點" if (w.get("forceap") or not w.get("ssid")) else f"連到「{w.get('ssid')}」(連不上時開熱點)"
+                self.q.put(("wifi_state", (f"已讀取板上設定:{mode};熱點名稱 {now}. 改好後按「套用到板子並測試連線」.", "#1a7f37")))
+            except board_link.BoardError as e:
+                self.q.put(("wifi_state", (f"讀不到板上設定:{e}", "#cf222e" if not quiet else "#555")))
+            finally:
+                self.q.put(("done", None))
+
+        threading.Thread(target=job, daemon=True).start()
+
+    def _wifi_scan(self):
+        port = self._port()
+        if not port:
+            messagebox.showwarning("沒有序列埠", "請用 USB 線接上開發板.", parent=self.root)
+            return
+        self._set_busy(True)
+        self.wifi_state.configure(text="板子搜尋附近的 WiFi,約 3~10 秒 …", foreground="#9a6700")
+
+        def job():
+            try:
+                items = board_link.wifi_scan(self._wifi_board(port))
+                self.q.put(("scan_list", items))
+            except board_link.BoardError as e:
+                self.q.put(("wifi_state", (f"搜尋失敗:{e}", "#cf222e")))
+            finally:
+                self.q.put(("done", None))
+
+        threading.Thread(target=job, daemon=True).start()
+
+    def _wifi_apply(self):
+        port = self._port()
+        if not port:
+            messagebox.showwarning("沒有序列埠", "請用 USB 線接上開發板. WiFi 設定只能透過 USB 線改(改完板子要重開,WiFi 會斷).", parent=self.root)
+            return
+        sta = self.wmode.get() == "sta"
+        ssid, pw, sfx, appw = self.wssid.get().strip(), self.wpw.get(), self.wsfx.get(), self.wappw.get()
+        errs = []
+        if sta and not ssid:
+            errs.append("請輸入 WiFi 名稱(或按「搜尋附近 WiFi」從清單點一個)")
+        if sta and len(ssid.encode("utf-8")) > 32:
+            errs.append("WiFi 名稱太長")
+        if sta and 0 < len(pw) < 8:
+            errs.append("WiFi 密碼至少 8 碼(開放網路請留空)")
+        if len(sfx.encode("utf-8")) > 14:
+            errs.append("熱點名稱後面接的字太長:最多 14 個英數字(中文一字算 3 個)")
+        if sfx != sfx.strip():
+            errs.append("熱點名稱後面接的字頭尾不能是空白")
+        if not 8 <= len(appw) <= 63 or appw != appw.strip() or any(not 0x20 <= ord(c) <= 0x7E for c in appw):
+            errs.append("熱點密碼要 8~63 個英文,數字或鍵盤符號(不能有中文或頭尾空白)")
+        if errs:
+            messagebox.showwarning("還不能套用", "\n".join(errs), parent=self.root)
+            return
+        apname = self.ap_prefix + sfx
+        what = (f"板子會連到 WiFi「{ssid}」(密碼 {'(無)' if not pw else '已填'}),連不上時改開自己的熱點「{apname}」." if sta
+                else f"板子自己開熱點「{apname}」,密碼 {appw}.")
+        if not messagebox.askokcancel("套用 WiFi 設定", f"{what}\n\n按確定後板子會重新開機並測試連線,約 10~40 秒,請不要拔 USB 線.",
+                                      parent=self.root):
+            return
+        new = {"ssid": ssid, "pw": pw, "forceap": 0 if sta else 1, "apsfx": sfx, "appw": appw}
+        self._set_busy(True)
+        self.wifi_big.grid_remove()
+        threading.Thread(target=self._wifi_apply_job, args=(port, new), daemon=True).start()
+
+    def _wait_reboot(self, timeout):
+        """重開後等板子印出開機完成(READY)再回應 API. 只靠 API 有回應不夠:太早問可能問到還沒重開的舊程式.
+        回 True = 看到開機完成;沒看到但 API 有回應也回 True(訊息被 USB 重新列舉吃掉);都沒有回 False."""
+        lq = queue.Queue()
+        self.listeners.append(lq)
+        try:
+            end = time.time() + timeout
+            ready = False
+            while time.time() < end and not ready:
+                try:
+                    ready = lq.get(timeout=0.2).startswith("READY")
+                except queue.Empty:
+                    pass
+        finally:
+            with contextlib.suppress(ValueError):
+                self.listeners.remove(lq)
+        end = time.time() + 8
+        while time.time() < end:
+            if self.monitor.connected() and board_link.probe(self.monitor.bridge, 1.5):
+                return True
+            time.sleep(0.3)
+        return False
+
+    def _serial_query(self, cmd, pred, timeout, retry=1.5):
+        """送文字指令直到收到符合 pred 的一行(回該行),逾時回 None. 背景執行緒用."""
+        lq = queue.Queue()
+        self.listeners.append(lq)
+        try:
+            end = time.time() + timeout
+            nxt = 0
+            while time.time() < end:
+                if time.time() >= nxt:
+                    self.monitor.send(cmd)
+                    nxt = time.time() + retry
+                try:
+                    line = lq.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                if pred(line):
+                    return line
+            return None
+        finally:
+            with contextlib.suppress(ValueError):
+                self.listeners.remove(lq)
+
+    def _wifi_apply_job(self, port, new, reverting=False):
+        """背景:寫入 WiFi 設定(板子存成試用)→ 重開 → 等 WiFi 就緒 → 是要的模式就保持(固定)並大字顯示網址.
+        要連家用 WiFi 卻退到熱點 = 連不上:問要不要改回原本的設定(用同一個流程套回去). reverting = 正在改回,不再問."""
+        q = self.q
+
+        def say(text, color="#9a6700"):
+            q.put(("wifi_state", (text, color)))
+            q.put(("tool", text))
+
+        try:
+            board = self._wifi_board(port)
+            cur = board_link.wifi_get(board)
+            cfg = {"ssid": new["ssid"], "pw": new["pw"], "host": cur.get("host", "lineplane"), "tmo": cur.get("tmo", 30),
+                   "forceap": new["forceap"], "txp": cur.get("txp", 5), "apsfx": new["apsfx"], "appw": new["appw"]}
+            prefix = cur.get("apprefix") or self.ap_prefix
+            apname = prefix + new["apsfx"]
+            host = cfg["host"] + ".local"
+            say("寫入 WiFi 設定到板子 …")
+            board_link.wifi_set(board, cfg)
+            say("已寫入,板子重新開機中 …")
+            board_link.reboot(board)
+            say("等待板子開機 …")
+            if not self._wait_reboot(25):
+                raise board_link.BoardError("板子重開後沒有回應. 拔掉 USB 再接上,按「讀取板上設定」看目前狀態")
+            want_ap = new["forceap"] == 1 or not new["ssid"]   # 板子沒有 WiFi 名稱時自己也會開熱點
+            tmo = int(cfg["tmo"])
+            deadline = time.time() + tmo + 20
+            kv = None
+            while time.time() < deadline:
+                line = self._serial_query("net", lambda s: s.startswith("wifi="), 4)
+                kv = parse_net(line) if line else None
+                if kv and kv["wifi"] != "connecting":
+                    break
+                if kv:
+                    say(f"板子正在連「{new['ssid']}」…(最多等 {tmo} 秒)")
+                time.sleep(1)
+            if not kv or kv["wifi"] == "connecting":
+                raise board_link.BoardError("等太久板子的 WiFi 還沒就緒. 稍後按「讀取板上設定」或「板子狀態」看結果;新設定沒確認的話板子 3 分鐘後會自己改回原設定")
+            back = "已改回原本的 WiFi 設定. " if reverting else ""
+            if not want_ap and kv["wifi"] == "sta":
+                board_link.wifi_keep(board)
+                big = (f"✔ {back}板子已連上「{new['ssid']}」,設定已固定.\n手機(同一個網路)用瀏覽器開: http://{kv['ip']}\n"
+                       f"iPhone 與電腦也可以開: http://{host}")
+                q.put(("wifi_big", (big, "#1a7f37")))
+                say(f"完成:板子已連上「{new['ssid']}」,位址 http://{kv['ip']}(訊號 {kv['rssi']} dBm)", "#1a7f37")
+                q.put(("dialog", ("WiFi 設定完成", f"板子已連上「{new['ssid']}」.\n\n手機連同一個網路,用瀏覽器開 http://{kv['ip']}\n(iPhone 與電腦也可以用 http://{host})", False)))
+            elif want_ap and kv["wifi"] == "ap":
+                board_link.wifi_keep(board)
+                big = f"✔ {back}板子的熱點已開,設定已固定.\n手機連 WiFi「{apname}」(密碼 {new['appw']})\n再用瀏覽器開: http://{kv['ip']}"
+                q.put(("wifi_big", (big, "#1a7f37")))
+                say(f"完成:板子自己開熱點「{apname}」,位址 http://{kv['ip']}", "#1a7f37")
+                q.put(("dialog", ("WiFi 設定完成", f"板子自己開熱點「{apname}」,密碼 {new['appw']}.\n\n手機連這個 WiFi 後用瀏覽器開 http://{kv['ip']}", False)))
+            else:
+                # 要連家用 WiFi 卻開了熱點:連不上. 常見原因寫清楚(手機熱點 5GHz 看不到,密碼錯)
+                big = (f"✖ 連不上「{new['ssid']}」,板子改開了自己的熱點「{apname}」.\n"
+                       "請檢查:密碼是否正確(分大小寫);手機熱點是否為 2.4GHz(iPhone 開「最大化相容性」,Android 頻段選 2.4GHz);手機熱點有沒有開著.")
+                q.put(("wifi_big", (big, "#cf222e")))
+                say(f"連不上「{new['ssid']}」,板子退到熱點「{apname}」", "#cf222e")
+                if not reverting and self._ask("連不上 WiFi", f"板子連不上「{new['ssid']}」,目前開著自己的熱點「{apname}」.\n\n"
+                                                           "要改回原本的 WiFi 設定嗎?(板子會再重新開機一次)\n選「否」的話板子會留在熱點模式,3 分鐘後自動改回原設定."):
+                    old = {"ssid": cur.get("ssid", ""), "pw": cur.get("pw", ""), "forceap": int(cur.get("forceap") or 0),
+                           "apsfx": cur.get("apsfx", ""), "appw": cur.get("appw") or "12345678"}
+                    say("改回原本的 WiFi 設定 …")
+                    self._wifi_apply_job(port, old, reverting=True)
+                    return
+            self.q.put(("wifi_fields", board_link.wifi_get(board)))
+        except board_link.BoardError as e:
+            say(f"WiFi 設定失敗:{e}", "#cf222e")
+            q.put(("err", f"WiFi 設定失敗:{e}"))
+            q.put(("dialog", ("WiFi 設定失敗", str(e), True)))
+        finally:
+            if not reverting:
+                q.put(("done", None))
+
     # ---------------- 監看 ----------------
+    def _toggle_cmd_adv(self):
+        if self.cmd_row.winfo_viewable():
+            self.cmd_row.grid_remove()
+            self.cmd_adv_btn.configure(text="進階 ▸")
+        else:
+            self.cmd_row.grid()
+            self.cmd_adv_btn.configure(text="進階 ▾")
+
+    def _board_status(self):
+        """板子狀態:依序送 fw / net / fs / mpu,回應由 translate_line 翻成中文顯示."""
+        if not self.monitor.connected():
+            if not self._port():
+                messagebox.showwarning("沒有序列埠", "請先接上開發板.", parent=self.root)
+                return
+            self.monitor.start(self._port())
+            self.mon_btn.configure(text="停止監看")
+            self.root.after(800, self._board_status)
+            return
+        for i, c in enumerate(("fw", "net", "fs", "mpu")):
+            self.root.after(i * 400, lambda c=c: self._send_cmd(c))
+
+    def _reboot_board(self):
+        if not messagebox.askokcancel("重新開機", "讓板子重新開機?(馬達運轉或起飛程序中請不要按)", parent=self.root):
+            return
+        self._send_cmd("reboot")
+
     def _toggle_monitor(self):
         if self.monitor.want:
             self.monitor.stop()
@@ -1327,7 +1835,8 @@ class App:
             self.root.after(800, lambda: self._send_cmd(text))
             return
         if self.monitor.send(text):
-            self._log(f"> {text}", "sent")
+            name = CMD_NAMES.get(text.lower())
+            self._log(f"> {name}({text})" if name and not self.raw_var.get() else f"> {text}", "sent")
         else:
             self._log("送出失敗(序列埠中斷?)", "err")
         if cmd is None:

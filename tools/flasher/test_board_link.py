@@ -1,4 +1,5 @@
-# 版本流水號: r1 (2026-11-02) 初版:USB 設定通道的電腦端測試(假板子照 web_server.cpp r33 的協定回應,不需要板子與序列埠)
+# 版本流水號: r2 (2026-11-03) WiFi 設定:wifi_get / wifi_set(拒絕碼轉中文)/ wifi_scan(掃描中 → 結果)/ wifi_keep / reboot
+# 舊: r1 (2026-11-02) 初版:USB 設定通道的電腦端測試(假板子照 web_server.cpp r33 的協定回應,不需要板子與序列埠)
 import json
 import threading
 import unittest
@@ -19,6 +20,12 @@ class FakeBoard:
         self.dirty = True
         self.saved = False
         self.applied = None
+        self.wifi = {"ssid": "Home", "pw": "secret123", "host": "lineplane", "tmo": 30, "forceap": 0, "txp": 5, "txmin": 2, "txmax": 20,
+                     "tmomin": 10, "tmomax": 120, "apssid": "HappySuperGG_Plane", "apnow": "HappySuperGG_Plane", "apprefix": "HappySuperGG_Plane",
+                     "apsfx": "", "appw": "12345678", "apsfxmax": 14, "build": "test"}
+        self.scan_polls = 0
+        self.kept = False
+        self.rebooted = False
 
     def feed_line(self, line):
         assert line.startswith(b"@Q ") and line.endswith(b"\n")
@@ -61,10 +68,33 @@ class FakeBoard:
             self.applied = a.get("text")
             return 200, "application/json", b'{"ok":true,"code":"bkapplied","gen":7,"names":["a"],"wifisaved":1}'
         if (method, path) == ("POST", "/api/reboot"):
+            self.rebooted = True
             return 200, "application/json", b'{"ok":true,"code":"reboot"}'
         if (method, path) == ("POST", "/api/wifi/keep"):
             self.kept = True
             return 200, "application/json", b'{"ok":true,"code":"kept"}'
+        if (method, path) == ("GET", "/api/wifi"):
+            return 200, "application/json", json.dumps(self.wifi, ensure_ascii=False).encode("utf-8")
+        if (method, path) == ("POST", "/api/wifi"):
+            # 照 handleWifiSet:欄位不齊 badform,後綴太長 apsfxlong,密碼 1~7 碼 pwshort;通過就存起來(試用)
+            for f in ("ssid", "pw", "host", "tmo", "forceap", "txp"):
+                if f not in a:
+                    return 400, "application/json", b'{"ok":false,"code":"badform"}'
+            if len(a.get("apsfx", "").encode("utf-8")) > 14:
+                return 400, "application/json", b'{"ok":false,"code":"apsfxlong"}'
+            if 0 < len(a["pw"]) < 8:
+                return 400, "application/json", b'{"ok":false,"code":"pwshort"}'
+            self.wifi.update({k: a[k] for k in ("ssid", "pw", "host", "apsfx", "appw") if k in a})
+            self.wifi.update(tmo=int(a["tmo"]), forceap=int(a["forceap"]), txp=int(a["txp"]))
+            return 200, "application/json", b'{"ok":true,"code":"saved"}'
+        if (method, path) == ("POST", "/api/wifi/scan"):
+            self.scan_polls = 0
+            return 200, "application/json", b'{"ok":true,"code":"scanning"}'
+        if (method, path) == ("GET", "/api/wifi/scan"):
+            self.scan_polls += 1
+            if self.scan_polls < 3:   # 前兩次還在掃
+                return 200, "application/json", b'{"run":1}'
+            return 200, "application/json", json.dumps({"run": 0, "n": 2, "list": [["GG iPhone", -48, 6, 0], ["Home 家", -70, 11, 1]]}, ensure_ascii=False).encode("utf-8")
         if path == "/update":
             return 400, "application/json", b'{"ok":false,"code":"usbnoupload"}'
         return 404, "text/plain", b"Not found"
@@ -133,6 +163,31 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual((r["code"], rs["code"], self.link.board.applied), ("bkapplied", "saved", "LP1:ABC"))
         with self.assertRaises(bl.BoardError):
             bl.backup_check(bl.SerialBridge(lambda d: True, lambda s: None), "x")   # 沒回應
+
+    def test_wifi_get_set_keep_reboot(self):
+        w = bl.wifi_get(self.b)
+        self.assertEqual((w["ssid"], w["apprefix"], w["apsfxmax"]), ("Home", "HappySuperGG_Plane", 14))
+        cfg = {"ssid": "GG iPhone", "pw": "hotspot99", "host": w["host"], "tmo": w["tmo"], "forceap": 0, "txp": w["txp"], "apsfx": "3號", "appw": "abcd1234"}
+        bl.wifi_set(self.b, cfg)
+        board = self.link.board.wifi
+        self.assertEqual((board["ssid"], board["pw"], board["apsfx"], board["appw"], board["forceap"]), ("GG iPhone", "hotspot99", "3號", "abcd1234", 0))
+        # 板子拒絕 → 中文訊息
+        with self.assertRaises(bl.BoardError) as cm:
+            bl.wifi_set(self.b, dict(cfg, pw="short"))
+        self.assertIn("至少 8 碼", str(cm.exception))
+        with self.assertRaises(bl.BoardError) as cm:
+            bl.wifi_set(self.b, dict(cfg, apsfx="太長太長太長"))
+        self.assertIn("太長", str(cm.exception))
+        with self.assertRaises(bl.BoardError):
+            bl.wifi_set(self.b, {"ssid": "x"})   # 欄位不齊
+        bl.wifi_keep(self.b)
+        bl.reboot(self.b)
+        self.assertTrue(self.link.board.kept and self.link.board.rebooted)
+
+    def test_wifi_scan(self):
+        items = bl.wifi_scan(self.b, timeout=5, sleep=lambda s: None)
+        self.assertEqual(items, [("GG iPhone", -48, 6, 0), ("Home 家", -70, 11, 1)])
+        self.assertEqual(self.link.board.scan_polls, 3)
 
     def test_backup_file(self):
         text = bl.backup_file_text("LP1:ABC", {"ver": "v", "board": "MINI"}, "COM5")
