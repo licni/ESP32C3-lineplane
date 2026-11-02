@@ -1,4 +1,5 @@
-# 版本流水號: r3 (2026-11-02) 改名「線控飛機設定器」LineplaneConfig.exe,APP_VERSION 2.0.0(GG:燒錄器改寫成設定器):
+# 版本流水號: r4 (2026-11-02) 分頁改成自製大按鈕(TabBar,GG:ttk 的分頁框太不明顯);APP_VERSION 2.0.1
+# 舊: r3 (2026-11-02) 改名「線控飛機設定器」LineplaneConfig.exe,APP_VERSION 2.0.0(GG:燒錄器改寫成設定器):
 #   三個分頁(燒錄 / 設定與備份 / 板子訊息);USB 線開板子那一份設定網頁(board_link.py 本機轉送,需韌體 2026.11.02.2 以上);
 #   WiFi 也能開;匯出/匯入板上全部設定備份(USB 或 WiFi);燒完整燒錄檔前先問要不要匯出備份
 # 舊: r2 (2026-10-29) 韌體版本讓使用者選(GG:不要只下載最新版):版本清單,版本說明,保留設定選項;APP_VERSION 1.1.0
@@ -37,7 +38,7 @@ import serial.tools.list_ports
 import board_link
 import fw_image
 
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.0.1"
 TITLE = f"線控飛機設定器 v{APP_VERSION}"
 USB_API_MIN_FW = "2026.11.02.2"   # USB 設定通道從這版韌體開始
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
@@ -225,6 +226,60 @@ class Monitor:
         self.on_state(False, "監看已停止")
 
 
+class TabBar(ttk.Frame):
+    """分頁列:自己畫的大按鈕(ttk.Notebook 在 Windows 的分頁框太淡,GG 看不出來). 選中的藍底白字加底線,其他灰底.
+    介面對齊 Notebook 的 select/index,切換時呼叫 on_change."""
+
+    SEL_BG, SEL_FG, BG, FG = "#1f5fbf", "#ffffff", "#e4e7ec", "#333333"
+
+    def __init__(self, parent, on_change=None):
+        super().__init__(parent)
+        self.on_change = on_change
+        self.buttons = []
+        self.frames = []
+        self.cur = -1
+        self.bar = tk.Frame(self, background="#c9ced6")
+        self.bar.pack(fill="x")
+        self.body = ttk.Frame(self)
+        self.body.pack(fill="both", expand=True)
+        self.body.columnconfigure(0, weight=1)
+        self.body.rowconfigure(0, weight=1)
+
+    def add(self, frame, text):
+        i = len(self.frames)
+        fam = "Microsoft JhengHei UI" if sys.platform == "win32" else "TkDefaultFont"
+        b = tk.Button(self.bar, text=text, font=(fam, 13, "bold"), relief="flat", bd=0, cursor="hand2", padx=22, pady=9,
+                      activebackground=self.SEL_BG, activeforeground=self.SEL_FG, command=lambda i=i: self.select(i))
+        b.pack(side="left", padx=(0, 2))
+        self.buttons.append(b)
+        self.frames.append(frame)
+        frame.grid(in_=self.body, row=0, column=0, sticky="nsew")
+        frame.grid_remove()
+        if self.cur < 0:
+            self.select(0)
+
+    def select(self, i=None):
+        if i is None:
+            return self.cur
+        i = int(i)
+        if not 0 <= i < len(self.frames):
+            return
+        for j, (b, f) in enumerate(zip(self.buttons, self.frames)):
+            sel = j == i
+            b.configure(background=self.SEL_BG if sel else self.BG, foreground=self.SEL_FG if sel else self.FG)
+            if sel:
+                f.grid()
+            else:
+                f.grid_remove()
+        changed = i != self.cur
+        self.cur = i
+        if changed and self.on_change:
+            self.on_change(i)
+
+    def index(self, i):
+        return int(i)
+
+
 class App:
     def __init__(self, root):
         self.root = root
@@ -275,14 +330,14 @@ class App:
         self.port_hint = ttk.Label(f1, text="", foreground="#555")
         self.port_hint.grid(row=1, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
-        self.nb = ttk.Notebook(main)
+        self.nb = TabBar(main, on_change=lambda i: self._save_tab())
         self.nb.grid(row=1, column=0, sticky="nsew", **pad)
-        tab_flash = ttk.Frame(self.nb, padding=4)
-        tab_cfg = ttk.Frame(self.nb, padding=4)
-        tab_mon = ttk.Frame(self.nb, padding=4)
-        self.nb.add(tab_flash, text="  燒錄  ")
-        self.nb.add(tab_cfg, text="  設定與備份  ")
-        self.nb.add(tab_mon, text="  板子訊息  ")
+        tab_flash = ttk.Frame(self.nb.body, padding=(4, 8, 4, 4))
+        tab_cfg = ttk.Frame(self.nb.body, padding=(4, 8, 4, 4))
+        tab_mon = ttk.Frame(self.nb.body, padding=(4, 8, 4, 4))
+        self.nb.add(tab_flash, text="① 燒錄")
+        self.nb.add(tab_cfg, text="② 設定與備份")
+        self.nb.add(tab_mon, text="③ 板子訊息")
         tab_flash.columnconfigure(0, weight=1)
         tab_cfg.columnconfigure(0, weight=1)
         tab_mon.columnconfigure(0, weight=1)
@@ -442,7 +497,6 @@ class App:
         self.status.pack(side="bottom", fill="x")
         self._log(f"{TITLE}. 接上開發板後會自動偵測序列埠. 燒錄與測試前請拆下螺旋槳.", "tool")
         self.nb.select({"flash": 0, "cfg": 1, "mon": 2}.get(self.prefs.get("tab", "flash"), 0))
-        self.nb.bind("<<NotebookTabChanged>>", lambda e: self._save_tab())
 
     # ---------------- 共用 ----------------
     def _log(self, text, tag=None):
