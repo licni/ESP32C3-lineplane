@@ -1,4 +1,5 @@
-# 版本流水號: r9 (2026-11-02) 預設保留板上設定(GG:燒完設定不見);燒完整燒錄檔時自動備份板上設定,燒完檢查後自動寫回(含 WiFi:套用後重開機再保持);APP_VERSION 2.1.0
+# 版本流水號: r10 (2026-11-02) 監看區至少 12 行(GG);APP_VERSION 2.1.1
+# 舊: r9 (2026-11-02) 預設保留板上設定(GG:燒完設定不見);燒完整燒錄檔時自動備份板上設定,燒完檢查後自動寫回(含 WiFi:套用後重開機再保持);APP_VERSION 2.1.0
 # 舊: r8 (2026-11-02) 高 DPI(GG:第一次打開只看到一半):視窗開啟時依內容需要的大小與螢幕自動調整,放不下就最大化;折行寬度依 DPI 縮放;APP_VERSION 2.0.5
 # 舊: r7 (2026-11-02) 板子訊息併入燒錄頁(GG):兩個分頁「燒錄與板子訊息」「設定與備份」;APP_VERSION 2.0.4
 # 舊: r6 (2026-11-02) 版本說明去掉 Markdown 粗體符號(GG:說明要給終端使用者看);APP_VERSION 2.0.3
@@ -43,7 +44,7 @@ import serial.tools.list_ports
 import board_link
 import fw_image
 
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.1.1"
 TITLE = f"線控飛機設定器 v{APP_VERSION}"
 USB_API_MIN_FW = "2026.11.02.2"   # USB 設定通道從這版韌體開始
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
@@ -481,7 +482,7 @@ class App:
         txt.columnconfigure(0, weight=1)
         txt.rowconfigure(0, weight=1)
         mono = ("Consolas", 10) if sys.platform == "win32" else ("Monospace", 10)
-        self.log = tk.Text(txt, height=6, wrap="word", font=mono, background="#111", foreground="#ddd", insertbackground="#ddd")
+        self.log = tk.Text(txt, height=12, wrap="word", font=mono, background="#111", foreground="#ddd", insertbackground="#ddd")
         self.log.grid(row=0, column=0, sticky="nsew")
         sb = ttk.Scrollbar(txt, command=self.log.yview)
         sb.grid(row=0, column=1, sticky="ns")
