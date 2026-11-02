@@ -47,7 +47,7 @@
   GitHub Actions 在 Windows 打包 LineplaneConfig.exe,main 分支打包完自動發布 Release(標籤 config-v<APP_VERSION>,設為最新;雲端環境推不了標籤所以不靠標籤觸發).
   給使用者的固定網址 https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneConfig.exe ;發新版改 lineplane_config.py 的 APP_VERSION.
   兩個分頁:燒錄與板子訊息(序列監看在下方;版本清單讀韌體專案 Releases,依賴發布工具的命名 Release 標籤 v版本,firmware-/lineplane-full-版本[-oled].bin,讀不到時退回 manifest;
-  舊版沒有完整燒錄檔時用最新完整檔前 64KB 組合;預設保留板上設定;燒完整檔時自動備份板上設定,燒完檢查後自動寫回並重開機按保持),設定與備份(USB 線或 WiFi 開板子那一份網頁;備份匯出/匯入).
+  舊版沒有完整燒錄檔時用最新完整檔前 64KB 組合;燒錄方式「更新(保留設定,燒更新檔)/全新燒錄(清空,燒完整檔)」,按開始燒錄自動下載;兩種都先自動備份存檔不寫回;空白板子選更新會問改全新;自選檔案收在進階;不再有螢幕板選項),設定與備份(USB 線或 WiFi 開板子那一份網頁;備份匯出/匯入).
   **USB 設定通道**(韌體 2026.11.02.2 起):web_server.cpp 的 server 是轉接物件 Req,同一組處理函式服務 WiFi 與序列埠「@Q」請求(協定見 web_server.cpp 與 tools/flasher/board_link.py);
   電腦端 board_link.LocalProxy 在 127.0.0.1 開小伺服器轉送,網頁看 location.hostname 是 127.0.0.1 就進 USB 模式(韌體更新卡換提示,待確認不自動確認).
   改 publish_firmware.py 的命名,身分標記格式,分割表時要一起改 tools/flasher/fw_image.py;改 @Q/@A 協定時兩邊一起改.
