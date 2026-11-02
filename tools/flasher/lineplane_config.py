@@ -1,4 +1,6 @@
-# 版本流水號: r13 (2026-11-03) 三個分頁「① 燒錄與板子訊息 ② 設定 ③ 備份」(GG:備份拆出去);區塊改成自製 _section(灰邊框 + 淺藍標題色帶,
+# 版本流水號: r14 (2026-11-03) 燒錄後檢查的 WiFi 項目等到連上或退回熱點為止(最多 45 秒)再顯示結果與網址(GG:更新後顯示「連線中」以為沒連上;
+#   原本只問一次 net,板子還在掃描);設定了家用 WiFi 卻退到熱點用黃字提醒;完成對話框寫 WiFi 結果;APP_VERSION 2.3.2
+# 舊: r13 (2026-11-03) 三個分頁「① 燒錄與板子訊息 ② 設定 ③ 備份」(GG:備份拆出去);區塊改成自製 _section(灰邊框 + 淺藍標題色帶,
 #   GG:ttk.LabelFrame 的框線太淡,連線方式/WiFi 設定分不出來);連線方式在 ②③ 都有(共用變數);APP_VERSION 2.3.1
 # 舊: r12 (2026-11-03) WiFi 設定區 + 板子訊息中文化(GG:使用者用手機熱點怎樣都連不上;快捷指令對終端使用者沒意義,回應要中文):
 #   設定與備份頁新增「WiFi 設定」(USB 線):讀板上設定,選「板子自己開熱點(熱點名稱固定開頭 + 可改後綴,密碼)/ 連家用 WiFi 或手機熱點(名稱可搜尋附近,密碼)」,
@@ -56,7 +58,7 @@ import serial.tools.list_ports
 import board_link
 import fw_image
 
-APP_VERSION = "2.3.1"
+APP_VERSION = "2.3.2"
 TITLE = f"線控飛機設定器 v{APP_VERSION}"
 USB_API_MIN_FW = "2026.11.02.2"   # USB 設定通道從這版韌體開始
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
@@ -1339,25 +1341,38 @@ class App:
                 q.put(("check", ("mpu", "bad", "找不到:檢查 SDA→GPIO5,SCL→GPIO6,VCC,GND 接線")))
                 fails.append(("感測器", False))
 
-            line = ask("net", lambda s: s.startswith("wifi="), 5)
-            if line is None:
-                q.put(("check", ("wifi", "warn", "沒有回應")))
+            # WiFi:開機後先掃描再連家用 WiFi,要 5~30 秒;只問一次會停在「連線中」(GG 2026-11-03 更新後以為沒連上). 問到不是連線中為止,最多 45 秒.
+            q.put(("stage", "等待 WiFi 連線 …"))
+            kv, t_net = None, time.time()
+            while time.time() - t_net < 45:
+                line = ask("net", lambda s: s.startswith("wifi="), 5)
+                kv = parse_net(line) if line else None
+                if not kv or kv["wifi"] != "connecting":
+                    break
+                q.put(("check", ("wifi", "run", f"正在連「{kv['ssid']}」…(已 {time.time() - t_net:.0f} 秒;連不上會自動改開熱點)")))
+                time.sleep(1)
+            if kv is None:
+                wifi_msg = "沒有回應"
+                q.put(("check", ("wifi", "warn", wifi_msg)))
+            elif kv["wifi"] == "sta":
+                wifi_msg = f"已連上「{kv['ssid']}」,IP {kv['ip']}:手機(同一個網路)開 http://{kv['ip']},iPhone 與電腦也可以開 http://{kv['host']}"
+                q.put(("check", ("wifi", "ok", wifi_msg)))
+            elif kv["wifi"] == "ap" and kv["ssid"]:
+                wifi_msg = f"設定了「{kv['ssid']}」但沒連上,板子改開自己的熱點(手機連板子熱點後開 http://{kv['ip']}). 密碼或 2.4GHz 請到「設定」頁 WiFi 設定重試"
+                q.put(("check", ("wifi", "warn", wifi_msg)))
+            elif kv["wifi"] == "ap":
+                wifi_msg = f"板子自己開熱點:手機連板子的 WiFi 後開 http://{kv['ip']}"
+                q.put(("check", ("wifi", "ok", wifi_msg)))
             else:
-                kv = dict(re.findall(r"(\w+)=(\S*)", line))
-                mode = kv.get("wifi")
-                if mode == "ap":
-                    q.put(("check", ("wifi", "ok", f"熱點模式 {kv.get('ip')}(手機連熱點後開 http://192.168.4.1)")))
-                elif mode == "sta":
-                    q.put(("check", ("wifi", "ok", f"已連家用 WiFi,IP {kv.get('ip')},http://{kv.get('host')}")))
-                else:
-                    q.put(("check", ("wifi", "run", "連線中(開機後幾秒內會開熱點或連上家用 WiFi)")))
+                wifi_msg = "等了 45 秒還在連線中,請稍後按「板子狀態」看結果"
+                q.put(("check", ("wifi", "warn", wifi_msg)))
             restored = ""
             bad = [n for n, ok in fails if not ok]
             q.put(("stage", "檢查完成" if not bad else "檢查完成,有項目沒通過"))
             q.put(("okmsg", "檢查完成. 序列監看保持開著,可以繼續看板子回報的訊息."))
             if after_flash and not bad:
-                q.put(("dialog", ("完成", f"燒錄與檢查完成,板子韌體 {ver}.{restored}\n\n接下來可以到「設定」頁按「開啟設定網頁」用 USB 線設定,"
-                                  "或手機連板子的 WiFi 熱點開 http://192.168.4.1.\n詳細步驟見專案 README 與使用說明書.", False)))
+                q.put(("dialog", ("完成", f"燒錄與檢查完成,板子韌體 {ver}.{restored}\n\nWiFi:{wifi_msg}\n\n"
+                                  "也可以到「設定」頁按「開啟設定網頁」用 USB 線設定.\n詳細步驟見專案 README 與使用說明書.", False)))
             elif after_flash:
                 q.put(("dialog", ("燒錄完成,檢查有問題", f"燒錄完成,板子韌體 {ver},但這些項目沒通過:{','.join(bad)}.\n請看「燒錄與檢查」的說明.", True)))
         finally:
