@@ -53,10 +53,14 @@
   **每天只留當天最新一版**(GG 2026-09-14):同一天再發布時工具自動刪掉當天舊的 Release/tag/韌體檔,當天修改合併進最新版的 Release 與 CHANGELOG.
   --notes 是板子顯示的精簡版(≤400 位元組,寫當天合併重點),--day-notes-file 是當天所有修改的完整條列(自己整理,拿掉已被取代的內容). firmware/ 只留最近 3 天.
 - **線控飛機設定器** tools/flasher/(2026-10-21 燒錄工具起家,2026-11-02 GG 改成設定器):Python tkinter + esptool + pyserial,
-  GitHub Actions 在 Windows 打包 LineplaneConfig.exe,main 分支打包完自動發布 Release(標籤 config-v<APP_VERSION>,設為最新;雲端環境推不了標籤所以不靠標籤觸發).
+  GitHub Actions 在 Windows 打包 LineplaneConfig.exe,推上 public 的 main(tools/flasher/ 有變更)就自動打包並發布 Release(標籤 config-v<APP_VERSION>,設為最新;
+  2026-11-03 之前 workflow 的 push 只列 tags 沒列 branches,推 main 從來沒自動跑過,每版都是 `gh workflow run flasher.yml` 手動觸發;已補 branches: main).
   給使用者的固定網址 https://github.com/licni/ESP32C3-lineplane/releases/latest/download/LineplaneConfig.exe ;發新版改 lineplane_config.py 的 APP_VERSION.
-  兩個分頁:燒錄與板子訊息(序列監看在下方;版本清單讀韌體專案 Releases,依賴發布工具的命名 Release 標籤 v版本,firmware-/lineplane-full-版本[-oled].bin,讀不到時退回 manifest;
-  舊版沒有完整燒錄檔時用最新完整檔前 64KB 組合;燒錄方式「更新(保留設定,燒更新檔)/全新燒錄(清空,燒完整檔)」,按開始燒錄自動下載;兩種都先自動備份存檔不寫回;空白板子選更新會問改全新;自選檔案收在進階;不再有螢幕板選項),設定與備份(USB 線或 WiFi 開板子那一份網頁;備份匯出/匯入).
+  本機打包:雙擊 tools\flasher\build_exe.bat(系統 Python 3.14 可用,PyInstaller 版本已放寬),產出 tools/flasher/dist/LineplaneConfig.exe(不進版本庫).
+  三個分頁(GG 2026-11-03):① 燒錄與板子訊息(序列監看在下方,板子訊息翻成中文;版本清單讀韌體專案 Releases,依賴發布工具的命名 Release 標籤 v版本,firmware-/lineplane-full-版本[-oled].bin,讀不到時退回 manifest;
+  舊版沒有完整燒錄檔時用最新完整檔前 64KB 組合;燒錄方式「更新(保留設定,燒更新檔)/全新燒錄(清空,燒完整檔)」,按開始燒錄自動下載;兩種都先自動備份存檔不寫回;空白板子選更新會問改全新;自選檔案收在進階;不再有螢幕板選項),
+  ② 設定(USB 線或 WiFi 開板子那一份網頁;WiFi 設定:熱點名稱固定開頭 + 後綴/密碼,或連家用 WiFi / 手機熱點,套用後重開測試,連上自動 keep 並大字顯示網址),③ 備份(匯出/匯入).
+  區塊用自製 _section(灰邊框 + 淺藍標題色帶;GG:ttk.LabelFrame 框線太淡).
   **USB 設定通道**(韌體 2026.11.02.2 起):web_server.cpp 的 server 是轉接物件 Req,同一組處理函式服務 WiFi 與序列埠「@Q」請求(協定見 web_server.cpp 與 tools/flasher/board_link.py);
   電腦端 board_link.LocalProxy 在 127.0.0.1 開小伺服器轉送,網頁看 location.hostname 是 127.0.0.1 就進 USB 模式(韌體更新卡換提示,待確認不自動確認).
   改 publish_firmware.py 的命名,身分標記格式,分割表時要一起改 tools/flasher/fw_image.py;改 @Q/@A 協定時兩邊一起改.

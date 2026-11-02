@@ -1,4 +1,6 @@
-# 版本流水號: r12 (2026-11-03) WiFi 設定區 + 板子訊息中文化(GG:使用者用手機熱點怎樣都連不上;快捷指令對終端使用者沒意義,回應要中文):
+# 版本流水號: r13 (2026-11-03) 三個分頁「① 燒錄與板子訊息 ② 設定 ③ 備份」(GG:備份拆出去);區塊改成自製 _section(灰邊框 + 淺藍標題色帶,
+#   GG:ttk.LabelFrame 的框線太淡,連線方式/WiFi 設定分不出來);連線方式在 ②③ 都有(共用變數);APP_VERSION 2.3.1
+# 舊: r12 (2026-11-03) WiFi 設定區 + 板子訊息中文化(GG:使用者用手機熱點怎樣都連不上;快捷指令對終端使用者沒意義,回應要中文):
 #   設定與備份頁新增「WiFi 設定」(USB 線):讀板上設定,選「板子自己開熱點(熱點名稱固定開頭 + 可改後綴,密碼)/ 連家用 WiFi 或手機熱點(名稱可搜尋附近,密碼)」,
 #   按「套用到板子並測試連線」→ 寫入 → 重開 → 等 WiFi 就緒 → 連上就自動保持(固定)並用大字顯示網址(IP 與 lineplane.local);連不上問要不要改回原設定.
 #   板子訊息區:快捷鈕改「板子狀態 / 重新開機」,板子回的英文訊息翻成中文(可勾「顯示原始訊息」),送指令列收進「進階」;APP_VERSION 2.3.0
@@ -29,7 +31,7 @@
 #  - 檢查:esptool 寫完逐段校驗檢查碼;重新開機後送序列指令 fw / mpu / net,確認版本,感測器與 WiFi.
 #  - 序列監看(燒錄頁下方):板子回報的訊息翻成中文顯示(translate_line;勾「顯示原始訊息」看英文原文),「板子狀態」送 fw/net/fs/mpu,
 #    「重新開機」送 reboot;「進階」才有送指令列(help 列出全部).
-#  - WiFi 設定(設定與備份頁,只走 USB):GET /api/wifi 讀 → POST /api/wifi 寫(板子存成試用)→ POST /api/reboot → 等板子回來 → 序列指令 net
+#  - WiFi 設定(設定頁,只走 USB):GET /api/wifi 讀 → POST /api/wifi 寫(板子存成試用)→ POST /api/reboot → 等板子回來 → 序列指令 net
 #    看 wifi=sta|ap|connecting → 符合要的模式就 POST /api/wifi/keep 固定,大字顯示網址;要連家用 WiFi 卻退到熱點 = 連不上,問要不要改回原設定.
 # 序列埠一律 dtr=False, rts=False 再開(C3 原生 USB 把 DTR/RTS 切換當成重置).
 # 只用 Python 內建 tkinter + esptool + pyserial. 開發測試:python lineplane_config.py
@@ -54,7 +56,7 @@ import serial.tools.list_ports
 import board_link
 import fw_image
 
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.3.1"
 TITLE = f"線控飛機設定器 v{APP_VERSION}"
 USB_API_MIN_FW = "2026.11.02.2"   # USB 設定通道從這版韌體開始
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
@@ -453,9 +455,8 @@ class App:
         main.columnconfigure(0, weight=1)
         main.rowconfigure(1, weight=1)
 
-        # 序列埠(兩個分頁共用)
-        f1 = ttk.LabelFrame(main, text=" 開發板序列埠(USB 線) ", padding=6)
-        f1.grid(row=0, column=0, sticky="ew", **pad)
+        # 序列埠(三個分頁共用)
+        f1 = self._section(main, "開發板序列埠(USB 線)", 0)
         f1.columnconfigure(1, weight=1)
         self.auto_port = tk.BooleanVar(value=True)
         ttk.Checkbutton(f1, text="自動偵測", variable=self.auto_port, command=lambda: self._scan_ports(force=True)).grid(row=0, column=0, sticky="w")
@@ -471,15 +472,16 @@ class App:
         self.nb.grid(row=1, column=0, sticky="nsew", **pad)
         tab_flash = ttk.Frame(self.nb.body, padding=(4, 8, 4, 4))
         tab_cfg = ttk.Frame(self.nb.body, padding=(4, 8, 4, 4))
+        tab_bk = ttk.Frame(self.nb.body, padding=(4, 8, 4, 4))
         self.nb.add(tab_flash, text="① 燒錄與板子訊息")
-        self.nb.add(tab_cfg, text="② 設定與備份")
-        tab_flash.columnconfigure(0, weight=1)
-        tab_cfg.columnconfigure(0, weight=1)
+        self.nb.add(tab_cfg, text="② 設定")
+        self.nb.add(tab_bk, text="③ 備份")
+        for t in (tab_flash, tab_cfg, tab_bk):
+            t.columnconfigure(0, weight=1)
         tab_flash.rowconfigure(2, weight=1)   # 板子訊息區吃掉剩下的高度
 
         # 燒錄分頁 1. 韌體檔
-        f2 = ttk.LabelFrame(tab_flash, text=" 1. 韌體檔 ", padding=6)
-        f2.grid(row=0, column=0, sticky="ew", **pad)
+        f2 = self._section(tab_flash, "1. 韌體檔", 0)
         f2.columnconfigure(1, weight=1)
         self.board_var = tk.StringVar(value="MINI")   # 帶螢幕板已不維護(GG 2026-10-29),設定器只燒普通版
         ttk.Label(f2, text="韌體版本").grid(row=0, column=0, sticky="w")
@@ -521,8 +523,7 @@ class App:
         self.file_info.grid(row=1, column=1, columnspan=3, sticky="w", padx=6, pady=(4, 0))
 
         # 燒錄分頁 2. 燒錄與檢查
-        f3 = ttk.LabelFrame(tab_flash, text=" 2. 燒錄與檢查 ", padding=6)
-        f3.grid(row=1, column=0, sticky="ew", **pad)
+        f3 = self._section(tab_flash, "2. 燒錄與檢查", 1)
         f3.columnconfigure(1, weight=1)
         self.flash_btn = ttk.Button(f3, text="開始燒錄", command=self._start_flash, style="Big.TButton")
         self.flash_btn.grid(row=0, column=0, rowspan=2, sticky="ns", padx=(0, 10))
@@ -551,23 +552,12 @@ class App:
             lab.grid(row=i // 2, column=(i % 2) * 2 + 1, sticky="w", padx=6)
             self.checks[key] = lab
 
-        # 設定與備份分頁
-        fc = ttk.LabelFrame(tab_cfg, text=" 連線方式 ", padding=6)
-        fc.grid(row=0, column=0, sticky="ew", **pad)
-        fc.columnconfigure(1, weight=1)
+        # 設定分頁(連線方式在設定頁與備份頁都有,共用同一組變數)
         self.link_var = tk.StringVar(value=self.prefs.get("link", "usb"))
-        ttk.Radiobutton(fc, text="USB 線(上面選的序列埠;韌體要 " + USB_API_MIN_FW + " 以上)", value="usb", variable=self.link_var,
-                        command=self._save_link).grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Radiobutton(fc, text="WiFi,板子位址:", value="wifi", variable=self.link_var, command=self._save_link).grid(row=1, column=0, sticky="w")
         self.host_var = tk.StringVar(value=self.prefs.get("host", "lineplane.local"))
-        he = ttk.Entry(fc, textvariable=self.host_var)
-        he.grid(row=1, column=1, sticky="ew", padx=6)
-        he.bind("<FocusOut>", lambda e: self._save_link())
-        ttk.Label(fc, text="連家用 WiFi 用 lineplane.local(或板子的 IP);電腦連板子熱點時用 192.168.4.1", foreground="#555").grid(
-            row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        self._conn_section(tab_cfg, 0)
 
-        fs = ttk.LabelFrame(tab_cfg, text=" 設定板子(和手機看到的網頁完全相同) ", padding=6)
-        fs.grid(row=1, column=0, sticky="ew", **pad)
+        fs = self._section(tab_cfg, "設定板子(和手機看到的網頁完全相同)", 1)
         fs.columnconfigure(1, weight=1)
         self.cfg_btn = ttk.Button(fs, text="開啟設定網頁", command=self._open_config, style="Big.TButton")
         self.cfg_btn.grid(row=0, column=0, rowspan=2, sticky="ns", padx=(0, 10))
@@ -577,8 +567,7 @@ class App:
                            "WiFi:直接開板子的網頁,和手機一樣.", foreground="#555", wraplength=W(620), justify="left").grid(row=1, column=1, sticky="w", pady=(4, 0))
 
         # WiFi 設定(GG 2026-11-03:使用者用手機熱點怎樣都連不上,要能在設定器改;只走 USB 線,改完板子重開會斷 WiFi)
-        fw = ttk.LabelFrame(tab_cfg, text=" WiFi 設定(用 USB 線設定板子怎麼連網) ", padding=6)
-        fw.grid(row=2, column=0, sticky="ew", **pad)
+        fw = self._section(tab_cfg, "WiFi 設定(用 USB 線設定板子怎麼連網)", 2)
         fw.columnconfigure(1, weight=1)
         top = ttk.Frame(fw)
         top.grid(row=0, column=0, columnspan=3, sticky="ew")
@@ -644,8 +633,9 @@ class App:
         self._wifi_mode_changed()
         self._wifi_ap_preview()
 
-        fb = ttk.LabelFrame(tab_cfg, text=" 板上設定備份(全部 6 組飛行風格 + 起飛降落與安全 / 安裝 / 電變 / WiFi) ", padding=6)
-        fb.grid(row=3, column=0, sticky="ew", **pad)
+        # 備份分頁(GG 2026-11-03:從設定頁拆出來)
+        self._conn_section(tab_bk, 0)
+        fb = self._section(tab_bk, "板上設定備份(全部 6 組飛行風格 + 起飛降落與安全 / 安裝 / 電變 / WiFi)", 1)
         fb.columnconfigure(2, weight=1)
         self.bk_out_btn = ttk.Button(fb, text="匯出板上設定備份…", command=lambda: self._backup_export())
         self.bk_out_btn.grid(row=0, column=0, sticky="w")
@@ -654,12 +644,12 @@ class App:
         self.bk_state = ttk.Label(fb, text="", wraplength=W(600), justify="left")
         self.bk_state.grid(row=0, column=2, sticky="w", padx=8)
         ttk.Label(fb, text="匯出存成文字檔(裡面是板子網頁「備份」頁用的設定備份碼). 匯入會先檢查,顯示內容後才套用並儲存;\n"
-                           "板上有未儲存的變更時會先問要不要儲存. 含 WiFi 的備份套用後 WiFi 設定為試用,重新開機後 3 分鐘內要在網頁按「保持」.",
+                           "板上有未儲存的變更時會先問要不要儲存. 含 WiFi 的備份套用後 WiFi 設定為試用,重新開機後 3 分鐘內要在網頁按「保持」.\n"
+                           "燒錄頁的「開始燒錄」也會先自動備份一份到電腦(%LOCALAPPDATA%\\LineplaneConfig\\backups).",
                   foreground="#555", wraplength=W(700), justify="left").grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
         # 燒錄分頁 3. 板子訊息(序列監看)
-        f4 = ttk.LabelFrame(tab_flash, text=" 3. 板子回報訊息(序列監看) ", padding=6)
-        f4.grid(row=2, column=0, sticky="nsew", **pad)
+        f4 = self._section(tab_flash, "3. 板子回報訊息(序列監看)", 2, fill="nsew")
         f4.columnconfigure(0, weight=1)
         f4.rowconfigure(1, weight=1)
         bar = ttk.Frame(f4)
@@ -713,7 +703,31 @@ class App:
         self.status = ttk.Label(r, text="", relief="sunken", anchor="w", padding=(6, 2))
         self.status.pack(side="bottom", fill="x")
         self._log(f"{TITLE}. 接上開發板後會自動偵測序列埠. 燒錄與測試前請拆下螺旋槳.", "tool")
-        self.nb.select({"flash": 0, "cfg": 1}.get(self.prefs.get("tab", "flash"), 0))
+        self.nb.select({"flash": 0, "cfg": 1, "bk": 2}.get(self.prefs.get("tab", "flash"), 0))
+
+    def _section(self, parent, title, row, fill="ew"):
+        """有明顯邊框與標題色帶的區塊(GG 2026-11-03:ttk.LabelFrame 的框線太淡,區塊分不出來). 回內容框(用 grid 排)."""
+        outer = tk.Frame(parent, highlightbackground="#9aa4b2", highlightthickness=1, background="#f0f0f0")
+        outer.grid(row=row, column=0, sticky=fill, padx=8, pady=5)
+        fam = "Microsoft JhengHei UI" if sys.platform == "win32" else "TkDefaultFont"
+        tk.Label(outer, text=title, font=(fam, 11, "bold"), background="#dde6f3", foreground="#1f3a68", anchor="w", padx=8, pady=4).pack(fill="x")
+        body = ttk.Frame(outer, padding=8)
+        body.pack(fill="both", expand=True)
+        return body
+
+    def _conn_section(self, parent, row):
+        """連線方式(USB 線 / WiFi 位址),設定頁與備份頁各一份,綁同一組變數."""
+        fc = self._section(parent, "連線方式", row)
+        fc.columnconfigure(1, weight=1)
+        ttk.Radiobutton(fc, text="USB 線(上面選的序列埠;韌體要 " + USB_API_MIN_FW + " 以上)", value="usb", variable=self.link_var,
+                        command=self._save_link).grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Radiobutton(fc, text="WiFi,板子位址:", value="wifi", variable=self.link_var, command=self._save_link).grid(row=1, column=0, sticky="w")
+        he = ttk.Entry(fc, textvariable=self.host_var)
+        he.grid(row=1, column=1, sticky="ew", padx=6)
+        he.bind("<FocusOut>", lambda e: self._save_link())
+        ttk.Label(fc, text="連家用 WiFi 用 lineplane.local(或板子的 IP);電腦連板子熱點時用 192.168.4.1", foreground="#555").grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        return fc
 
     def _fit_window(self):
         """開啟時依內容需要的大小與螢幕決定視窗大小(高 DPI 下內容比固定尺寸大,板子訊息區會被擠到看不到);放不下就最大化."""
@@ -721,7 +735,7 @@ class App:
         r.update_idletasks()
         sw, sh = r.winfo_screenwidth(), r.winfo_screenheight()
         need_w, need_h = r.winfo_reqwidth() + 16, r.winfo_reqheight() + 16
-        # 沒顯示的分頁(設定與備份頁有 WiFi 設定區)可能比目前這頁高:兩頁都要放得下
+        # 沒顯示的分頁(設定頁有 WiFi 設定區)可能比目前這頁高:每一頁都要放得下
         shown = self.nb.frames[self.nb.cur].winfo_reqheight()
         need_h += max(0, max(f.winfo_reqheight() for f in self.nb.frames) - shown)
         w, h = min(sw - 40, max(int(880 * self.dpi), need_w)), min(sh - 90, max(620, need_h))
@@ -918,7 +932,7 @@ class App:
     def _mode_changed(self):
         keep = self.mode_var.get() == "keep"
         self.mode_hint.configure(text=("只換程式,板上設定(飛行參數,WiFi)完全不動. 燒錄前仍會自動備份一份存檔當保險."
-                                       if keep else "整片重寫,板上設定全部回出廠值. 燒錄前會自動備份板上設定存成檔案(不會自動寫回;要的話到「設定與備份」頁匯入). 全新空白板子用這個."))
+                                       if keep else "整片重寫,板上設定全部回出廠值. 燒錄前會自動備份板上設定存成檔案(不會自動寫回;要的話到「備份」頁匯入). 全新空白板子用這個."))
         self.erase_cb.configure(state="normal" if not keep else "disabled")
         self._show_notes()
 
@@ -1342,7 +1356,7 @@ class App:
             q.put(("stage", "檢查完成" if not bad else "檢查完成,有項目沒通過"))
             q.put(("okmsg", "檢查完成. 序列監看保持開著,可以繼續看板子回報的訊息."))
             if after_flash and not bad:
-                q.put(("dialog", ("完成", f"燒錄與檢查完成,板子韌體 {ver}.{restored}\n\n接下來可以到「設定與備份」頁按「開啟設定網頁」用 USB 線設定,"
+                q.put(("dialog", ("完成", f"燒錄與檢查完成,板子韌體 {ver}.{restored}\n\n接下來可以到「設定」頁按「開啟設定網頁」用 USB 線設定,"
                                   "或手機連板子的 WiFi 熱點開 http://192.168.4.1.\n詳細步驟見專案 README 與使用說明書.", False)))
             elif after_flash:
                 q.put(("dialog", ("燒錄完成,檢查有問題", f"燒錄完成,板子韌體 {ver},但這些項目沒通過:{','.join(bad)}.\n請看「燒錄與檢查」的說明.", True)))
@@ -1359,7 +1373,7 @@ class App:
         save_prefs(self.prefs)
 
     def _save_tab(self):
-        self.prefs["tab"] = ["flash", "cfg"][self.nb.index(self.nb.select())]
+        self.prefs["tab"] = ["flash", "cfg", "bk"][self.nb.index(self.nb.select())]
         save_prefs(self.prefs)
         # 切到設定頁時順手把板上 WiFi 設定讀進來(有板子,沒在忙,而且還沒讀過)
         if self.prefs["tab"] == "cfg" and not self.busy and self._port() and not getattr(self, "wifi_loaded", False):

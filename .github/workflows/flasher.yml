@@ -1,4 +1,5 @@
-# 版本流水號: r3 (2026-11-02) 改名設定器 LineplaneConfig.exe(GG),Release 標籤 config-v<APP_VERSION>;測試加 test_board_link
+# 版本流水號: r4 (2026-11-03) push 觸發加 branches: main(原本只列 tags,GitHub 就只在推標籤時跑,推 main 從來沒自動打包過,每版都是手動 dispatch)
+# 舊: r3 (2026-11-02) 改名設定器 LineplaneConfig.exe(GG),Release 標籤 config-v<APP_VERSION>;測試加 test_board_link
 # 舊: r2 (2026-10-21) main 分支打包完直接發布 Release(標籤 flasher-v<APP_VERSION>,設為最新),不用另外推標籤
 # 舊: r1 (2026-10-21) 初版:在 Windows 打包燒錄工具 LineplaneFlasher.exe
 # - 改到 tools/flasher/ 就打包,exe 放在這次執行的 Artifacts(Actions 頁面下載).
@@ -9,6 +10,8 @@ name: 設定器 exe
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "tools/flasher/**"
       - ".github/workflows/flasher.yml"
@@ -84,10 +87,11 @@ jobs:
             2. 用可以傳資料的 USB 線接上 ESP32-C3 開發板,程式會自動找到板子.
             3. **燒錄與板子訊息**頁:「韌體版本」預設最新版,「燒錄方式」預設「更新:保留板上設定」,按「開始燒錄」就會自動下載、備份板上設定、燒錄、檢查.
                全新空白板子選「全新燒錄」(板子沒回應時程式也會問你要不要改用).
-            4. **設定與備份**頁:按「開啟設定網頁」,用電腦瀏覽器打開和手機一樣的設定網頁(USB 線或 WiFi 都可以;
+            4. **設定**頁:按「開啟設定網頁」,用電腦瀏覽器打開和手機一樣的設定網頁(USB 線或 WiFi 都可以;
                USB 線需要韌體 2026.11.02.2 以上,先在燒錄頁更新). **WiFi 設定**:選板子自己開熱點(可改熱點名稱後綴與密碼)或連家用 WiFi / 手機熱點
-               (可搜尋附近 WiFi),按「套用到板子並測試連線」,連上了自動固定並用大字顯示手機要開的網址. 「匯出 / 匯入備份」把板上全部設定存成檔案或還原.
-            5. 燒錄頁下方的**板子訊息**:板子回報的訊息翻成中文;「板子狀態」一鍵看版本,WiFi,飛行狀態,感測器.
+               (可搜尋附近 WiFi),按「套用到板子並測試連線」,連上了自動固定並用大字顯示手機要開的網址.
+            5. **備份**頁:「匯出 / 匯入備份」把板上全部設定存成檔案或還原.
+            6. 燒錄頁下方的**板子訊息**:板子回報的訊息翻成中文;「板子狀態」一鍵看版本,WiFi,飛行狀態,感測器.
 
             燒錄與測試時請拆下螺旋槳. 找不到板子時:按住板子上的 BOOT 鍵,拔掉再插上 USB,放開 BOOT.
             詳細說明:https://github.com/licni/ESP32C3-lineplane/blob/main/tools/flasher/README.md

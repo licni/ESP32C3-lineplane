@@ -1,4 +1,5 @@
-# 燒錄工具執行與打包需要的套件(固定版本,打包結果才可重現)
+# 設定器執行與打包需要的套件. esptool 與 pyserial 釘死版本(燒錄行為可重現);
+# PyInstaller 放寬(2026-11-03,GG 電腦是 Python 3.14,6.11.1 只支援到 3.13),本機與 Actions 都抓 6.x 最新可用版.
 esptool==4.12.0
 pyserial==3.5
-pyinstaller==6.11.1
+pyinstaller>=6.11.1,<7
