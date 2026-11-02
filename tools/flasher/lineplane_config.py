@@ -1,4 +1,5 @@
-# 版本流水號: r8 (2026-11-02) 高 DPI(GG:第一次打開只看到一半):視窗開啟時依內容需要的大小與螢幕自動調整,放不下就最大化;折行寬度依 DPI 縮放;APP_VERSION 2.0.5
+# 版本流水號: r9 (2026-11-02) 預設保留板上設定(GG:燒完設定不見);燒完整燒錄檔時自動備份板上設定,燒完檢查後自動寫回(含 WiFi:套用後重開機再保持);APP_VERSION 2.1.0
+# 舊: r8 (2026-11-02) 高 DPI(GG:第一次打開只看到一半):視窗開啟時依內容需要的大小與螢幕自動調整,放不下就最大化;折行寬度依 DPI 縮放;APP_VERSION 2.0.5
 # 舊: r7 (2026-11-02) 板子訊息併入燒錄頁(GG):兩個分頁「燒錄與板子訊息」「設定與備份」;APP_VERSION 2.0.4
 # 舊: r6 (2026-11-02) 版本說明去掉 Markdown 粗體符號(GG:說明要給終端使用者看);APP_VERSION 2.0.3
 # 舊: r5 (2026-11-02) 連續燒多片(GG:自動偵測只有第一片會跳出):監看守著的埠不見了(換板子)就停掉監看改選新板子;APP_VERSION 2.0.2
@@ -42,7 +43,7 @@ import serial.tools.list_ports
 import board_link
 import fw_image
 
-APP_VERSION = "2.0.5"
+APP_VERSION = "2.1.0"
 TITLE = f"線控飛機設定器 v{APP_VERSION}"
 USB_API_MIN_FW = "2026.11.02.2"   # USB 設定通道從這版韌體開始
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
@@ -375,9 +376,9 @@ class App:
         self.dl_btn.pack(side="left", padx=(4, 0))
         self.notes = ttk.Label(f2, text="讀取版本清單中 …", foreground="#555", wraplength=W(700), justify="left")
         self.notes.grid(row=2, column=1, columnspan=2, sticky="w", padx=6, pady=(4, 0))
-        self.keep_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(f2, text="保留板上設定(只換韌體;已經燒過、正常使用中的板子才能勾)", variable=self.keep_var,
-                        command=self._show_notes).grid(row=3, column=1, columnspan=2, sticky="w", padx=6, pady=(4, 0))
+        self.keep_var = tk.BooleanVar(value=bool(self.prefs.get("keep", True)))
+        ttk.Checkbutton(f2, text="保留板上設定(建議:只換程式,設定完全不動. 全新空白板子才取消勾選,改燒完整燒錄檔)", variable=self.keep_var,
+                        command=self._keep_changed).grid(row=3, column=1, columnspan=2, sticky="w", padx=6, pady=(4, 0))
         ttk.Separator(f2).grid(row=4, column=0, columnspan=3, sticky="ew", pady=8)
         ttk.Label(f2, text="要燒的檔案").grid(row=5, column=0, sticky="w")
         self.file_var = tk.StringVar()
@@ -388,7 +389,7 @@ class App:
         self.file_info = ttk.Label(f2, text="尚未選擇檔案:先選版本按「下載這個版本」,或選電腦裡的 .bin", foreground="#555", wraplength=W(700), justify="left")
         self.file_info.grid(row=6, column=1, columnspan=2, sticky="w", padx=6, pady=(4, 0))
         self.erase_var = tk.BooleanVar(value=True)
-        self.erase_cb = ttk.Checkbutton(f2, text="燒錄前先清除整片(全新板子建議勾選)", variable=self.erase_var)
+        self.erase_cb = ttk.Checkbutton(f2, text="燒錄前先清除整片(只有完整燒錄檔會用到;全新板子建議勾選)", variable=self.erase_var)
         self.erase_cb.grid(row=7, column=1, columnspan=2, sticky="w", padx=6, pady=(4, 0))
 
         # 燒錄分頁 2. 燒錄與檢查
@@ -409,7 +410,7 @@ class App:
         ttk.Checkbutton(opt, text="燒錄完自動檢查", variable=self.auto_check).pack(side="left")
         self.bk_flash_btn = ttk.Button(opt, text="匯出板上設定備份…", command=lambda: self._backup_export())
         self.bk_flash_btn.pack(side="left", padx=(16, 4))
-        ttk.Label(opt, text="(完整燒錄檔會清掉板上設定;燒錄前會先問要不要備份)", foreground="#555").pack(side="left")
+        ttk.Label(opt, text="(燒完整燒錄檔時會自動備份板上設定,燒完檢查後自動寫回)", foreground="#555").pack(side="left")
         chk = ttk.Frame(f3)
         chk.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         self.checks = {}
@@ -694,6 +695,11 @@ class App:
         if not quiet:
             self._log(f"選擇韌體檔:{path}({kind},版本 {a['version'] or '不明'})", "tool")
 
+    def _keep_changed(self):
+        self.prefs["keep"] = self.keep_var.get()
+        save_prefs(self.prefs)
+        self._show_notes()
+
     def _load_releases(self):
         self.notes.configure(text="讀取版本清單中 …", foreground="#555")
 
@@ -814,19 +820,39 @@ class App:
             msg = "注意:" + a["warnings"][-1] + "\n\n" + msg
         if not messagebox.askokcancel("開始燒錄", msg, parent=self.root, icon="warning"):
             return
+        self.pending_restore = None
         if a["kind"] == "full":
-            # 完整燒錄檔會清掉板上設定:板子有 USB 設定通道就問要不要先匯出備份(空白板或舊韌體問不到,直接燒)
+            # 完整燒錄檔會清掉板上設定:板子有 USB 設定通道就自動備份到檔案,燒完檢查後自動寫回(空白板或舊韌體問不到,直接燒)
             fw = self._usb_probe(port, 2.0)
             if fw:
-                ans = messagebox.askyesnocancel("先備份板上設定?", f"板子目前韌體 {fw.get('ver')},板上設定燒錄後會全部清除.\n\n"
-                                                "要先把板上全部設定匯出成備份檔嗎?(燒完可以在「設定與備份」頁匯入)\n\n是 = 先匯出再燒錄,否 = 直接燒錄",
-                                                parent=self.root, icon="warning")
-                if ans is None:
-                    return
-                if ans:
-                    self._backup_export(then=lambda: self._start_flash_go(port, data, a))
-                    return
+                self._set_busy(True)
+                self.stage.configure(text="燒錄前先備份板上設定 …")
+                threading.Thread(target=self._auto_backup_then_flash, args=(port, data, a, fw), daemon=True).start()
+                return
         self._start_flash_go(port, data, a)
+
+    def _auto_backup_then_flash(self, port, data, a, fw):
+        """背景:匯出板上全部設定到 LOCALAPPDATA\\LineplaneConfig\\backups,成功才進入燒錄;失敗問使用者要不要照樣燒."""
+        q = self.q
+        try:
+            code, fw = board_link.backup_export(self.monitor.bridge, log=lambda m: q.put(("tool", m)),
+                                                ask_save=lambda: self._ask("板上有未儲存的變更", "板上有還沒儲存的設定變更,備份碼只能從已儲存的設定產生.\n\n要先儲存板上的變更再備份嗎?"))
+            d = os.path.join(data_dir(), "backups")
+            os.makedirs(d, exist_ok=True)
+            path = os.path.join(d, time.strftime("lineplane_backup_%Y%m%d_%H%M%S.txt"))
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(board_link.backup_file_text(code, fw, f"USB {port}(燒錄前自動備份)"))
+            self.pending_restore = (code, path)
+            q.put(("okmsg", f"燒錄前已自動備份板上設定:{path}(燒完檢查後自動寫回)"))
+            q.put(("bk_state", (f"燒錄前自動備份:{path}", "#1a7f37")))
+        except (board_link.BoardError, OSError, ValueError) as e:
+            q.put(("err", f"燒錄前自動備份失敗:{e}"))
+            if not self._ask("自動備份失敗", f"{e}\n\n燒完整燒錄檔會清掉板上設定. 不備份直接燒嗎?"):
+                q.put(("stage", "已取消"))
+                q.put(("done", None))
+                return
+        # 不送 done:busy 要一路保持到燒錄結束(送了會和 _start_flash_go 的 set_busy 搶,中間被解鎖)
+        self.root.after(0, lambda: self._start_flash_go(port, data, a))
 
     def _start_flash_go(self, port, data, a):
         self.monitor.stop()   # esptool 要用這個序列埠
@@ -1036,11 +1062,14 @@ class App:
                     q.put(("check", ("wifi", "ok", f"已連家用 WiFi,IP {kv.get('ip')},http://{kv.get('host')}")))
                 else:
                     q.put(("check", ("wifi", "run", "連線中(開機後幾秒內會開熱點或連上家用 WiFi)")))
+            restored = ""
+            if after_flash and getattr(self, "pending_restore", None):
+                restored = self._auto_restore(ask, q)
             bad = [n for n, ok in fails if not ok]
             q.put(("stage", "檢查完成" if not bad else "檢查完成,有項目沒通過"))
             q.put(("okmsg", "檢查完成. 序列監看保持開著,可以繼續看板子回報的訊息."))
             if after_flash and not bad:
-                q.put(("dialog", ("完成", f"燒錄與檢查完成,板子韌體 {ver}.\n\n接下來可以到「設定與備份」頁按「開啟設定網頁」用 USB 線設定,"
+                q.put(("dialog", ("完成", f"燒錄與檢查完成,板子韌體 {ver}.{restored}\n\n接下來可以到「設定與備份」頁按「開啟設定網頁」用 USB 線設定,"
                                   "或手機連板子的 WiFi 熱點開 http://192.168.4.1.\n詳細步驟見專案 README 與使用說明書.", False)))
             elif after_flash:
                 q.put(("dialog", ("燒錄完成,檢查有問題", f"燒錄完成,板子韌體 {ver},但這些項目沒通過:{','.join(bad)}.\n請看「燒錄與檢查」的說明.", True)))
@@ -1216,6 +1245,38 @@ class App:
                 self.q.put(("done", None))
 
         threading.Thread(target=job, daemon=True).start()
+
+    def _auto_restore(self, ask, q):
+        """燒完整燒錄檔後把燒錄前自動備份的設定寫回:套用 + 儲存 → 重開機(含 WiFi 的備份重開才生效)→ 按「保持」固定 WiFi 設定.
+        在檢查流程的執行緒裡跑(監看已連線). 回給完成對話框的一句話."""
+        code, path = self.pending_restore
+        self.pending_restore = None
+        try:
+            q.put(("stage", "寫回燒錄前備份的設定 …"))
+            bridge = self.monitor.bridge
+            if not board_link.probe(bridge, 3.0):
+                raise board_link.BoardError("板子沒有回應 USB 設定通道")
+            r, _ = board_link.backup_apply(bridge, code)
+            q.put(("okmsg", "燒錄前備份的設定已寫回並儲存"))
+            if r.get("wifisaved"):
+                # WiFi 設定要重開機才生效,重開後是「試用」:這裡透過 USB 按保持,使用者不用再開網頁按
+                q.put(("tool", "備份含 WiFi 設定:重新開機套用後自動按「保持」"))
+                with contextlib.suppress(board_link.BoardError):
+                    bridge.post("/api/reboot", timeout=5)
+                time.sleep(2.0)
+                if not ask("fw", lambda s: s.startswith("version="), 15):
+                    raise board_link.BoardError("重開機後板子沒有回應,WiFi 設定還在試用:請在 3 分鐘內用網頁按「保持」")
+                if not board_link.probe(bridge, 5.0):
+                    raise board_link.BoardError("重開機後 USB 設定通道沒有回應,WiFi 設定還在試用:請在 3 分鐘內用網頁按「保持」")
+                _, _, data = bridge.post("/api/wifi/keep", timeout=5)
+                if b'"ok":true' not in data:
+                    raise board_link.BoardError("WiFi 設定「保持」沒有成功:請在 3 分鐘內用網頁按「保持」")
+                q.put(("okmsg", "WiFi 設定已保持"))
+            return "\n\n燒錄前自動備份的設定已全部寫回(含 WiFi)."
+        except (board_link.BoardError, ValueError) as e:
+            q.put(("err", f"自動寫回設定失敗:{e}"))
+            q.put(("dialog", ("設定沒有寫回", f"{e}\n\n備份檔在:{path}\n可以到「設定與備份」頁用「匯入備份到板子」手動寫回.", True)))
+            return f"\n\n注意:設定沒有自動寫回,備份檔在 {path}."
 
     # ---------------- 監看 ----------------
     def _toggle_monitor(self):

@@ -59,7 +59,12 @@ class FakeBoard:
             return (200 if ok else 400), "application/json", json.dumps({"ok": ok, "code": "bkok" if ok else "bkcrc", "gen": 7, "mask": 63, "sec": 15, "names": ["a", "b"], "newer": 0}).encode()
         if (method, path) == ("POST", "/api/backup/apply"):
             self.applied = a.get("text")
-            return 200, "application/json", b'{"ok":true,"code":"bkapplied","gen":7,"names":["a"]}'
+            return 200, "application/json", b'{"ok":true,"code":"bkapplied","gen":7,"names":["a"],"wifisaved":1}'
+        if (method, path) == ("POST", "/api/reboot"):
+            return 200, "application/json", b'{"ok":true,"code":"reboot"}'
+        if (method, path) == ("POST", "/api/wifi/keep"):
+            self.kept = True
+            return 200, "application/json", b'{"ok":true,"code":"kept"}'
         if path == "/update":
             return 400, "application/json", b'{"ok":false,"code":"usbnoupload"}'
         return 404, "text/plain", b"Not found"
