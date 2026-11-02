@@ -1,4 +1,5 @@
-# 版本流水號: r7 (2026-11-02) 板子訊息併入燒錄頁(GG):兩個分頁「燒錄與板子訊息」「設定與備份」;APP_VERSION 2.0.4
+# 版本流水號: r8 (2026-11-02) 高 DPI(GG:第一次打開只看到一半):視窗開啟時依內容需要的大小與螢幕自動調整,放不下就最大化;折行寬度依 DPI 縮放;APP_VERSION 2.0.5
+# 舊: r7 (2026-11-02) 板子訊息併入燒錄頁(GG):兩個分頁「燒錄與板子訊息」「設定與備份」;APP_VERSION 2.0.4
 # 舊: r6 (2026-11-02) 版本說明去掉 Markdown 粗體符號(GG:說明要給終端使用者看);APP_VERSION 2.0.3
 # 舊: r5 (2026-11-02) 連續燒多片(GG:自動偵測只有第一片會跳出):監看守著的埠不見了(換板子)就停掉監看改選新板子;APP_VERSION 2.0.2
 # 舊: r4 (2026-11-02) 分頁改成自製大按鈕(TabBar,GG:ttk 的分頁框太不明顯);APP_VERSION 2.0.1
@@ -41,7 +42,7 @@ import serial.tools.list_ports
 import board_link
 import fw_image
 
-APP_VERSION = "2.0.4"
+APP_VERSION = "2.0.5"
 TITLE = f"線控飛機設定器 v{APP_VERSION}"
 USB_API_MIN_FW = "2026.11.02.2"   # USB 設定通道從這版韌體開始
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
@@ -299,6 +300,7 @@ class App:
         self.proxy = board_link.LocalProxy(self.monitor.bridge, os.path.join(data_dir(), "pages"),
                                            log=lambda m: self.q.put(("tool", m)))
         self._build()
+        self.root.after(0, self._fit_window)
         self._scan_ports(force=True)
         self.root.after(1500, self._port_loop)
         self._load_releases()
@@ -313,12 +315,12 @@ class App:
         r = self.root
         r.title(TITLE)
         r.minsize(760, 620)
-        # 預設高度依螢幕:燒錄頁下方有板子訊息區,太矮會被擠掉;小筆電(768)就用剩下的高度
+        # 高 DPI(Windows 125%~200%):字會跟著放大,折行寬度(像素)要一起放大,不然版面變很高
         try:
-            sh = r.winfo_screenheight()
-            r.geometry(f"880x{min(980, max(620, sh - 90))}")
+            self.dpi = max(1.0, r.winfo_fpixels("1i") / 96.0)
         except Exception:
-            pass
+            self.dpi = 1.0
+        W = lambda px: int(px * self.dpi)   # noqa: E731
         pad = {"padx": 8, "pady": 4}
         main = ttk.Frame(r, padding=8)
         main.pack(fill="both", expand=True)
@@ -371,7 +373,7 @@ class App:
         self.reload_btn.pack(side="left")
         self.dl_btn = ttk.Button(vb, text="下載這個版本", command=self._download)
         self.dl_btn.pack(side="left", padx=(4, 0))
-        self.notes = ttk.Label(f2, text="讀取版本清單中 …", foreground="#555", wraplength=700, justify="left")
+        self.notes = ttk.Label(f2, text="讀取版本清單中 …", foreground="#555", wraplength=W(700), justify="left")
         self.notes.grid(row=2, column=1, columnspan=2, sticky="w", padx=6, pady=(4, 0))
         self.keep_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(f2, text="保留板上設定(只換韌體;已經燒過、正常使用中的板子才能勾)", variable=self.keep_var,
@@ -383,7 +385,7 @@ class App:
         e.grid(row=5, column=1, sticky="ew", padx=6)
         e.bind("<Return>", lambda ev: self._load_file(self.file_var.get().strip().strip('"')))
         ttk.Button(f2, text="選電腦裡的檔案…", command=self._browse).grid(row=5, column=2)
-        self.file_info = ttk.Label(f2, text="尚未選擇檔案:先選版本按「下載這個版本」,或選電腦裡的 .bin", foreground="#555", wraplength=700, justify="left")
+        self.file_info = ttk.Label(f2, text="尚未選擇檔案:先選版本按「下載這個版本」,或選電腦裡的 .bin", foreground="#555", wraplength=W(700), justify="left")
         self.file_info.grid(row=6, column=1, columnspan=2, sticky="w", padx=6, pady=(4, 0))
         self.erase_var = tk.BooleanVar(value=True)
         self.erase_cb = ttk.Checkbutton(f2, text="燒錄前先清除整片(全新板子建議勾選)", variable=self.erase_var)
@@ -416,7 +418,7 @@ class App:
         for i, (key, name) in enumerate([("chip", "晶片"), ("verify", "寫入校驗"), ("boot", "開機與版本"),
                                          ("mpu", "感測器 MPU6050"), ("wifi", "WiFi")]):
             ttk.Label(chk, text=name + ":").grid(row=i // 2, column=(i % 2) * 2, sticky="w", padx=(0 if i % 2 == 0 else 16, 0))
-            lab = ttk.Label(chk, text="—", foreground="#777", wraplength=330, justify="left")
+            lab = ttk.Label(chk, text="—", foreground="#777", wraplength=W(330), justify="left")
             lab.grid(row=i // 2, column=(i % 2) * 2 + 1, sticky="w", padx=6)
             self.checks[key] = lab
 
@@ -440,10 +442,10 @@ class App:
         fs.columnconfigure(1, weight=1)
         self.cfg_btn = ttk.Button(fs, text="開啟設定網頁", command=self._open_config, style="Big.TButton")
         self.cfg_btn.grid(row=0, column=0, rowspan=2, sticky="ns", padx=(0, 10))
-        self.cfg_state = ttk.Label(fs, text="按下後會用電腦的瀏覽器打開設定網頁.", wraplength=620, justify="left")
+        self.cfg_state = ttk.Label(fs, text="按下後會用電腦的瀏覽器打開設定網頁.", wraplength=W(620), justify="left")
         self.cfg_state.grid(row=0, column=1, sticky="w")
         ttk.Label(fs, text="USB 線:網頁透過這個程式轉送到板子,程式關掉網頁就斷線. 韌體更新請用「燒錄」頁(勾保留板上設定).\n"
-                           "WiFi:直接開板子的網頁,和手機一樣.", foreground="#555", wraplength=620, justify="left").grid(row=1, column=1, sticky="w", pady=(4, 0))
+                           "WiFi:直接開板子的網頁,和手機一樣.", foreground="#555", wraplength=W(620), justify="left").grid(row=1, column=1, sticky="w", pady=(4, 0))
 
         fb = ttk.LabelFrame(tab_cfg, text=" 板上設定備份(全部 6 組飛行風格 + 起飛降落與安全 / 安裝 / 電變 / WiFi) ", padding=6)
         fb.grid(row=2, column=0, sticky="ew", **pad)
@@ -452,11 +454,11 @@ class App:
         self.bk_out_btn.grid(row=0, column=0, sticky="w")
         self.bk_in_btn = ttk.Button(fb, text="匯入備份到板子…", command=self._backup_import)
         self.bk_in_btn.grid(row=0, column=1, sticky="w", padx=(6, 0))
-        self.bk_state = ttk.Label(fb, text="", wraplength=600, justify="left")
+        self.bk_state = ttk.Label(fb, text="", wraplength=W(600), justify="left")
         self.bk_state.grid(row=0, column=2, sticky="w", padx=8)
         ttk.Label(fb, text="匯出存成文字檔(裡面是板子網頁「備份」頁用的設定備份碼). 匯入會先檢查,顯示內容後才套用並儲存;\n"
                            "板上有未儲存的變更時會先問要不要儲存. 含 WiFi 的備份套用後 WiFi 設定為試用,重新開機後 3 分鐘內要在網頁按「保持」.",
-                  foreground="#555", wraplength=700, justify="left").grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
+                  foreground="#555", wraplength=W(700), justify="left").grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
         # 燒錄分頁 3. 板子訊息(序列監看)
         f4 = ttk.LabelFrame(tab_flash, text=" 3. 板子回報訊息(序列監看) ", padding=6)
@@ -505,6 +507,18 @@ class App:
         self.status.pack(side="bottom", fill="x")
         self._log(f"{TITLE}. 接上開發板後會自動偵測序列埠. 燒錄與測試前請拆下螺旋槳.", "tool")
         self.nb.select({"flash": 0, "cfg": 1}.get(self.prefs.get("tab", "flash"), 0))
+
+    def _fit_window(self):
+        """開啟時依內容需要的大小與螢幕決定視窗大小(高 DPI 下內容比固定尺寸大,板子訊息區會被擠到看不到);放不下就最大化."""
+        r = self.root
+        r.update_idletasks()
+        sw, sh = r.winfo_screenwidth(), r.winfo_screenheight()
+        need_w, need_h = r.winfo_reqwidth() + 16, r.winfo_reqheight() + 16
+        w, h = min(sw - 40, max(int(880 * self.dpi), need_w)), min(sh - 90, max(620, need_h))
+        r.geometry(f"{w}x{h}+{max(0, (sw - w) // 2)}+{max(0, (sh - h) // 2 - 20)}")
+        if need_h > sh - 90 and sys.platform == "win32":
+            with contextlib.suppress(Exception):
+                r.state("zoomed")
 
     # ---------------- 共用 ----------------
     def _log(self, text, tag=None):
