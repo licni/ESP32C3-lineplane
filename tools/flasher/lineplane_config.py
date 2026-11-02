@@ -1,4 +1,5 @@
-# 版本流水號: r5 (2026-11-02) 連續燒多片(GG:自動偵測只有第一片會跳出):監看守著的埠不見了(換板子)就停掉監看改選新板子;APP_VERSION 2.0.2
+# 版本流水號: r6 (2026-11-02) 版本說明去掉 Markdown 粗體符號(GG:說明要給終端使用者看);APP_VERSION 2.0.3
+# 舊: r5 (2026-11-02) 連續燒多片(GG:自動偵測只有第一片會跳出):監看守著的埠不見了(換板子)就停掉監看改選新板子;APP_VERSION 2.0.2
 # 舊: r4 (2026-11-02) 分頁改成自製大按鈕(TabBar,GG:ttk 的分頁框太不明顯);APP_VERSION 2.0.1
 # 舊: r3 (2026-11-02) 改名「線控飛機設定器」LineplaneConfig.exe,APP_VERSION 2.0.0(GG:燒錄器改寫成設定器):
 #   三個分頁(燒錄 / 設定與備份 / 板子訊息);USB 線開板子那一份設定網頁(board_link.py 本機轉送,需韌體 2026.11.02.2 以上);
@@ -39,7 +40,7 @@ import serial.tools.list_ports
 import board_link
 import fw_image
 
-APP_VERSION = "2.0.2"
+APP_VERSION = "2.0.3"
 TITLE = f"線控飛機設定器 v{APP_VERSION}"
 USB_API_MIN_FW = "2026.11.02.2"   # USB 設定通道從這版韌體開始
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
@@ -716,6 +717,7 @@ class App:
         board = self.board_var.get()
         has_full, has_app = fw_image.release_offers(r, board)
         body = r["notes"].split("\n---")[0].strip()   # Release 說明後段是「怎麼更新」的固定文字
+        body = re.sub(r"\*\*(.+?)\*\*", r"\1", body)   # Markdown 粗體符號拿掉(這裡是純文字)
         lines = [x.strip() for x in body.splitlines() if x.strip()]
         text = "\n".join(lines[:8]) + (" …" if len(lines) > 8 else "")
         if len(text) > 600:
