@@ -1,4 +1,5 @@
-// 版本流水號: r24 (2026-10-29) 版面 v13:風格尾端加補償方式 compMode(曲線 / 曲線+線軸 G 回授 / 只用線軸 G 回授)與線軸 G 回授參數
+// 版本流水號: r25 (2026-11-03) 版面 v14:共用設定尾端加滾轉修正 rollTrimDeg(「水平標定」按鈕一次填好機頭與滾轉修正;GG:好幾片 MPU 放平讀值不是 0)
+// 舊: r24 (2026-10-29) 版面 v13:風格尾端加補償方式 compMode(曲線 / 曲線+線軸 G 回授 / 只用線軸 G 回授)與線軸 G 回授參數
 //   gTarget/gGain/gLimit/gFilter(GG:飛手要的是任何方位相同的外甩手感,加速度計 y 軸量到的就是線拉力手感)
 // 舊: r23 (2026-10-29) 版面 v12:風格尾端加側傾補償曲線 side(翼軸仰角 0~90 一側,與 up 同格式),出廠值同朝上曲線
 // 舊: r22 (2026-09-24) 版面 v11:風格加降落減力方式 landingMode(逐漸減力/忽高忽低)與蜂鳴器提醒 landingBuzz(用 reserved0),
@@ -49,7 +50,7 @@ const uint8_t CURVE_STORE_POINTS = 5;
 const uint8_t CURVE_MAX_POINTS = 4;
 const uint8_t CURVE_MIN_POINTS = 1;
 const uint8_t PROFILE_NAME_BUFFER = 24;   // UTF-8,中文一字 3 位元組,約 7 個中文字
-const uint16_t SETTINGS_LAYOUT_VERSION = 13;
+const uint16_t SETTINGS_LAYOUT_VERSION = 14;
 // 起飛油門持續時間走完後,用這麼多秒平順換到時間軸的基本油門(不直接跳,免得剛離地推力突然掉)
 const float TAKEOFF_BLEND_S = 1.0f;
 const uint8_t ARM_WAIT_DEFAULT_MIN = 2;   // 安全開關等待上限出廠值(GG 2026-09-14 基準設定:2 分鐘,可調)
@@ -76,7 +77,7 @@ struct SharedSettings {
   uint8_t upAxis;            // ImuAxis:晶片哪一軸朝機背
   uint8_t noseRight;         // 網頁圖示機頭朝右(0=朝左,逆時針飛)
   uint8_t escProtocol;       // EscProtocol(第 6 階段)
-  float pitchTrimDeg;        // 角度修正:加到量測值上,讓飛行時水平讀到 0
+  float pitchTrimDeg;        // 角度修正(機頭):v14 起與滾轉修正一起當成感測器座標的微調旋轉(imu.cpp),讓平飛姿勢讀到 0
   uint16_t escMinUs;         // 油門 0% 的脈寬
   uint16_t escMaxUs;         // 油門 100% 的脈寬
   float gestureG;            // 啟動手勢:機頭方向推力門檻
@@ -123,6 +124,8 @@ struct SharedSettings {
   // 用 v9 的預留位元組,版面不變;v10 以前的存檔讀進來補出廠值(預留位元組是 0,不能當成使用者關閉)
   uint8_t wagStopDeg;
   uint8_t reserved9[1];
+  // --- v14 起加在尾端(2026-11-03):滾轉修正. 「水平標定」把當下修正前的機頭/滾轉角取負填進兩個修正值;v13 以前的存檔補 0 ---
+  float rollTrimDeg;
 };
 
 struct CurvePoint {

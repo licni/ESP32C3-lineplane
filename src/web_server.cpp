@@ -1,4 +1,5 @@
-// 版本流水號: r36 (2026-11-02) USB 設定通道(GG:電腦接線用同一份網頁設定):序列埠「@Q」請求走同一組處理函式,
+// 版本流水號: r37 (2026-11-03) POST /api/level 水平標定(待機/結束 + 靜止 1 秒,把修正前的機頭/滾轉角取負填進兩個修正值,不存檔);狀態加 rr(修正前滾轉角)
+// 舊: r36 (2026-11-02) USB 設定通道(GG:電腦接線用同一份網頁設定):序列埠「@Q」請求走同一組處理函式,
 //   server 改成轉接物件(Req),同時服務 WiFi 的 WebServer 與 USB 序列埠;/update 上傳只有 WiFi(USB 用燒錄工具)
 // 舊: r35 (2026-10-29) 狀態加 az(方位角)與 sf(側傾補償倍率);scmp 已乘倍率
 // 舊: r34 (2026-10-29) 狀態 f 加 lg(線軸 G 低通值)與 gt(線軸 G 回授微調 %)
@@ -314,7 +315,7 @@ static void handleStatus() {
   fwUpdateGetStatus(fw);
   char buf[2100];
   snprintf(buf, sizeof(buf),
-           "{\"p\":%.2f,\"rp\":%.2f,\"r\":%.1f,\"sd\":%.1f,\"scmp\":%.1f,\"az\":%.1f,\"sf\":%.2f,\"a\":%.3f,\"g\":[%.1f,%.1f,%.1f],\"b\":[%.2f,%.2f,%.2f],"
+           "{\"p\":%.2f,\"rp\":%.2f,\"r\":%.1f,\"rr\":%.1f,\"sd\":%.1f,\"scmp\":%.1f,\"az\":%.1f,\"sf\":%.2f,\"a\":%.3f,\"g\":[%.1f,%.1f,%.1f],\"b\":[%.2f,%.2f,%.2f],"
            "\"st\":%d,\"sts\":%.1f,\"imu\":%u,\"esc\":%u,\"ex\":%lu,\"late\":%lu,\"up\":%lu,"
            "\"heap\":%lu,\"ws\":%u,\"ip\":\"%s\",\"rssi\":%d,\"cd\":%u,\"ota\":%d,"
            "\"act\":%u,\"dirty\":%d,\"lock\":%d,\"cmp\":%.1f,\"imp\":[%.2f,%u,%ld],"
@@ -323,7 +324,7 @@ static void handleStatus() {
            "\"lc\":%u,\"er\":%u,\"rj\":%u,\"rja\":%ld,\"da\":%u,\"dg\":%.2f,\"dga\":%ld,\"ge\":%d,\"au\":%d,\"fp\":%u,\"set\":%.1f,\"tw\":%.0f,\"gb\":%.1f,\"aw\":%d,\"arm\":%d,\"al\":%d,\"awl\":%ld,\"lp\":%d},"
            "\"man\":%d,\"cal\":[%u,%.1f,%d,%d,%.0f],\"dsh\":%ld,\"proto\":%u,\"hz\":%u,\"evn\":%lu,\"rpm\":[%d,%lu,%lu,%lu,%lu,%lu,%lu,%ld],"
            "\"sim\":%d,\"cap\":[%d,%lu,%lu,%lu,%lu,%lu,%ld],\"gear\":[%.0f,%u,%d],\"wt\":[%.0f,%d,%.0f,%u],\"fw\":[%d,%d,%.0f,%u,%u,%d],\"asoff\":%d,\"swp\":%u}",
-           t.pitchDeg, t.rawPitchDeg, t.rollDeg, t.sideDeg, sideComp, t.azimuthDeg, sideFactor, t.accMagG, t.gyroDps[0], t.gyroDps[1], t.gyroDps[2], t.biasDps[0],
+           t.pitchDeg, t.rawPitchDeg, t.rollDeg, t.rawRollDeg, t.sideDeg, sideComp, t.azimuthDeg, sideFactor, t.accMagG, t.gyroDps[0], t.gyroDps[1], t.gyroDps[2], t.biasDps[0],
            t.biasDps[1], t.biasDps[2], t.still ? 1 : 0, t.stillSeconds, imu, t.escUs, (unsigned long)t.maxExecUs,
            (unsigned long)t.maxLateMs, (unsigned long)(millis() / 1000), (unsigned long)ESP.getFreeHeap(),
            (unsigned)wifiState(), wifiIpText().c_str(), (int)wifiRssi(), (unsigned)wifiStaCountdownSeconds(),
@@ -607,6 +608,28 @@ static void handleRevert() {
   sendResult(true, "reverted");
 }
 
+// POST /api/level:水平標定(GG 2026-11-03,好幾片 MPU 放平讀值不是 0). 飛機擺成平飛姿勢放穩,把當下修正前的機頭/滾轉角取負
+// 填進角度修正與滾轉修正(不存檔,按儲存才寫入). 條件:待機或結束,感測器正常,靜止 1 秒以上(靜止判斷已含 |a| 在 1g 附近,
+// 壞晶片與移動中過不了),修正值不超過 ±30°(更大是安裝方位選錯). 回 {"ok":true,"code":"level","pt":機頭修正,"rt":滾轉修正}.
+static void handleLevel() {
+  if (refuseIfLocked()) return;
+  FlightStatus f;
+  flightGetStatus(f);
+  if (f.state != FS_STANDBY && f.state != FS_DONE) return sendResult(false, "levelstate");
+  Telemetry t;
+  controlGetTelemetry(t);
+  if (!t.imuPresent || t.imuFault) return sendResult(false, "levelimu");
+  if (!t.still || t.stillSeconds < 1.0f) return sendResult(false, "levelstill");
+  const float pt = -t.rawPitchDeg, rt = -t.rawRollDeg;
+  if (fabsf(pt) > 30.0f || fabsf(rt) > 30.0f) return sendResult(false, "levelbig");
+  char text[48];
+  snprintf(text, sizeof(text), "pitchTrim=%.1f\nrollTrim=%.1f", pt, rt);
+  if (const char *err = settingsSetMany(-1, text)) return sendResult(false, err);
+  char buf[96];
+  snprintf(buf, sizeof(buf), "{\"ok\":true,\"code\":\"level\",\"pt\":%.1f,\"rt\":%.1f}", pt, rt);
+  server.send(200, "application/json", buf);
+}
+
 static void handleWifiGet() {
   const WifiConfig &c = wifiConfig();
   // 密碼一併回傳:這是自己裝置的區域設定頁(類似路由器後台),回填才能只改別的欄位而不必重打密碼.
@@ -881,6 +904,7 @@ static void registerRoutes() {
   server.on("/api/manual/stop", HTTP_POST, handleManualStop);
   server.on("/api/calib", HTTP_POST, handleCalib);
   server.on("/api/geartest", HTTP_POST, handleGearTest);
+  server.on("/api/level", HTTP_POST, handleLevel);
   server.on("/update", HTTP_POST, handleUpdateDone, handleUpdateUpload);
   server.on("/api/fw", HTTP_GET, handleFwGet);
   server.on("/api/fw/check", HTTP_POST, handleFwCheck);

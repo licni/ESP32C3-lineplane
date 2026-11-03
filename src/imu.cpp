@@ -1,4 +1,6 @@
-// 版本流水號: r4 (2026-10-29) 加 attitudeYawRateDps(角速度點乘機身座標的「上」向量)
+// 版本流水號: r5 (2026-11-03) 水平標定:角度修正(機頭)與滾轉修正改成感測器座標的微調旋轉 T(先修滾轉再修機頭),機身 = T × 安裝方位 × 晶片;
+//   加 imuSetTrim 與修正前的角度 attitudeRawPitch/RollDeg(「把現在當成水平」= 兩個角取負填進修正值,之後讀值剛好 0)
+// 舊: r4 (2026-10-29) 加 attitudeYawRateDps(角速度點乘機身座標的「上」向量)
 // 舊: r3 (2026-10-29) 加翼軸仰角 attitudeSideDeg:重力在機身 y 軸的分量取 asin,正飛倒飛同值
 // 舊: r2 (2026-09-13) 靜止判斷的 1g 容許範圍放寬到 ±0.3g(副廠晶片實測靜止讀 1.12g)
 #include "imu.h"
@@ -35,7 +37,13 @@ static const float STILL_ACC_RANGE_G = 0.06f;         // 窗內加速度大小�
 static const float STILL_ACC_MAG_TOL_G = 0.3f;
 static const float STILL_WINDOW_SECONDS = 0.5f;
 
-static int8_t orientMatrix[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};  // 機身 = M × 晶片
+static int8_t orientMatrix[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};  // 安裝方位:機身(修正前)= M × 晶片
+// 水平標定的微調旋轉(2026-11-03):機身 = T × M × 晶片,T = Ry(pitchTrim) × Rx(−rollTrim),先修滾轉再修機頭.
+// 「把現在當成水平」= pitchTrim = −修正前機頭角,rollTrim = −修正前滾轉角,套上去之後兩個角剛好是 0;
+// 小角度時等於以前的「量到的角度加上修正值」,使用者原本填的值意義不變. 陀螺儀同樣轉過去,所有角度與方位角速度一致.
+static float trimPitchDeg = 0, trimRollDeg = 0;
+static float trimMatrix[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+static float bodyMatrix[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
 static float gyroBiasDps[3] = {0, 0, 0};
 static bool gyroBiasLearned = false;
 
@@ -86,9 +94,30 @@ bool imuBegin() {
   return true;
 }
 
+// T 的推導:Rx(−rt) 讓 y' = y·cos(rt) + z·sin(rt),Ry(pt) 讓 x' = x·cos(pt) + z·sin(pt);相乘得下面的矩陣.
+// 修正前「上」向量 (sinθ, cosθ·sinρ, cosθ·cosρ) 配 pt = −θ,rt = −ρ 時結果是 (0,0,1).
+static void rebuildBodyMatrix() {
+  const float cp = cosf(trimPitchDeg / DEG_PER_RAD), sp = sinf(trimPitchDeg / DEG_PER_RAD);
+  const float cr = cosf(trimRollDeg / DEG_PER_RAD), sr = sinf(trimRollDeg / DEG_PER_RAD);
+  const float t[3][3] = {{cp, -sp * sr, sp * cr}, {0, cr, sr}, {-sp, -cp * sr, cp * cr}};
+  for (uint8_t i = 0; i < 3; ++i)
+    for (uint8_t j = 0; j < 3; ++j) {
+      trimMatrix[i][j] = t[i][j];
+      bodyMatrix[i][j] = t[i][0] * orientMatrix[0][j] + t[i][1] * orientMatrix[1][j] + t[i][2] * orientMatrix[2][j];
+    }
+}
+
 static void mapToBody(const float chip[3], float body[3]) {
   for (uint8_t i = 0; i < 3; ++i)
-    body[i] = orientMatrix[i][0] * chip[0] + orientMatrix[i][1] * chip[1] + orientMatrix[i][2] * chip[2];
+    body[i] = bodyMatrix[i][0] * chip[0] + bodyMatrix[i][1] * chip[1] + bodyMatrix[i][2] * chip[2];
+}
+
+void imuSetTrim(float pitchDeg, float rollDeg) {
+  if (pitchDeg == trimPitchDeg && rollDeg == trimRollDeg) return;
+  trimPitchDeg = pitchDeg;
+  trimRollDeg = rollDeg;
+  rebuildBodyMatrix();
+  attitudeNeedsInit = true;   // 修正值只在地上改得到:用加速度計重新定姿,網頁讀值立刻跟上
 }
 
 static void updateStillWindow(const float gyroChipDps[3], float accMag) {
@@ -162,6 +191,7 @@ bool imuSetOrientation(uint8_t noseAxis, uint8_t upAxis) {
     orientMatrix[1][i] = y[i];
     orientMatrix[2][i] = z[i];
   }
+  rebuildBodyMatrix();
   attitudeNeedsInit = true;
   return true;
 }
@@ -252,6 +282,27 @@ float attitudePitchDeg() {
 
 float attitudeRollDeg() {
   return atan2f(2 * (q0 * q1 + q2 * q3), q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3) * DEG_PER_RAD;
+}
+
+// 修正前(只套安裝方位)的角度:「上」向量用 T 的轉置轉回去再算. 安裝頁「晶片原始」與水平標定用.
+static void rawUp(float out[3]) {
+  const float u[3] = {2 * (q1 * q3 - q0 * q2), 2 * (q0 * q1 + q2 * q3), q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3};
+  for (uint8_t i = 0; i < 3; ++i) out[i] = trimMatrix[0][i] * u[0] + trimMatrix[1][i] * u[1] + trimMatrix[2][i] * u[2];
+}
+
+float attitudeRawPitchDeg() {
+  float u[3];
+  rawUp(u);
+  float v = u[0];
+  if (v > 1) v = 1;
+  if (v < -1) v = -1;
+  return asinf(v) * DEG_PER_RAD;
+}
+
+float attitudeRawRollDeg() {
+  float u[3];
+  rawUp(u);
+  return atan2f(u[1], u[2]) * DEG_PER_RAD;
 }
 
 float attitudeYawRateDps(const float gyroDps[3]) {

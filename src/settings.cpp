@@ -1,4 +1,5 @@
-// 版本流水號: r29 (2026-10-29) 側傾曲線出廠值改成全部 0%(死區 20°,3 點 45/70/90),v12 以前的存檔升級也補 0%(GG 2026-10-29:
+// 版本流水號: r30 (2026-11-03) 版面 v14:共用設定尾端加滾轉修正 rollTrim(-30~30,水平標定用);讀 v9~v13 共用設定尾端補 0,v13 風格版面相同照讀
+// 舊: r29 (2026-10-29) 側傾曲線出廠值改成全部 0%(死區 20°,3 點 45/70/90),v12 以前的存檔升級也補 0%(GG 2026-10-29:
 //   審查發現「等於朝上曲線」會讓舊飛法在斜上方多補 8~16%,改成飛手自己拉)
 // 舊: r28 (2026-10-29) 版面 v13:風格尾端加補償方式 compMode 與線軸 G 回授 gTarget/gGain/gLimit/gFilter(出廠 曲線,3.0g,10%/g,±30%,0.5s);
 //   讀 v12 以前風格尾端補出廠值
@@ -60,7 +61,10 @@ static const size_t SHARED_V7_SIZE = offsetof(SharedSettings, gearEnable);
 static_assert(SHARED_V7_SIZE == SHARED_V6_SIZE + 4, "SharedSettings v7 size");
 static const size_t SHARED_V8_SIZE = offsetof(SharedSettings, buzzerActiveLow);
 static_assert(SHARED_V8_SIZE == SHARED_V7_SIZE + 12, "SharedSettings v8 size");
-static_assert(sizeof(SharedSettings) == SHARED_V8_SIZE + 4, "SharedSettings v9 size");
+// v9~v13 的共用設定到 reserved9 為止;v14 在尾端加滾轉修正 4 位元組
+static const size_t SHARED_V13_SIZE = offsetof(SharedSettings, rollTrimDeg);
+static_assert(SHARED_V13_SIZE == SHARED_V8_SIZE + 4, "SharedSettings v9~v13 size");
+static_assert(sizeof(SharedSettings) == SHARED_V13_SIZE + 4, "SharedSettings v14 size");
 // armWaitMin 占用 v8 收腳區塊的預留位元組:位置不可移動
 static_assert(offsetof(SharedSettings, armWaitMin) == offsetof(SharedSettings, gearRetractSec) + 1, "SharedSettings armWaitMin");
 // 風格 v4,v6~v9 的長度到 takeoffPct 為止;v10 在尾端加起飛油門 8 位元組
@@ -90,6 +94,7 @@ static void defaultShared(SharedSettings &s) {
   s.noseRight = 0;
   s.escProtocol = ESC_PROTO_PWM50;
   s.pitchTrimDeg = 0;
+  s.rollTrimDeg = 0;
   s.escMinUs = 1000;
   s.escMaxUs = 2000;
   // 出廠值 = GG 的基準設定(2026-09-14,test_logs/基準設定碼.txt 那組備份碼). 括號是改之前的出廠值.
@@ -255,6 +260,7 @@ static const ParamDef SHARED_PARAMS[] = {
     SP("upAxis", PARAM_U8, upAxis, 0, 5, 1, 1),
     SP("noseRight", PARAM_U8, noseRight, 0, 1, 1, 1),
     SP("pitchTrim", PARAM_F32, pitchTrimDeg, -30, 30, 0.1f, 1),
+    SP("rollTrim", PARAM_F32, rollTrimDeg, -30, 30, 0.1f, 1),   // v14:水平標定一起填
     SP("escProtocol", PARAM_U8, escProtocol, 0, 2, 1, 1),   // EscProtocol,開機時套用
     SP("escPwmHz", PARAM_U16, escPwmHz, 50, 400, 10, 50),   // 開機時套用
     SP("escMinUs", PARAM_U16, escMinUs, 800, 1500, 5, 50),
@@ -517,6 +523,7 @@ static bool loadBlobAny(Preferences &prefs, const char *key, uint8_t *data, size
 //   v11:風格尾端加忽高忽低減力(低,高,2 預留,週期),減力方式與蜂鳴器提醒用 reserved0;共用設定大小不變,wagStopDeg 用 reserved9[0]
 //   v12:風格尾端加側傾補償曲線 side(一個 CurveSide);共用設定不變. 舊風格讀進來側傾曲線補 0%(出廠值也是 0%;10.29.1 曾複製朝上曲線)
 //   v13:風格尾端加補償方式與線軸 G 回授 16 位元組;共用設定不變. 舊風格讀進來補出廠值(方式 = 曲線)
+//   v14:共用設定尾端加滾轉修正 4 位元組;風格不變. 舊共用設定讀進來補 0(= 不修正)
 // 所以風格 v4/v6~v9 原樣沿用後尾端補「不使用」,v5 取前段;共用設定 v4~v6 較短,尾端補預設. GG 已經在板子上調好參數,改版不可洗掉.
 static const size_t CURVE_SIDE_SIZE = sizeof(CurveSide);
 
@@ -525,11 +532,12 @@ static bool loadShared(Preferences &prefs, SharedSettings &out) {
   defaultShared(s);   // v6 以前的存檔比較短,尾端新欄位保留預設值
   uint16_t ver = 0, size = 0;
   if (!loadBlobAny(prefs, "shared", (uint8_t *)&s, sizeof(s), ver, size)) return false;
-  const bool current = (ver == SETTINGS_LAYOUT_VERSION || ver == 12 || ver == 11 || ver == 10 || ver == 9) && size == sizeof(s);   // v9~v13 大小相同
+  const bool current = ver == SETTINGS_LAYOUT_VERSION && size == sizeof(s);
+  const bool old13 = ver >= 9 && ver <= 13 && size == SHARED_V13_SIZE;   // v9~v13 大小相同,v14 尾端多滾轉修正
   const bool old6 = ver >= 4 && ver <= 6 && size == SHARED_V6_SIZE;
   const bool old7 = ver == 7 && size == SHARED_V7_SIZE;
   const bool old8 = ver == 8 && size == SHARED_V8_SIZE;
-  if (!current && !old6 && !old7 && !old8) return false;
+  if (!current && !old13 && !old6 && !old7 && !old8) return false;
   if (!current) {
     // loadBlobAny 只蓋掉前 size 個位元組;保險起見尾端再設一次預設
     SharedSettings d;
@@ -554,7 +562,7 @@ static bool loadProfile(Preferences &prefs, const char *key, ProfileSettings &ou
   uint16_t ver = 0, size = 0;
   if (!loadBlobAny(prefs, key, raw, sizeof(raw), ver, size)) return false;
   // 風格結構 v4,v6~v9 版面相同(v7~v9 只改了共用設定),v10 尾端多了起飛油門,v11 再多忽高忽低減力,v12 再多側傾曲線,v13 再多線軸 G 回授
-  const bool current = ver == SETTINGS_LAYOUT_VERSION && size == sizeof(ProfileSettings);
+  const bool current = (ver == SETTINGS_LAYOUT_VERSION || ver == 13) && size == sizeof(ProfileSettings);   // v14 只改了共用設定
   const bool old12 = ver == 12 && size == PROFILE_V12_SIZE;
   const bool old11 = ver == 11 && size == PROFILE_V11_SIZE;
   const bool old10 = ver == 10 && size == PROFILE_V10_SIZE;

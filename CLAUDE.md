@@ -32,6 +32,8 @@
 - **目前是「只改程式碼」模式(GG 2026-09-14,優先於下面的檢查規則)**:在 GG 說【恢復全部檢查】之前,不跑回歸/全功能/瀏覽器測試,
   不改使用說明書,不做燒錄前後設定備份比對,不重拍截圖. 程式改完編譯並燒到開發板,只列出這次修改影響到的東西與建議 GG 自己檢查的項目.
 - 分段實作,每段編譯通過就寫進 docs/開發紀錄.md,再請 GG 實機確認.
+- **測試用的東西不寫進韌體**(GG 2026-11-03):查問題可以自己做工具(tools/),也可以編譯測試用韌體燒到開發板,
+  但診斷/測試專用的程式碼不能留在 src/ 裡;測試版燒完查完,原始碼還原並燒回乾淨版. 診斷結果寫 docs/開發紀錄.md.
 - **編譯,燒錄,OTA,序列監控全部由 Claude 用 PlatformIO 操作**. GG 不用 Arduino IDE.
   pio 路徑:`$env:USERPROFILE\.platformio\penv\Scripts\pio.exe`.
 - GG 開發期間全程不裝螺旋槳,燒錄與測試時不需要提醒拆槳.
@@ -59,7 +61,7 @@
   本機打包:雙擊 tools\flasher\build_exe.bat(系統 Python 3.14 可用,PyInstaller 版本已放寬),產出 tools/flasher/dist/LineplaneConfig.exe(不進版本庫).
   三個分頁(GG 2026-11-03):① 燒錄與板子訊息(序列監看在下方,板子訊息翻成中文;版本清單讀韌體專案 Releases,依賴發布工具的命名 Release 標籤 v版本,firmware-/lineplane-full-版本[-oled].bin,讀不到時退回 manifest;
   舊版沒有完整燒錄檔時用最新完整檔前 64KB 組合;燒錄方式「更新(保留設定,燒更新檔)/全新燒錄(清空,燒完整檔)」,按開始燒錄自動下載;兩種都先自動備份存檔不寫回;空白板子選更新會問改全新;自選檔案收在進階;不再有螢幕板選項),
-  ② 設定(USB 線或 WiFi 開板子那一份網頁;WiFi 設定:熱點名稱固定開頭 + 後綴/密碼,或連家用 WiFi / 手機熱點,套用後重開測試,連上自動 keep 並大字顯示網址),③ 備份(匯出/匯入).
+  ② 設定(USB 線或 WiFi 開板子那一份網頁;水平標定:確認擺平 → POST /api/level → 問要不要儲存,韌體 2026.11.04.1 起;WiFi 設定:熱點名稱固定開頭 + 後綴/密碼,或連家用 WiFi / 手機熱點,套用後重開測試,連上自動 keep 並大字顯示網址),③ 備份(匯出/匯入).
   區塊用自製 _section(灰邊框 + 淺藍標題色帶;GG:ttk.LabelFrame 框線太淡).
   **USB 設定通道**(韌體 2026.11.02.2 起):web_server.cpp 的 server 是轉接物件 Req,同一組處理函式服務 WiFi 與序列埠「@Q」請求(協定見 web_server.cpp 與 tools/flasher/board_link.py);
   電腦端 board_link.LocalProxy 在 127.0.0.1 開小伺服器轉送,網頁看 location.hostname 是 127.0.0.1 就進 USB 模式(韌體更新卡換提示,待確認不自動確認).

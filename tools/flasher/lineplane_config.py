@@ -1,4 +1,6 @@
-# 版本流水號: r14 (2026-11-03) 燒錄後檢查的 WiFi 項目等到連上或退回熱點為止(最多 45 秒)再顯示結果與網址(GG:更新後顯示「連線中」以為沒連上;
+# 版本流水號: r15 (2026-11-04) 設定頁加「水平標定」區(GG:設定器也要能標定水平):確認飛機擺平 → POST /api/level(韌體 2026.11.04.1 起)
+#   → 顯示兩個修正值 → 問要不要儲存;APP_VERSION 2.4.0
+# 舊: r14 (2026-11-03) 燒錄後檢查的 WiFi 項目等到連上或退回熱點為止(最多 45 秒)再顯示結果與網址(GG:更新後顯示「連線中」以為沒連上;
 #   原本只問一次 net,板子還在掃描);設定了家用 WiFi 卻退到熱點用黃字提醒;完成對話框寫 WiFi 結果;APP_VERSION 2.3.2
 # 舊: r13 (2026-11-03) 三個分頁「① 燒錄與板子訊息 ② 設定 ③ 備份」(GG:備份拆出去);區塊改成自製 _section(灰邊框 + 淺藍標題色帶,
 #   GG:ttk.LabelFrame 的框線太淡,連線方式/WiFi 設定分不出來);連線方式在 ②③ 都有(共用變數);APP_VERSION 2.3.1
@@ -58,7 +60,7 @@ import serial.tools.list_ports
 import board_link
 import fw_image
 
-APP_VERSION = "2.3.2"
+APP_VERSION = "2.4.0"
 TITLE = f"線控飛機設定器 v{APP_VERSION}"
 USB_API_MIN_FW = "2026.11.02.2"   # USB 設定通道從這版韌體開始
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
@@ -568,8 +570,19 @@ class App:
         ttk.Label(fs, text="USB 線:網頁透過這個程式轉送到板子,程式關掉網頁就斷線. 韌體更新請用「燒錄」頁(勾保留板上設定).\n"
                            "WiFi:直接開板子的網頁,和手機一樣.", foreground="#555", wraplength=W(620), justify="left").grid(row=1, column=1, sticky="w", pady=(4, 0))
 
+        # 水平標定(GG 2026-11-03:好幾片 MPU 放平讀值不是 0,設定器也要能標定;板子網頁的安裝頁也有同一顆按鈕)
+        fl = self._section(tab_cfg, "水平標定(把飛機現在的姿勢當成水平)", 2)
+        fl.columnconfigure(1, weight=1)
+        self.level_btn = ttk.Button(fl, text="水平標定", command=self._level_calib, style="Big.TButton")
+        self.level_btn.grid(row=0, column=0, rowspan=2, sticky="ns", padx=(0, 10))
+        self.level_state = ttk.Label(fl, text="把飛機擺成平飛姿勢(用你平常調機的水平基準),放穩不要碰,再按左邊的按鈕.", wraplength=W(620), justify="left")
+        self.level_state.grid(row=0, column=1, sticky="w")
+        ttk.Label(fl, text="板子會把當下量到的機頭與滾轉角度當成 0°,填進「角度修正」與「滾轉修正」,問過你再儲存. 每片感測器的零點都不一樣,"
+                           "裝機後做一次;換感測器或重新安裝後再做. 需要韌體 2026.11.04.1 以上.",
+                  foreground="#555", wraplength=W(620), justify="left").grid(row=1, column=1, sticky="w", pady=(4, 0))
+
         # WiFi 設定(GG 2026-11-03:使用者用手機熱點怎樣都連不上,要能在設定器改;只走 USB 線,改完板子重開會斷 WiFi)
-        fw = self._section(tab_cfg, "WiFi 設定(用 USB 線設定板子怎麼連網)", 2)
+        fw = self._section(tab_cfg, "WiFi 設定(用 USB 線設定板子怎麼連網)", 3)
         fw.columnconfigure(1, weight=1)
         top = ttk.Frame(fw)
         top.grid(row=0, column=0, columnspan=3, sticky="ew")
@@ -765,7 +778,7 @@ class App:
         st = "disabled" if busy else "normal"
         for w in (self.flash_btn, self.check_btn, self.reload_btn, self.mon_btn, self.cfg_btn,
                   self.bk_out_btn, self.bk_in_btn, self.bk_flash_btn, self.wifi_read_btn, self.wifi_scan_btn, self.wifi_apply_btn,
-                  self.status_btn, self.reboot_btn):
+                  self.status_btn, self.reboot_btn, self.level_btn):
             w.configure(state=st)
         self.port_cb.configure(state="disabled" if busy else "readonly")
         self.ver_cb.configure(state="disabled" if busy else "readonly")
@@ -832,6 +845,8 @@ class App:
                     self.bk_state.configure(text=val[0], foreground=val[1])
                 elif kind == "wifi_state":
                     self.wifi_state.configure(text=val[0], foreground=val[1])
+                elif kind == "level_state":
+                    self.level_state.configure(text=val[0], foreground=val[1])
                 elif kind == "wifi_big":   # (文字, 顏色);空字串 = 藏起來
                     if val[0]:
                         self.wifi_big.configure(text=val[0], foreground=val[1])
@@ -1547,6 +1562,38 @@ class App:
                 self.q.put(("bk_state", (f"匯入失敗:{e}", "#cf222e")))
                 self.q.put(("err", f"匯入備份失敗:{e}"))
                 self.q.put(("dialog", ("匯入備份失敗", str(e), True)))
+            finally:
+                self.q.put(("done", None))
+
+        threading.Thread(target=job, daemon=True).start()
+
+    # ---------------- 水平標定(GG 2026-11-03) ----------------
+    def _level_calib(self):
+        """確認飛機擺平 → 板子把當下當成水平(填角度修正與滾轉修正,不存檔)→ 顯示結果 → 問要不要儲存."""
+        self._save_link()
+        if not messagebox.askokcancel("水平標定", "請把飛機擺成平飛姿勢(用你平常調機的水平基準),放穩不要碰.\n\n按「確定」後板子會把現在的姿勢當成水平.",
+                                      parent=self.root):
+            return
+        self._set_busy(True)
+        self.level_state.configure(text="連線板子,讀取姿勢 …", foreground="#9a6700")
+
+        def job():
+            try:
+                board, src = self._board()
+                r = board_link.level_set(board)
+                pt, rt = float(r.get("pt", 0)), float(r.get("rt", 0))
+                msg = f"標定完成({src}):角度修正 {pt:+.1f}°,滾轉修正 {rt:+.1f}°."
+                self.q.put(("tool", msg))
+                if self._ask("儲存到板子?", msg + "\n\n要儲存到板子嗎?\n不儲存的話,板子重新開機就回到原本的值(也可以先開設定網頁看讀值再儲存)."):
+                    board_link.save_settings(board)
+                    self.q.put(("level_state", (msg + " 已儲存.", "#1a7f37")))
+                    self.q.put(("okmsg", "水平標定已儲存."))
+                else:
+                    self.q.put(("level_state", (msg + " 還沒儲存:到設定網頁按儲存,或重新開機放棄.", "#9a6700")))
+            except board_link.BoardError as e:
+                self.q.put(("level_state", (f"水平標定失敗:{e}", "#cf222e")))
+                self.q.put(("err", f"水平標定失敗:{e}"))
+                self.q.put(("dialog", ("水平標定失敗", str(e), True)))
             finally:
                 self.q.put(("done", None))
 

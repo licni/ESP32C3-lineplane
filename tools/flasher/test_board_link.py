@@ -1,4 +1,5 @@
-# 版本流水號: r2 (2026-11-03) WiFi 設定:wifi_get / wifi_set(拒絕碼轉中文)/ wifi_scan(掃描中 → 結果)/ wifi_keep / reboot
+# 版本流水號: r3 (2026-11-04) 水平標定:level_set 成功(回兩個修正值,板上變未儲存)/ 沒放穩被拒(中文訊息)/ 舊韌體 404;save_settings
+# 舊: r2 (2026-11-03) WiFi 設定:wifi_get / wifi_set(拒絕碼轉中文)/ wifi_scan(掃描中 → 結果)/ wifi_keep / reboot
 # 舊: r1 (2026-11-02) 初版:USB 設定通道的電腦端測試(假板子照 web_server.cpp r33 的協定回應,不需要板子與序列埠)
 import json
 import threading
@@ -26,6 +27,8 @@ class FakeBoard:
         self.scan_polls = 0
         self.kept = False
         self.rebooted = False
+        self.still = True          # 水平標定:飛機放穩了
+        self.has_level = True      # False = 舊韌體,/api/level 回 404
 
     def feed_line(self, line):
         assert line.startswith(b"@Q ") and line.endswith(b"\n")
@@ -95,6 +98,12 @@ class FakeBoard:
             if self.scan_polls < 3:   # 前兩次還在掃
                 return 200, "application/json", b'{"run":1}'
             return 200, "application/json", json.dumps({"run": 0, "n": 2, "list": [["GG iPhone", -48, 6, 0], ["Home 家", -70, 11, 1]]}, ensure_ascii=False).encode("utf-8")
+        if (method, path) == ("POST", "/api/level") and self.has_level:
+            # 照 handleLevel:沒放穩 levelstill;成功填兩個修正值(未儲存)
+            if not self.still:
+                return 400, "application/json", b'{"ok":false,"code":"levelstill"}'
+            self.dirty = True
+            return 200, "application/json", b'{"ok":true,"code":"level","pt":-2.3,"rt":1.0}'
         if path == "/update":
             return 400, "application/json", b'{"ok":false,"code":"usbnoupload"}'
         return 404, "text/plain", b"Not found"
@@ -120,6 +129,27 @@ class BridgeTest(unittest.TestCase):
     def setUp(self):
         self.link = Link()
         self.b = self.link.bridge
+
+    def test_level_set_and_save(self):
+        self.link.board.dirty = False
+        r = bl.level_set(self.b)
+        self.assertEqual((r["pt"], r["rt"]), (-2.3, 1.0))
+        self.assertTrue(self.link.board.dirty)   # 填了修正值但還沒儲存
+        bl.save_settings(self.b)
+        self.assertTrue(self.link.board.saved)
+        self.assertFalse(self.link.board.dirty)
+
+    def test_level_refused_not_still(self):
+        self.link.board.still = False
+        with self.assertRaises(bl.BoardError) as cm:
+            bl.level_set(self.b)
+        self.assertIn("放穩", str(cm.exception))
+
+    def test_level_old_firmware(self):
+        self.link.board.has_level = False
+        with self.assertRaises(bl.BoardError) as cm:
+            bl.level_set(self.b)
+        self.assertIn("2026.11.04.1", str(cm.exception))
 
     def test_get_json_and_log_lines(self):
         st, ct, data = self.b.get("/api/fw")

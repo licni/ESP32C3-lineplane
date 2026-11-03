@@ -1,4 +1,6 @@
-// 版本流水號: r104 (2026-11-02) USB 模式(電腦設定器透過 USB 線開這份網頁,網址是 127.0.0.1):韌體更新卡換成提示(更新用設定器的燒錄頁),
+// 版本流水號: r105 (2026-11-03) 安裝頁「水平標定」按鈕(POST /api/level,板子把當下當成水平填好角度修正與滾轉修正);新參數滾轉修正 rollTrim;
+//   控制使用/晶片原始各顯示機頭與滾轉;方位回預設一併清滾轉修正
+// 舊: r104 (2026-11-02) USB 模式(電腦設定器透過 USB 線開這份網頁,網址是 127.0.0.1):韌體更新卡換成提示(更新用設定器的燒錄頁),
 //   新韌體待確認不自動確認(確認要證明 WiFi 能連上),網路標籤顯示 USB 線;其他功能與 WiFi 完全相同
 // 舊: r103 (2026-10-30) fmtT 修正 59.6 秒顯示成 0:60
 // 舊: r102 (2026-10-30) 紀錄上限 6000 → 12000 筆(板上存 19.8 分鐘,網頁原本只留後 10 分鐘),視窗加「20 分」;3D 軌跡跨趟(中間隔著倒數/待機)不再連一條線
@@ -610,7 +612,7 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
  <div class="card">
   <h2>感測器安裝方位<span class="h2r"><button class="b sm" id="btnOrientDef">方位回預設</button></span></h2>
   <div class="cnote">裝機時設定一次:選晶片的哪一軸朝機頭,哪一軸朝機背(座艙頂). 模組板上印有 X,Y 箭頭;Z 軸垂直板面,朝元件那面為 +Z. 朝左翼由兩軸自動決定(向心力在這個方向).
-   裝好後把飛機擺成平飛姿勢,用「角度修正」讓控制使用的角度讀到 0°. 出廠:+X 朝機頭,+Z 朝機背,修正 0°. 改完按上方的儲存.</div>
+   裝好後把飛機擺成平飛姿勢放穩,按「水平標定」把當下當成水平(機頭與滾轉的修正值自動填好);也可以手動改修正值. 出廠:+X 朝機頭,+Z 朝機背,修正 0°. 改完按上方的儲存.</div>
   <div class="inst-views">
    <figure><figcaption>側視 <span class="sub">站在圓心看,左翼朝你</span></figcaption><svg id="instSide" viewBox="-160 -100 320 200" role="img" aria-label="側視安裝方位圖"></svg></figure>
    <figure><figcaption>後視 <span class="sub">站在機尾往機頭看</span></figcaption><svg id="instRear" viewBox="-160 -100 320 200" role="img" aria-label="後視安裝方位圖"></svg></figure>
@@ -621,7 +623,7 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
    <label><span class="axk up">■</span> 朝機背<select id="selUp"></select></label>
    <span><span class="axk left">■</span> 朝左翼 <b id="axisY">--</b> <span class="sub">(自動)</span></span>
   </div>
-  <div class="live"><span>控制使用 <b id="setPitch">--</b></span><span class="sub">晶片原始 <b id="setRaw">--</b></span><span id="instDefState" style="margin-left:auto"></span></div>
+  <div class="live"><span>控制使用 機頭 <b id="setPitch">--</b> 滾轉 <b id="setRoll">--</b></span><span class="sub">晶片原始 機頭 <b id="setRaw">--</b> 滾轉 <b id="setRawRoll">--</b></span><button class="b sm" id="btnLevel" title="飛機擺成平飛姿勢放穩 1 秒再按">水平標定</button><span id="instDefState" style="margin-left:auto"></span></div>
   <div id="setOrientCards"></div>
   <div class="row" style="margin-bottom:0"><span class="sub">圖示機頭</span><span class="seg" id="noseSeg"><button data-v="0">朝左(逆時針飛)</button><button data-v="1">朝右(順時針飛)</button></span></div>
  </div>
@@ -792,7 +794,7 @@ const $=id=>document.getElementById(id);
 // USB 模式:電腦設定器在本機開一個小伺服器轉送請求到 USB 線,網址是 127.0.0.1. 功能與 WiFi 相同,只有韌體更新卡與待確認不同.
 const USB_MODE=/^(127\.0\.0\.1|localhost)$/.test(location.hostname);
 let pane='mon',META=null,VALS=null,editP=0,STATUS=null;
-const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔掉電池再接上(每次通電倒數一次).',startstate:'只有待機或飛行結束時可以開始.',
+const CODES={startauto:'目前是「上電後直接倒數」模式:要飛請拔掉電池再接上(每次通電倒數一次).',startstate:'只有待機或飛行結束時可以開始.',level:'水平標定完成.',levelstate:'只有待機或飛行結束時可以做水平標定.',levelimu:'感測器沒有回應,不能標定.',levelstill:'飛機還沒放穩:擺成平飛姿勢,放著不要碰,等 1 秒再按.',levelbig:'量到的角度超過 30°:先檢查感測器安裝方位(朝機頭/朝機背的軸)是否選對.',
  startblock:'剛取消起飛或剛停止馬達,稍等幾秒再開始.',startbusy:'手動輸出或電變校正進行中,先上鎖或等校正完成再開始.',cancelstate:'只有等待放穩或倒數中可以取消;馬達運轉中請用緊急停止.',start:'已開始.',saved:'已儲存.',pwshort:'密碼至少 8 碼(開放網路請留空).',apsfxlong:'熱點名稱後面接的字太長:最多 14 個英數字(中文一字算 3 個).',
  apsfxspace:'熱點名稱後面接的字,頭尾不能是空白(手機上看不出來,容易連錯).',apsfxbad:'熱點名稱後面接的字含有不能用的字元.',ssidlong:'WiFi 名稱太長.',
  pwlong:'密碼太長.',hostbad:'裝置名稱只能用英文,數字與連字號,且不可頭尾為連字號.',tmo:'等待秒數要在 10~120.',
@@ -847,7 +849,8 @@ const L={
  upDb:['補速開始角度','deg','機頭朝上超過這個角度才開始補速.'],
  dnDb:['減速開始角度','deg','機頭朝下超過這個角度才開始減速.'],
  sdDb:['側傾補速開始角度','deg','翼軸仰角超過這個角度才開始補速(飛到斜上方,翼軸往下指向飛手).'],
- pitchTrim:['角度修正','deg','加到量到的角度上. 平飛姿勢讀到 +2° 就設 −2. 出廠 0.'],
+ pitchTrim:['角度修正(機頭)','deg','平飛姿勢機頭讀到 +2° 就設 −2(按「水平標定」自動填). 出廠 0.'],
+ rollTrim:['滾轉修正','deg','平飛姿勢左翼抬起讀到 +2° 就設 −2(按「水平標定」自動填). 出廠 0.'],
  gestureG:['啟動手勢力道','g','機身水平時往機頭推超過這個力道才算啟動. 推一下看下方試推燈調整.'],
  armWait:['安全開關等待上限','min','起飛程序開始後這麼久沒按安全開關就取消,回到待機(飛機被碰到誤觸發時不會一直鎖著設定). 上電直接倒數模式取消後,要飛請拔電再接電.'],
  countdownSec:['起飛倒數秒數','sec','倒數完馬達啟動,也就是你走到手柄的時間. 從按過安全開關而且飛機放穩那一刻算起.'],
@@ -1564,7 +1567,7 @@ function buildCurvePanel(){
  renderWidgets();
 }
 function buildShared(){
- const oc=$('setOrientCards');oc.innerHTML='';oc.appendChild(makeParam('s','pitchTrim'));
+ const oc=$('setOrientCards');oc.innerHTML='';oc.appendChild(makeParam('s','pitchTrim'));oc.appendChild(makeParam('s','rollTrim'));
  $('setCards').innerHTML='';$('instCards').innerHTML='';$('escCards').innerHTML='';
  $('calParam').innerHTML='';$('calParam').appendChild(makeParam('s','calibHold'));
  for(const [layout,boxId] of [[SET_LAYOUT,'setCards'],[INST_LAYOUT,'instCards'],[ESC_LAYOUT,'escCards']])for(const g of layout){const box=$(boxId);
@@ -1598,8 +1601,14 @@ function buildShared(){
  sn.onchange=()=>setParam('s','noseAxis',sn.value);su.onchange=()=>setParam('s','upAxis',su.value);
  // 回預設:兩軸與角度修正一次送出(逐項送會卡在「兩軸同軸」的中間狀態被拒)
  $('btnOrientDef').onclick=()=>{chain=chain.then(async()=>{
-  try{const r=await poll('/api/setmany?p=s',{method:'POST',headers:{'Content-Type':'text/plain'},body:'noseAxis=0\nupAxis=4\npitchTrim=0'});
+  try{const r=await poll('/api/setmany?p=s',{method:'POST',headers:{'Content-Type':'text/plain'},body:'noseAxis=0\nupAxis=4\npitchTrim=0\nrollTrim=0'});
    if(!r.ok)toast(CODES[r.code]||r.code,true);else toast('安裝方位已回預設,確認沒問題再按上方的儲存.')}
+  catch(e){toast('連線失敗,請再試一次.',true)}
+  await loadVals()})};
+ // 水平標定(GG 2026-11-03):板子把當下修正前的機頭/滾轉角取負填進兩個修正值(不存檔,按儲存才寫入)
+ $('btnLevel').onclick=()=>{chain=chain.then(async()=>{
+  try{const r=await poll('/api/level',{method:'POST'});
+   if(!r.ok)toast(CODES[r.code]||r.code,true);else toast(`水平標定完成:角度修正 ${sgn(r.pt,1)}°,滾轉修正 ${sgn(r.rt,1)}°. 確認控制使用的角度接近 0 再按上方的儲存.`)}
   catch(e){toast('連線失敗,請再試一次.',true)}
   await loadVals()})};
  // 啟動手勢試推燈:掛在手勢力道那一列
@@ -1904,8 +1913,8 @@ function renderStatus(s){
   $('gearState').textContent=p<=0?'放下':p>=100?'收起':`移動中 ${p}%`;$('gearUs').textContent=`${s.gear[1]} µs`+(s.gear[2]?' · 試收輪中':'');
   $('btnGearTest').textContent=s.gear[2]?'放下':'試收輪';$('btnGearTest').disabled=!idle&&!s.gear[2]}
  $('impact').textContent=s.imp[2]<0?'尚未發生':`${s.imp[0].toFixed(2)} g / ${s.imp[1]} ms(${s.imp[2]} 秒前)`;
- $('setPitch').textContent=sgn(s.p,1)+'°';
- $('setRaw').textContent=sgn(s.rp,1)+'°';
+ $('setPitch').textContent=sgn(s.p,1)+'°';$('setRoll').textContent=sgn(s.r,1)+'°';
+ $('setRaw').textContent=sgn(s.rp,1)+'°';$('setRawRoll').textContent=sgn(s.rr,1)+'°';
  instDraw(s);
  escRender(s);
  if(VALS){
@@ -2326,7 +2335,7 @@ function instDraw(s){
   `<text x="152" y="-82" text-anchor="end" class="ins-s">左翼抬起 = 正</text>`+
   `<text x="152" y="92" text-anchor="end" class="ins-v">${ok?'滾轉 '+sgn(R,0)+'°':''}</text>`;
  rv.innerHTML=h;
- const isDef=sh.noseAxis===0&&sh.upAxis===4&&Math.abs(sh.pitchTrim)<0.05;
+ const isDef=sh.noseAxis===0&&sh.upAxis===4&&Math.abs(sh.pitchTrim)<0.05&&Math.abs(sh.rollTrim||0)<0.05;
  $('instDefState').innerHTML=isDef?'<span style="color:var(--ok)">出廠預設</span>':'<span style="color:var(--warn)">和出廠預設不同</span>';
 }
 

@@ -1,4 +1,5 @@
-// 版本流水號: r12 (2026-10-29) 世代 8:補償方式 compMode 與線軸 G 回授 gTarget/gGain/gLimit/gFilter
+// 版本流水號: r13 (2026-11-03) 世代 9:滾轉修正 rollTrim(水平標定)
+// 舊: r12 (2026-10-29) 世代 8:補償方式 compMode 與線軸 G 回授 gTarget/gGain/gLimit/gFilter
 // 舊: r11 (2026-10-29) 世代 7:側傾補償曲線 sdDb/sdN/sd1a~sd4p
 // 舊: r10 (2026-09-24) 世代 6:搖擺機尾強制停機 wagStop;降落減力方式 landingMode,蜂鳴器提醒 landingBuzz,忽高忽低 pulseLow/pulseHigh/pulsePeriod
 // 舊: r9 (2026-09-15) 安全審查:解碼從板上目前值起算(碼裡沒有的欄位一律保持,舊碼不再把新功能洗回出廠);含 WiFi 時先存 WiFi 再套飛行設定
@@ -126,6 +127,11 @@ const CodecField GEN8_PROFILE[] = {
     {"compMode", 0, 1, 2}, {"gTarget", 0.5f, 0.1f, 7}, {"gGain", 0, 0.5f, 7}, {"gLimit", 0, 1, 7}, {"gFilter", 0.1f, 0.1f, 5},
 };
 
+// --- 世代 9(2026-11-03):滾轉修正(水平標定;格式同 pitchTrim) ---------------------------------------------
+const CodecField GEN9_SHARED[] = {
+    {"rollTrim", -30, 0.1f, 11},
+};
+
 // --- 共用參數的分區(與網頁分頁一致;★ 登記後永遠不改,參數刪掉也保留) -----------------------------
 struct KeySection {
   const char *key;
@@ -146,7 +152,7 @@ const KeySection SHARED_SECTIONS[] = {
     {"pitchTrim", BACKUP_SEC_INSTALL},    {"lineLength", BACKUP_SEC_INSTALL},  {"lapSec", BACKUP_SEC_INSTALL},
     {"gearEnable", BACKUP_SEC_INSTALL},   {"gearReverse", BACKUP_SEC_INSTALL}, {"gearMinUs", BACKUP_SEC_INSTALL},
     {"gearMaxUs", BACKUP_SEC_INSTALL},    {"gearRetractSec", BACKUP_SEC_INSTALL}, {"gearTravelSec", BACKUP_SEC_INSTALL},
-    {"buzzerLow", BACKUP_SEC_INSTALL},
+    {"buzzerLow", BACKUP_SEC_INSTALL},    {"rollTrim", BACKUP_SEC_INSTALL},
     // 電變頁:輸出協定,PWM 頻率,脈寬,校正保持,轉速回傳,馬達極數
     {"escProtocol", BACKUP_SEC_ESC},      {"escPwmHz", BACKUP_SEC_ESC},        {"escMinUs", BACKUP_SEC_ESC},
     {"escMaxUs", BACKUP_SEC_ESC},         {"calibHold", BACKUP_SEC_ESC},       {"escRpm", BACKUP_SEC_ESC},
@@ -176,6 +182,7 @@ const Generation GENERATIONS[] = {
     {GEN6_SHARED, COUNT_OF(GEN6_SHARED), GEN6_PROFILE, COUNT_OF(GEN6_PROFILE)},
     {nullptr, 0, GEN7_PROFILE, COUNT_OF(GEN7_PROFILE)},
     {nullptr, 0, GEN8_PROFILE, COUNT_OF(GEN8_PROFILE)},
+    {GEN9_SHARED, COUNT_OF(GEN9_SHARED), nullptr, 0},
 };
 const uint8_t MY_GENERATION = COUNT_OF(GENERATIONS);
 

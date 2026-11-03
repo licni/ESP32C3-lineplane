@@ -1,4 +1,5 @@
-# 版本流水號: r2 (2026-11-03) WiFi 設定(GG:使用者用手機熱點怎樣都連不上,要能在設定器改):wifi_get / wifi_set / wifi_scan / wifi_keep / reboot,
+# 版本流水號: r3 (2026-11-04) 水平標定 level_set(POST /api/level,韌體 2026.11.04.1 起;舊韌體 404 → 提示更新)與 save_settings;拒絕碼加 level*
+# 舊: r2 (2026-11-03) WiFi 設定(GG:使用者用手機熱點怎樣都連不上,要能在設定器改):wifi_get / wifi_set / wifi_scan / wifi_keep / reboot,
 #   板子錯誤代碼 → 中文(WIFI_CODES,與 web_page.h 的 CODES 同義)
 # 舊: r1 (2026-11-02) 初版:電腦端 USB 設定通道(GG:插線用同一份網頁設定飛控)
 # ============================================================================
@@ -304,6 +305,26 @@ def backup_apply(board, code):
     return r, rs
 
 
+def level_set(board):
+    """水平標定:板子把當下修正前的機頭/滾轉角取負填進角度修正與滾轉修正(不存檔). 回板子的 JSON(pt = 機頭修正,rt = 滾轉修正)."""
+    st, _, data = board.post("/api/level", timeout=8)
+    if st == 404:
+        raise BoardError("板子韌體沒有水平標定功能(要 2026.11.04.1 以上):請到「燒錄」頁更新,勾「保留板上設定」")
+    r = _json(data, "水平標定")
+    if not r.get("ok"):
+        raise BoardError(_code_text(str(r.get("code"))))
+    return r
+
+
+def save_settings(board):
+    """按儲存(POST /api/save),把板上未儲存的變更寫進快閃."""
+    _, _, data = board.post("/api/save", timeout=8)
+    r = _json(data, "儲存")
+    if not r.get("ok"):
+        raise BoardError("儲存失敗:" + str(r.get("code")))
+    return r
+
+
 # 板子回的錯誤代碼 → 給使用者看的中文(對照 web_page.h 的 CODES 與 wifi_manager.cpp 的驗證)
 WIFI_CODES = {
     "pwshort": "WiFi 密碼至少 8 碼(開放網路請留空)", "pwlong": "WiFi 密碼太長(最多 63 碼)", "ssidlong": "WiFi 名稱太長(最多 32 位元組)",
@@ -314,6 +335,9 @@ WIFI_CODES = {
     "savefail": "板子寫入失敗,請再試一次", "badform": "欄位不齊(程式錯誤,請回報)",
     "locked": "板子在起飛程序或飛行中,現在不能改設定", "busy": "板子不在待機(起飛程序,馬達運轉或更新中),現在不能做",
     "scanbusy": "板子還在開機連線中,等幾秒再搜尋", "scanfail": "搜尋啟動失敗,請再按一次",
+    # 水平標定(web_server.cpp handleLevel)
+    "levelstate": "只有待機或飛行結束時可以做水平標定", "levelimu": "感測器沒有回應,不能標定",
+    "levelstill": "飛機還沒放穩:擺成平飛姿勢放著不要碰,等 1 秒再按", "levelbig": "量到的角度超過 30°:先在設定網頁檢查感測器安裝方位(朝機頭/朝機背的軸)",
 }
 
 

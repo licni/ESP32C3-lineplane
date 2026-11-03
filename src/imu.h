@@ -1,4 +1,5 @@
-// 版本流水號: r3 (2026-10-29) 加 attitudeYawRateDps:機身角速度投影到世界鉛直軸(繞飛手的方位角積分,3D 半球位置用)
+// 版本流水號: r4 (2026-11-03) 水平標定:imuSetTrim(角度修正與滾轉修正當成感測器座標的微調旋轉)與修正前角度 attitudeRawPitch/RollDeg
+// 舊: r3 (2026-10-29) 加 attitudeYawRateDps:機身角速度投影到世界鉛直軸(繞飛手的方位角積分,3D 半球位置用)
 // 舊: r2 (2026-10-29) 加翼軸仰角 attitudeSideDeg(側傾補償用,0~90,正飛倒飛同值)
 // 舊: r1 (2026-09-13) 初版:MPU6050 讀取,安裝方位,向心力補償 Mahony,靜止偵測與零點學習
 #pragma once
@@ -37,6 +38,11 @@ void attitudeReset();
 
 float attitudePitchDeg();
 float attitudeRollDeg();
+// 水平標定(2026-11-03):角度修正(機頭)與滾轉修正當成感測器座標的微調旋轉,加速度與角速度都轉. 控制工作每拍呼叫,值沒變直接返回.
+void imuSetTrim(float pitchDeg, float rollDeg);
+// 修正前(只套安裝方位)的角度:安裝頁顯示「晶片原始」,水平標定把它們取負填進修正值.
+float attitudeRawPitchDeg();
+float attitudeRawRollDeg();
 // 翼軸仰角:翼軸(y,也就是線的方向)與地平線的夾角,0~90 度. 低空平飛 0,正頭頂 90;正飛倒飛同值,順逆時針飛也相同.
 // 飛到斜上方時翼軸往下指向飛手,升力分量變小,側傾補償曲線用這個角度(GG 2026-10-29).
 float attitudeSideDeg();

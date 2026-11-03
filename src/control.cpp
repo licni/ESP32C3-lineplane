@@ -1,4 +1,5 @@
-// 版本流水號: r24 (2026-10-29) 方位角積分(attitudeYawRateDps,馬達啟動歸零)送遙測與飛行紀錄,紀錄加翼軸仰角;3D 半球位置用
+// 版本流水號: r25 (2026-11-03) 水平標定:每拍把角度修正與滾轉修正交給 imuSetTrim(修正改在 imu.cpp 以旋轉套用,不再在這裡加 pitchTrimDeg),遙測加修正前的滾轉角
+// 舊: r24 (2026-10-29) 方位角積分(attitudeYawRateDps,馬達啟動歸零)送遙測與飛行紀錄,紀錄加翼軸仰角;3D 半球位置用
 // 舊: r23 (2026-10-29) 飛行紀錄加線軸 G(來自狀態機的低通值)
 // 舊: r22 (2026-10-29) 翼軸仰角送進飛行狀態機與遙測(側傾補償曲線)
 // 舊: r21 (2026-09-15) 控制工作加入任務看門狗(5 秒沒餵 panic 重開);飛行輸入加電變輸出掛載失敗
@@ -143,6 +144,7 @@ static void controlTask(void *) {
     const uint32_t nowMs = millis();
     // 待機時是即時設定,手勢成立後是這趟飛行的快照(上一拍更新,差 5ms 無妨)
     const SharedSettings &cfg = flightShared();
+    imuSetTrim(cfg.pitchTrimDeg, cfg.rollTrimDeg);   // 水平標定修正(值沒變就直接返回)
 
     float spikeThisTick = 0;
     if (imuPresent) {
@@ -188,8 +190,8 @@ static void controlTask(void *) {
     }
     const bool imuOk = imuPresent && !imuFault;
 
-    const float rawPitch = attitudePitchDeg();
-    const float pitch = constrain(rawPitch + cfg.pitchTrimDeg, -90.0f, 90.0f);
+    const float rawPitch = attitudeRawPitchDeg(), rawRoll = attitudeRawRollDeg();   // 修正前,只給安裝頁與水平標定看
+    const float pitch = attitudePitchDeg();   // 修正已在 imu.cpp 套進感測器座標(r25;以前是在這裡加 pitchTrimDeg)
     const float roll = attitudeRollDeg();
     const float side = attitudeSideDeg();
     if (imuOk) {
@@ -328,6 +330,7 @@ static void controlTask(void *) {
     telemetry.rawPitchDeg = rawPitch;
     telemetry.pitchDeg = pitch;
     telemetry.rollDeg = roll;
+    telemetry.rawRollDeg = rawRoll;
     telemetry.sideDeg = side;
     telemetry.azimuthDeg = azimuthDeg;
     telemetry.vibG = groundRoll.vibG();
