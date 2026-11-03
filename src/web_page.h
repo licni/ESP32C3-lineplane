@@ -1,4 +1,5 @@
-// 版本流水號: r105 (2026-11-03) 安裝頁「水平標定」按鈕(POST /api/level,板子把當下當成水平填好角度修正與滾轉修正);新參數滾轉修正 rollTrim;
+// 版本流水號: r106 (2026-11-04) 水平標定按鈕放大(GG:按鈕太小):移出讀值列,自己一列,主色大按鈕(lvl)+ 操作說明
+// 舊: r105 (2026-11-03) 安裝頁「水平標定」按鈕(POST /api/level,板子把當下當成水平填好角度修正與滾轉修正);新參數滾轉修正 rollTrim;
 //   控制使用/晶片原始各顯示機頭與滾轉;方位回預設一併清滾轉修正
 // 舊: r104 (2026-11-02) USB 模式(電腦設定器透過 USB 線開這份網頁,網址是 127.0.0.1):韌體更新卡換成提示(更新用設定器的燒錄頁),
 //   新韌體待確認不自動確認(確認要證明 WiFi 能連上),網路標籤顯示 USB 線;其他功能與 WiFi 完全相同
@@ -245,6 +246,8 @@ main{max-width:860px;margin:0 auto;padding:12px}
 @media (min-width:700px){.att .read{flex:0 0 170px;flex-direction:column;align-items:flex-start}.att .read .pill{margin-left:0}}
 .big{font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
 button.b.sm{padding:3px 10px;font-size:13px}
+button.b.lvl{padding:12px 28px;font-size:17px;font-weight:700;min-width:150px}
+.lvlrow .sub{flex:1 1 220px}
 .sub{color:var(--mute);font-size:13px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:5px}
 .stat{border:1px solid var(--line);border-radius:8px;padding:3px 8px;min-width:0}
@@ -623,7 +626,8 @@ button.b.danger{color:#ff9292;border-color:#ac4b4b;background:#361e20}
    <label><span class="axk up">■</span> 朝機背<select id="selUp"></select></label>
    <span><span class="axk left">■</span> 朝左翼 <b id="axisY">--</b> <span class="sub">(自動)</span></span>
   </div>
-  <div class="live"><span>控制使用 機頭 <b id="setPitch">--</b> 滾轉 <b id="setRoll">--</b></span><span class="sub">晶片原始 機頭 <b id="setRaw">--</b> 滾轉 <b id="setRawRoll">--</b></span><button class="b sm" id="btnLevel" title="飛機擺成平飛姿勢放穩 1 秒再按">水平標定</button><span id="instDefState" style="margin-left:auto"></span></div>
+  <div class="live"><span>控制使用 機頭 <b id="setPitch">--</b> 滾轉 <b id="setRoll">--</b></span><span class="sub">晶片原始 機頭 <b id="setRaw">--</b> 滾轉 <b id="setRawRoll">--</b></span><span id="instDefState" style="margin-left:auto"></span></div>
+  <div class="row lvlrow"><button class="b pri lvl" id="btnLevel">水平標定</button><span class="sub">飛機擺成平飛姿勢,放穩 1 秒再按:把現在的姿勢當成水平,自動填好下面的角度修正與滾轉修正. 按上方的儲存才生效.</span></div>
   <div id="setOrientCards"></div>
   <div class="row" style="margin-bottom:0"><span class="sub">圖示機頭</span><span class="seg" id="noseSeg"><button data-v="0">朝左(逆時針飛)</button><button data-v="1">朝右(順時針飛)</button></span></div>
  </div>
