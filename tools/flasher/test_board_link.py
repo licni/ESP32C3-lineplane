@@ -1,4 +1,5 @@
-# 版本流水號: r3 (2026-11-04) 水平標定:level_set 成功(回兩個修正值,板上變未儲存)/ 沒放穩被拒(中文訊息)/ 舊韌體 404;save_settings
+# 版本流水號: r4 (2026-11-04) 即時姿態:get_status / get_settings
+# 舊: r3 (2026-11-04) 水平標定:level_set 成功(回兩個修正值,板上變未儲存)/ 沒放穩被拒(中文訊息)/ 舊韌體 404;save_settings
 # 舊: r2 (2026-11-03) WiFi 設定:wifi_get / wifi_set(拒絕碼轉中文)/ wifi_scan(掃描中 → 結果)/ wifi_keep / reboot
 # 舊: r1 (2026-11-02) 初版:USB 設定通道的電腦端測試(假板子照 web_server.cpp r33 的協定回應,不需要板子與序列埠)
 import json
@@ -98,6 +99,10 @@ class FakeBoard:
             if self.scan_polls < 3:   # 前兩次還在掃
                 return 200, "application/json", b'{"run":1}'
             return 200, "application/json", json.dumps({"run": 0, "n": 2, "list": [["GG iPhone", -48, 6, 0], ["Home 家", -70, 11, 1]]}, ensure_ascii=False).encode("utf-8")
+        if (method, path) == ("GET", "/api/status"):
+            return 200, "application/json", b'{"p":1.25,"rp":-2.4,"r":-3.0,"rr":-13.7,"a":0.96,"st":1,"imu":1,"f":{"s":1}}'
+        if (method, path) == ("GET", "/api/settings"):
+            return 200, "application/json", b'{"shared":{"noseAxis":0,"upAxis":4,"pitchTrim":3.6,"rollTrim":13.7},"profile":{}}'
         if (method, path) == ("POST", "/api/level") and self.has_level:
             # 照 handleLevel:沒放穩 levelstill;成功填兩個修正值(未儲存)
             if not self.still:
@@ -138,6 +143,12 @@ class BridgeTest(unittest.TestCase):
         bl.save_settings(self.b)
         self.assertTrue(self.link.board.saved)
         self.assertFalse(self.link.board.dirty)
+
+    def test_status_and_settings(self):
+        s = bl.get_status(self.b)
+        self.assertEqual((s["p"], s["r"], s["rr"], s["imu"]), (1.25, -3.0, -13.7, 1))
+        sh = bl.get_settings(self.b)["shared"]
+        self.assertEqual((sh["noseAxis"], sh["upAxis"], sh["rollTrim"]), (0, 4, 13.7))
 
     def test_level_refused_not_still(self):
         self.link.board.still = False

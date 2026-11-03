@@ -1,4 +1,5 @@
-# 版本流水號: r3 (2026-11-04) 水平標定 level_set(POST /api/level,韌體 2026.11.04.1 起;舊韌體 404 → 提示更新)與 save_settings;拒絕碼加 level*
+# 版本流水號: r4 (2026-11-04) 即時姿態用的 get_status(GET /api/status)與 get_settings(GET /api/settings)
+# 舊: r3 (2026-11-04) 水平標定 level_set(POST /api/level,韌體 2026.11.04.1 起;舊韌體 404 → 提示更新)與 save_settings;拒絕碼加 level*
 # 舊: r2 (2026-11-03) WiFi 設定(GG:使用者用手機熱點怎樣都連不上,要能在設定器改):wifi_get / wifi_set / wifi_scan / wifi_keep / reboot,
 #   板子錯誤代碼 → 中文(WIFI_CODES,與 web_page.h 的 CODES 同義)
 # 舊: r1 (2026-11-02) 初版:電腦端 USB 設定通道(GG:插線用同一份網頁設定飛控)
@@ -314,6 +315,22 @@ def level_set(board):
     if not r.get("ok"):
         raise BoardError(_code_text(str(r.get("code"))))
     return r
+
+
+def get_status(board):
+    """板子即時狀態(GET /api/status):p/r = 控制使用的機頭/滾轉角,rp/rr = 修正前,a = 加速度大小 g,st = 靜止,imu = 1 正常,f.s = 飛行狀態."""
+    st, _, data = board.get("/api/status", timeout=3)
+    if st != 200:
+        raise BoardError(f"板子狀態回應 {st}")
+    return _json(data, "狀態")
+
+
+def get_settings(board):
+    """板上目前的設定值(GET /api/settings):shared = 共用設定(noseAxis,upAxis,pitchTrim,rollTrim …)."""
+    st, _, data = board.get("/api/settings", timeout=5)
+    if st != 200:
+        raise BoardError(f"板子設定回應 {st}")
+    return _json(data, "設定")
 
 
 def save_settings(board):

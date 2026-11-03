@@ -1,4 +1,6 @@
-# 版本流水號: r15 (2026-11-04) 設定頁加「水平標定」區(GG:設定器也要能標定水平):確認飛機擺平 → POST /api/level(韌體 2026.11.04.1 起)
+# 版本流水號: r16 (2026-11-04) 即時姿態(GG:設定器也要有網頁那樣的飛機圖,不用一直進網頁就知道姿態對不對):水平標定區加側視/後視飛機圖,
+#   每 0.2 秒讀 /api/status(USB 或 WiFi),顯示控制使用與修正前的機頭/滾轉,安裝方位與修正值;燒錄等工作進行中自動暫停;標定成功自動開啟;APP_VERSION 2.5.0
+# 舊: r15 (2026-11-04) 設定頁加「水平標定」區(GG:設定器也要能標定水平):確認飛機擺平 → POST /api/level(韌體 2026.11.04.1 起)
 #   → 顯示兩個修正值 → 問要不要儲存;APP_VERSION 2.4.0
 # 舊: r14 (2026-11-03) 燒錄後檢查的 WiFi 項目等到連上或退回熱點為止(最多 45 秒)再顯示結果與網址(GG:更新後顯示「連線中」以為沒連上;
 #   原本只問一次 net,板子還在掃描);設定了家用 WiFi 卻退到熱點用黃字提醒;完成對話框寫 WiFi 結果;APP_VERSION 2.3.2
@@ -43,6 +45,7 @@
 import contextlib
 import io
 import json
+import math
 import os
 import queue
 import re
@@ -60,7 +63,7 @@ import serial.tools.list_ports
 import board_link
 import fw_image
 
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.5.0"
 TITLE = f"線控飛機設定器 v{APP_VERSION}"
 USB_API_MIN_FW = "2026.11.02.2"   # USB 設定通道從這版韌體開始
 BAUD_FLASH = 921600            # 原生 USB 不看鮑率;USB 轉序列晶片的板子才有差
@@ -580,6 +583,34 @@ class App:
         ttk.Label(fl, text="板子會把當下量到的機頭與滾轉角度當成 0°,填進「角度修正」與「滾轉修正」,問過你再儲存. 每片感測器的零點都不一樣,"
                            "裝機後做一次;換感測器或重新安裝後再做. 需要韌體 2026.11.04.1 以上.",
                   foreground="#555", wraplength=W(620), justify="left").grid(row=1, column=1, sticky="w", pady=(4, 0))
+        # 即時姿態(GG 2026-11-04:和網頁安裝頁同一套側視/後視圖,不用開網頁就能看姿態對不對)
+        att = ttk.Frame(fl)
+        att.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        abar = ttk.Frame(att)
+        abar.pack(fill="x")
+        self.att_btn = ttk.Button(abar, text="開始即時姿態", command=self._att_toggle)
+        self.att_btn.pack(side="left")
+        self.att_state = ttk.Label(abar, text="檢查方式:抬機頭,側視圖的機頭也要抬起;抬左翼,後視圖的左翼也要抬起. 反了就是感測器安裝方位選錯(在設定網頁的安裝頁改).",
+                                   foreground="#555", wraplength=W(560), justify="left")
+        self.att_state.pack(side="left", padx=8)
+        views = ttk.Frame(att)
+        views.pack(anchor="w", pady=(6, 0))
+        self.att_cw = W(300)
+        self.att_ch = int(self.att_cw * 0.625)
+        cv_opt = {"width": self.att_cw, "height": self.att_ch, "background": "#f7f9fc", "highlightthickness": 1, "highlightbackground": "#c5ccd6"}
+        self.att_side = tk.Canvas(views, **cv_opt)
+        self.att_side.pack(side="left")
+        self.att_rear = tk.Canvas(views, **cv_opt)
+        self.att_rear.pack(side="left", padx=(8, 0))
+        afam = "Microsoft JhengHei UI" if sys.platform == "win32" else "TkDefaultFont"
+        self.att_font = afam
+        self.att_read = tk.Label(att, text="", font=(afam, 13, "bold"), anchor="w", justify="left")
+        self.att_read.pack(fill="x", pady=(6, 0))
+        self.att_sub = ttk.Label(att, text="", foreground="#555", wraplength=W(620), justify="left")
+        self.att_sub.pack(fill="x")
+        self.att_on = False
+        self.att_gen = 0
+        self._att_draw(None)
 
         # WiFi 設定(GG 2026-11-03:使用者用手機熱點怎樣都連不上,要能在設定器改;只走 USB 線,改完板子重開會斷 WiFi)
         fw = self._section(tab_cfg, "WiFi 設定(用 USB 線設定板子怎麼連網)", 3)
@@ -847,6 +878,20 @@ class App:
                     self.wifi_state.configure(text=val[0], foreground=val[1])
                 elif kind == "level_state":
                     self.level_state.configure(text=val[0], foreground=val[1])
+                elif kind == "att":
+                    if self.att_on:
+                        self._att_draw(val)
+                elif kind == "att_state":
+                    if self.att_on:
+                        self.att_state.configure(text=val[0], foreground=val[1])
+                elif kind == "att_stop":
+                    self.att_on = False
+                    self.att_btn.configure(text="開始即時姿態")
+                    self.att_state.configure(text=val, foreground="#cf222e")
+                    self._att_draw(None)
+                elif kind == "att_auto":   # 水平標定成功:自動打開即時姿態讓使用者看結果
+                    if not self.att_on:
+                        self._att_toggle()
                 elif kind == "wifi_big":   # (文字, 顏色);空字串 = 藏起來
                     if val[0]:
                         self.wifi_big.configure(text=val[0], foreground=val[1])
@@ -1590,6 +1635,7 @@ class App:
                     self.q.put(("okmsg", "水平標定已儲存."))
                 else:
                     self.q.put(("level_state", (msg + " 還沒儲存:到設定網頁按儲存,或重新開機放棄.", "#9a6700")))
+                self.q.put(("att_auto", None))
             except board_link.BoardError as e:
                 self.q.put(("level_state", (f"水平標定失敗:{e}", "#cf222e")))
                 self.q.put(("err", f"水平標定失敗:{e}"))
@@ -1598,6 +1644,138 @@ class App:
                 self.q.put(("done", None))
 
         threading.Thread(target=job, daemon=True).start()
+
+    # ---------------- 即時姿態(GG 2026-11-04) ----------------
+    AXES = ["晶片 +X", "晶片 −X", "晶片 +Y", "晶片 −Y", "晶片 +Z", "晶片 −Z"]   # 與 web_page.h 的 AXES 相同
+
+    def _att_toggle(self):
+        if self.att_on:
+            self.att_on = False
+            self.att_btn.configure(text="開始即時姿態")
+            self.att_state.configure(text="已停止即時姿態.", foreground="#555")
+            return
+        self._save_link()
+        self.att_on = True
+        self.att_gen += 1
+        self.att_btn.configure(text="停止即時姿態")
+        self.att_state.configure(text="連線板子 …", foreground="#9a6700")
+        threading.Thread(target=self._att_job, args=(self.att_gen,), daemon=True).start()
+
+    def _att_job(self, gen):
+        """背景:每 0.2 秒讀一次狀態. 燒錄,檢查,標定等工作進行中(busy)暫停,之後重新連線;連續 3 次失敗就停."""
+        board, sh, fails = None, {}, 0
+        while self.att_on and self.att_gen == gen:
+            if self.busy:
+                board = None
+                time.sleep(0.3)
+                continue
+            try:
+                if board is None:
+                    board, src = self._board()
+                    sh = board_link.get_settings(board).get("shared") or {}
+                    self.q.put(("att_state", (f"即時姿態({src}),每秒更新 5 次. 抬機頭/抬左翼,看圖有沒有跟著動.", "#1a7f37")))
+                    n = 0
+                s = board_link.get_status(board)
+                n += 1
+                if n % 25 == 0:   # 每 5 秒重讀一次設定(使用者可能在網頁改了安裝方位或修正值)
+                    sh = board_link.get_settings(board).get("shared") or sh
+                s["_sh"] = sh
+                self.q.put(("att", s))
+                fails = 0
+                time.sleep(0.2)
+            except (board_link.BoardError, ValueError, KeyError, TypeError) as e:
+                board = None
+                fails += 1
+                if fails >= 3:
+                    if self.att_gen == gen:
+                        self.q.put(("att_stop", f"讀不到板子的姿態,已停止:{e}"))
+                    return
+                time.sleep(1.0)
+
+    def _att_pts(self, pts, ang):
+        """圖上座標(和網頁 SVG 一樣:寬 320 高 200,原點在中心,y 朝下)旋轉 ang 度後換成畫布座標."""
+        k = self.att_cw / 320.0
+        c, s = math.cos(math.radians(ang)), math.sin(math.radians(ang))
+        out = []
+        for x, y in pts:
+            out += [self.att_cw / 2 + (x * c - y * s) * k, self.att_ch / 2 + (x * s + y * c) * k]
+        return out
+
+    def _att_circle(self, cv, x, y, r, ang, **kw):
+        k = self.att_cw / 320.0
+        cx, cy = self._att_pts([(x, y)], ang)
+        cv.create_oval(cx - r * k, cy - r * k, cx + r * k, cy + r * k, **kw)
+
+    def _att_draw(self, s):
+        ok = bool(s) and s.get("imu") == 1
+        P = float(s.get("p", 0)) if ok else 0.0
+        R = float(s.get("r", 0)) if ok else 0.0
+        k = self.att_cw / 320.0
+        small = (self.att_font, 9)
+        bold = (self.att_font, 11, "bold")
+        body_col = "#3d5a80" if ok else "#a7b0bc"
+
+        # 側視(和網頁同一套):站在圓心看,左翼朝你,機頭在左;倒飛時機頭換邊且上下顛倒
+        cv = self.att_side
+        cv.delete("all")
+        cv.create_line(0, self.att_ch / 2, self.att_cw, self.att_ch / 2, fill="#9aa4b2", dash=(4, 3))
+        ang = (180 - P) if (ok and abs(R) > 90) else P
+        cv.create_polygon(self._att_pts([(68, -4), (90, -30), (100, -30), (97, -3)], ang), fill=body_col, outline="")
+        cv.create_polygon(self._att_pts([(-92, 0), (-90, -7), (-84, -9.5), (-72, -10), (58, -5), (96, -3), (96, 3), (58, 5),
+                                         (-72, 10), (-84, 9.5), (-90, 7)], ang), fill=body_col, outline="")
+        cv.create_polygon(self._att_pts([(-97, -28), (-94, -28), (-94, 28), (-97, 28)], ang), fill="#555", outline="")
+        cv.create_line(*self._att_pts([(-44, 9), (-54, 30)], ang), fill=body_col, width=max(2, 3 * k))
+        self._att_circle(cv, -54, 32, 6, ang, fill=body_col, outline="")
+        cv.create_polygon(self._att_pts([(-21, -8), (5, -8), (5, 8), (-21, 8)], ang), fill="#e8912d", outline="")
+        cv.create_text(*self._att_pts([(-112, -16)], ang), text="機頭", fill="#1f3a68", font=small)
+        cv.create_text(6, 4, anchor="nw", text="側視(站在圓心看,左翼朝你)", fill="#555", font=small)
+        cv.create_text(self.att_cw - 6, 4, anchor="ne", text="機頭朝上 = 正", fill="#777", font=small)
+        cv.create_text(self.att_cw - 6, self.att_ch - 4, anchor="se", text=f"機頭 {P:+.1f}°" if ok else "感測器未就緒",
+                       fill="#1f3a68" if ok else "#cf222e", font=bold)
+
+        # 後視:站在機尾往機頭看,左翼在左;左翼抬起為正滾轉(畫面上順時針)
+        cv = self.att_rear
+        cv.delete("all")
+        cv.create_line(0, self.att_ch / 2, self.att_cw, self.att_ch / 2, fill="#9aa4b2", dash=(4, 3))
+        cv.create_line(*self._att_pts([(-128, -1), (-160, -6)], R), fill="#777", width=1)
+        cv.create_line(*self._att_pts([(-128, 1), (-160, 6)], R), fill="#777", width=1)
+        cv.create_polygon(self._att_pts([(-128, -3), (128, -3), (128, 3), (-128, 3)], R), fill=body_col, outline="")
+        cv.create_polygon(self._att_pts([(-2.5, -50), (2.5, -50), (2.5, -14), (-2.5, -14)], R), fill=body_col, outline="")
+        cv.create_polygon(self._att_pts([(-42, -38), (42, -38), (42, -34), (-42, -34)], R), fill=body_col, outline="")
+        for sx in (-1, 1):
+            cv.create_line(*self._att_pts([(8 * sx, 12), (30 * sx, 40)], R), fill=body_col, width=max(2, 3 * k))
+            self._att_circle(cv, 30 * sx, 43, 6, R, fill=body_col, outline="")
+        self._att_circle(cv, 0, 0, 15, R, fill=body_col, outline="")
+        cv.create_polygon(self._att_pts([(-13, -8), (13, -8), (13, 8), (-13, 8)], R), fill="#e8912d", outline="")
+        cv.create_text(*self._att_pts([(-100, -14)], R), text="左翼", fill="#1f3a68", font=small)
+        cv.create_text(6, 4, anchor="nw", text="後視(站在機尾往機頭看)", fill="#555", font=small)
+        cv.create_text(self.att_cw - 6, 4, anchor="ne", text="左翼抬起 = 正", fill="#777", font=small)
+        cv.create_text(6, self.att_ch - 4, anchor="sw", text="← 引線,往操控手", fill="#777", font=small)
+        cv.create_text(self.att_cw - 6, self.att_ch - 4, anchor="se", text=f"滾轉 {R:+.1f}°" if ok else "",
+                       fill="#1f3a68", font=bold)
+
+        if not s:
+            self.att_read.configure(text="")
+            self.att_sub.configure(text="")
+            return
+        if not ok:
+            self.att_read.configure(text="感測器未就緒(沒有回應或故障)", foreground="#cf222e")
+            self.att_sub.configure(text="")
+            return
+        level = abs(P) <= 1.5 and abs(R) <= 1.5
+        self.att_read.configure(text=f"控制使用:機頭 {P:+.1f}°   滾轉 {R:+.1f}°" + ("     ✓ 接近水平" if level else ""),
+                                foreground="#1a7f37" if level else "#1f3a68")
+        sh = s.get("_sh") or {}
+        parts = [f"晶片原始(修正前):機頭 {float(s.get('rp', 0)):+.1f}°,滾轉 {float(s.get('rr', s.get('r', 0))):+.1f}°"]
+        if "pitchTrim" in sh:
+            parts.append(f"角度修正 {float(sh['pitchTrim']):+.1f}°,滾轉修正 {float(sh.get('rollTrim', 0)):+.1f}°")
+        if "noseAxis" in sh and "upAxis" in sh:
+            try:
+                parts.append(f"安裝方位:{self.AXES[int(sh['noseAxis'])]} 朝機頭,{self.AXES[int(sh['upAxis'])]} 朝機背")
+            except (IndexError, ValueError):
+                pass
+        parts.append("靜止" if s.get("st") else "移動中")
+        self.att_sub.configure(text=" · ".join(parts))
 
     # ---------------- WiFi 設定(GG 2026-11-03) ----------------
     def _wifi_mode_changed(self):
@@ -1929,6 +2107,7 @@ class App:
     def _on_close(self):
         if self.busy and not messagebox.askokcancel("燒錄中", "正在燒錄或下載,現在關閉可能讓板子燒到一半(可以重新燒錄救回). 確定關閉?", parent=self.root):
             return
+        self.att_on = False
         self.monitor.want = False
         with contextlib.suppress(Exception):
             self.proxy.stop()
